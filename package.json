@@ -3,7 +3,8 @@
   "type": "module",
   "dependencies": {
     "csv-parse": "^5.5.6",
-    "imapflow": "^1.0.164",
-    "luxon": "^3.5.0"
+    "imapflow": "^1.0.199",
+    "luxon": "^3.5.0",
+    "mailparser": "^3.6.8"
   }
 }
