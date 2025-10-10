@@ -9,7 +9,7 @@ const SLOT_MIN = Number(process.env.SLOT_MIN || 30);
 const FORCE_ALL = String(process.env.FORCE_ALL || '').toLowerCase() === 'true';
 const tz = 'America/Chicago';
 
-/** Known AC rooms we’ve seen/expect (extend as you learn more) */
+/** Extend this with your exact AC room names once we see samples */
 const ROOMS_CATALOG = [
   'AC Fieldhouse - Court 3',
   'AC Fieldhouse - Court 4',
@@ -41,7 +41,7 @@ function parseTimeRange(value) {
   if (!value) return null;
   const v = String(value).trim();
 
-  // 1) "M/D/YYYY h:mm AM - h:mm PM" (same day)
+  // "M/D/YYYY h:mm AM - h:mm PM"
   let m = v.match(/^(\d{1,2}\/\d{1,2}\/\d{4})\s+(\d{1,2}:\d{2}\s*[AP]M)\s*-\s*(\d{1,2}:\d{2}\s*[AP]M)$/i);
   if (m) {
     const [ , d1, t1, t2 ] = m;
@@ -51,7 +51,7 @@ function parseTimeRange(value) {
     if (start.isValid && end.isValid) return { start, end };
   }
 
-  // 2) "M/D/YYYY h:mm AM - M/D/YYYY h:mm PM" (explicit end date)
+  // "M/D/YYYY h:mm AM - M/D/YYYY h:mm PM"
   m = v.match(/^(\d{1,2}\/\d{1,2}\/\d{4})\s+(\d{1,2}:\d{2}\s*[AP]M)\s*-\s*(\d{1,2}\/\d{1,2}\/\d{4})\s+(\d{1,2}:\d{2}\s*[AP]M)$/i);
   if (m) {
     const [ , d1, t1, d2, t2 ] = m;
@@ -76,15 +76,15 @@ function buildRange({sd, st, ed, et}) {
   return { start, end };
 }
 
-const ROOM_KEYS     = ['resourcelabel','resource','location','facilityname','room','areaname','space','facility'];
-const FACILITY_KEYS = ['facility','site','building','center'];
-const TIME_KEYS     = ['reservedtime','time','reservationtime','startend','starttoend','reservation','dateandtime'];
+const ROOM_KEYS       = ['resourcelabel','resource','location','facilityname','room','areaname','space','facility'];
+const FACILITY_KEYS   = ['facility','site','building','center'];
+const TIME_KEYS       = ['reservedtime','time','reservationtime','startend','starttoend','reservation','dateandtime'];
 const START_DATE_KEYS = ['startdate','fromdate','date','begindate'];
 const START_TIME_KEYS = ['starttime','fromtime','timein','begintime'];
 const END_DATE_KEYS   = ['enddate','todate','finishdate'];
 const END_TIME_KEYS   = ['endtime','totime','timeout','finishtime'];
-const PURPOSE_KEYS  = ['reservationpurpose','purpose','event','program','activity','description'];
-const RESERVEE_KEYS = ['reservee','reservedby','customer','name'];
+const PURPOSE_KEYS    = ['reservationpurpose','purpose','event','program','activity','description'];
+const RESERVEE_KEYS   = ['reservee','reservedby','customer','name'];
 
 function looksACLabel(str) {
   const s = skinny(str);
@@ -98,27 +98,25 @@ function looksACLabel(str) {
 }
 
 function detectRoom(rowObj, directRoom) {
-  // 1) Take 'location' (or other direct roomish fields) if present
+  // 1) use explicit room-like field if present
   if (directRoom) {
     const dr = norm(directRoom);
     if (dr) return dr;
   }
-
-  // 2) Prefer 'location' then 'facility' explicitly if they look like rooms
+  // 2) prefer 'location' then 'facility' if they look like room labels
   const loc = pick(rowObj, ['location']);
   if (loc && looksACLabel(loc)) return norm(loc);
-
   const fac = pick(rowObj, ['facility']);
   if (fac && looksACLabel(fac)) return norm(fac);
 
-  // 3) Fallback: scan all values for any known catalog name
+  // 3) scan entire row for any catalog name
   const joined = Object.values(rowObj).map(v => norm(v)).join(' | ').toLowerCase();
   const sorted = [...ROOMS_CATALOG].sort((a,b)=>b.length-a.length);
   for (const name of sorted) {
     if (joined.includes(name.toLowerCase())) return name;
   }
 
-  // 4) Ultimate fallback in FORCE_ALL mode: pick location→facility→roomish text
+  // 4) ultimate fallback in FORCE_ALL: show location → facility if present
   if (FORCE_ALL) {
     if (loc) return norm(loc);
     if (fac) return norm(fac);
@@ -126,7 +124,7 @@ function detectRoom(rowObj, directRoom) {
   return null;
 }
 
-// ---------- parse CSV (auto delimiter) ----------
+// ---------- parse CSV with auto-delimiter ----------
 const raw = fs.readFileSync(CSV_PATH, 'utf8');
 const delimiters = [',',';','\t'];
 let rows = [];
@@ -147,7 +145,7 @@ for (const d of delimiters) {
       usedDelimiter = d;
       break;
     }
-  } catch {/* try next */}
+  } catch { /* try next */ }
 }
 
 if (!rows.length) {
@@ -159,7 +157,7 @@ if (!rows.length) {
 const headerKeys = Object.keys(rows[0] || {});
 console.log('Detected headers:', headerKeys.join(', '), `| delimiter="${usedDelimiter === '\t' ? 'TAB' : usedDelimiter}"`);
 
-// --- quick diagnostics: show unique samples for location/facility ---
+// Diagnostics: sample out what the CSV calls rooms
 const uniq = (arr) => Array.from(new Set(arr.map(x => norm(x))).values()).filter(Boolean);
 const sample = (arr, n=8) => arr.slice(0, n);
 
@@ -185,8 +183,8 @@ for (const r of rows) {
     const et = pick(r, END_TIME_KEYS);
     range = buildRange({ sd, st, ed, et });
   }
-  const room = detectRoom(r, directRoom);
 
+  const room = detectRoom(r, directRoom);
   if (!room || !range) continue;
 
   // Only keep AC rows unless FORCE_ALL is on
@@ -195,13 +193,13 @@ for (const r of rows) {
 
   events.push({
     room: norm(room),
-    purpose: norm(purpose || reservee || ''), // show something useful if purpose is blank
+    purpose: norm(purpose || reservee || ''), // display something useful if purpose missing
     startISO: range.start.toISO(),
     endISO: range.end.toISO()
   });
 }
 
-// ---------- build grid ----------
+// ---------- build time grid ----------
 let dayStart = DateTime.now().setZone(tz).startOf('day').plus({ hours: 5 });
 let dayEnd   = DateTime.now().setZone(tz).startOf('day').plus({ hours: 23 });
 
