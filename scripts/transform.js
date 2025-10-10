@@ -8,7 +8,7 @@ const OUT = process.env.JSON_OUT || 'events.json';
 const SLOT_MIN = Number(process.env.SLOT_MIN || 30);
 const tz = 'America/Chicago';
 
-// Known room names (keep growing this list as needed)
+// Known room names (extend as needed)
 const ROOMS_CATALOG = [
   'AC Fieldhouse - Full Turf',
   'AC Fieldhouse - Half Turf North',
@@ -35,33 +35,40 @@ const uniq = arr => Array.from(new Set(arr.map(x => norm(x))).values()).filter(B
 const sample = (arr, n=8) => arr.slice(0, n);
 
 function pick(obj, keys) {
-  for (const k of keys) {
-    if (k in obj && obj[k] !== undefined && obj[k] !== '') return obj[k];
-  }
+  for (const k of keys) if (k in obj && obj[k] !== undefined && obj[k] !== '') return obj[k];
   return undefined;
 }
 
 // ───────────────── time parsing ─────────────────
 function cleanRangeString(value) {
-  // unify separators: hyphen, en dash, em dash, " to "
   return String(value)
+    // normalize separators (hyphen, en dash, em dash, " to ")
     .replace(/\s+–\s+|\s+—\s+|\s+-\s+|\s+to\s+/gi, ' - ')
-    .replace(/\u00A0/g, ' ') // non-breaking spaces
+    .replace(/\u00A0/g, ' ') // non-breaking space
     .trim();
 }
 
-function parseTimeRange(value) {
+function parseTimeRange(value, fallbackDateISO) {
   if (!value) return null;
   const v = cleanRangeString(value);
 
+  // 0) TIME-ONLY: h:mmam - h:mmpm (no date present)
+  //    Use fallbackDateISO (today in tz) if provided.
+  let m = v.match(/^(\d{1,2}:\d{2}\s*[ap]m)\s*-\s*(\d{1,2}:\d{2}\s*[ap]m)$/i);
+  if (m && fallbackDateISO) {
+    const d = DateTime.fromISO(fallbackDateISO, { zone: tz });
+    const start = DateTime.fromFormat(`${d.toFormat('M/d/yyyy')} ${m[1]}`, 'M/d/yyyy h:mm a', { zone: tz });
+    let end = DateTime.fromFormat(`${d.toFormat('M/d/yyyy')} ${m[2]}`, 'M/d/yyyy h:mm a', { zone: tz });
+    if (end <= start) end = end.plus({ days: 1 });
+    if (start.isValid && end.isValid) return { start, end };
+  }
+
   // 1) M/D/YYYY h:mm AM - h:mm PM
-  let m = v.match(/^(\d{1,2}\/\d{1,2}\/\d{2,4})\s+(\d{1,2}:\d{2}\s*[AP]M)\s*-\s*(\d{1,2}:\d{2}\s*[AP]M)$/i);
+  m = v.match(/^(\d{1,2}\/\d{1,2}\/\d{2,4})\s+(\d{1,2}:\d{2}\s*[AP]M)\s*-\s*(\d{1,2}:\d{2}\s*[AP]M)$/i);
   if (m) {
     let [ , d1, t1, t2 ] = m;
-    // allow 2-digit year
     if (d1.match(/\/\d{2}$/)) {
-      const dt = DateTime.fromFormat(d1, 'M/d/yy');
-      if (dt.isValid) d1 = dt.toFormat('M/d/yyyy');
+      const dt = DateTime.fromFormat(d1, 'M/d/yy'); if (dt.isValid) d1 = dt.toFormat('M/d/yyyy');
     }
     const start = DateTime.fromFormat(`${d1} ${t1}`, 'M/d/yyyy h:mm a', { zone: tz });
     let end = DateTime.fromFormat(`${d1} ${t2}`, 'M/d/yyyy h:mm a', { zone: tz });
@@ -102,15 +109,13 @@ function parseTimeRange(value) {
 
 function buildRange({sd, st, ed, et}) {
   if (!sd || !st || !et) return null;
-  // allow 2-digit year in sd/ed
-  const fixY = (d) => {
-    if (!d) return d;
-    return d.match(/\/\d{2}$/)
-      ? (DateTime.fromFormat(d, 'M/d/yy').isValid
-          ? DateTime.fromFormat(d, 'M/d/yy').toFormat('M/d/yyyy')
-          : d)
-      : d;
-  };
+
+  const fixY = (d) => d && d.match(/\/\d{2}$/)
+    ? (DateTime.fromFormat(d, 'M/d/yy').isValid
+        ? DateTime.fromFormat(d, 'M/d/yy').toFormat('M/d/yyyy')
+        : d)
+    : d;
+
   sd = fixY(sd); ed = fixY(ed);
 
   const start = DateTime.fromFormat(`${sd} ${st}`, 'M/d/yyyy h:mm a', { zone: tz })
@@ -124,7 +129,7 @@ function buildRange({sd, st, ed, et}) {
        || DateTime.fromFormat(`${sd} ${et}`, 'M/d/yyyy H:mm',    { zone: tz });
     if (end <= start) end = end.plus({ days: 1 });
   }
-  if (!start.isValid || !end.isValid) return null;
+  if (!start?.isValid || !end?.isValid) return null;
   return { start, end };
 }
 
@@ -146,7 +151,7 @@ function looksACLabel(str) {
     s.includes('gym') ||
     s.includes('court') ||
     s.includes('turf') ||
-    /^ac/.test(s)          // begins with "ac"
+    /^ac/.test(s)
   );
 }
 
@@ -163,9 +168,8 @@ function detectRoom(rowObj, directRoom) {
 
   const joined = Object.values(rowObj).map(v => norm(v)).join(' | ').toLowerCase();
   const sorted = [...ROOMS_CATALOG].sort((a,b)=>b.length-a.length);
-  for (const name of sorted) {
-    if (joined.includes(name.toLowerCase())) return name;
-  }
+  for (const name of sorted) if (joined.includes(name.toLowerCase())) return name;
+
   return null;
 }
 
@@ -185,11 +189,7 @@ for (const d of delimiters) {
       relax_column_count: true,
       trim: true
     });
-    if (parsed.length) {
-      rows = parsed;
-      usedDelimiter = d;
-      break;
-    }
+    if (parsed.length) { rows = parsed; usedDelimiter = d; break; }
   } catch { /* try next */ }
 }
 
@@ -210,6 +210,10 @@ console.log('Samples • location:', sample(locations).join(' || ') || '(none)')
 console.log('Samples • facility:', sample(facilities).join(' || ') || '(none)');
 console.log('Samples • reservedtime:', sample(reservedTimes).join(' || ') || '(none)');
 
+// Determine fallback date (today) if there is no date column at all
+const haveAnyDateCol = headerKeys.some(k => START_DATE_KEYS.includes(k) || END_DATE_KEYS.includes(k));
+const fallbackDateISO = !haveAnyDateCol ? DateTime.now().setZone(tz).startOf('day').toISO() : null;
+
 // ───────────────── extract events ─────────────────
 const events = [];
 
@@ -219,7 +223,7 @@ for (const r of rows) {
   const reservee = pick(r, RESERVEE_KEYS);
   const purpose  = pick(r, PURPOSE_KEYS);
 
-  let range = parseTimeRange(whenStr);
+  let range = parseTimeRange(whenStr, fallbackDateISO);
   if (!range) {
     const sd = pick(r, START_DATE_KEYS);
     const st = pick(r, START_TIME_KEYS);
@@ -231,7 +235,6 @@ for (const r of rows) {
   const room = detectRoom(r, directRoom);
   if (!room || !range) continue;
 
-  // Keep only AC spaces
   const isAC = looksACLabel(room) || ROOMS_CATALOG.some(n => n.toLowerCase() === room.toLowerCase());
   if (!isAC) continue;
 
@@ -255,9 +258,7 @@ if (events.length) {
 }
 
 const slots = [];
-for (let t = dayStart; t < dayEnd; t = t.plus({ minutes: SLOT_MIN })) {
-  slots.push(t.toISO());
-}
+for (let t = dayStart; t < dayEnd; t = t.plus({ minutes: SLOT_MIN })) slots.push(t.toISO());
 
 const rooms = Array.from(new Set(events.map(e => e.room))).sort((a, b) => a.localeCompare(b));
 const occupancy = {};
@@ -278,7 +279,7 @@ for (const room of rooms) occupancy[room] = (occupancy[room] || []).map(x => x |
 console.log(`Rows parsed: ${rows.length}`);
 console.log(`Events found: ${events.length}`);
 if (!events.length) {
-  console.log('No AC events matched. Check Samples above; if time formats look different, we can add another parser.');
+  console.log('No AC events matched. Check Samples above; if times are from a different day than today, we can add a date source.');
 }
 
 const out = { tz, slotMin: SLOT_MIN, dayStart: dayStart.toISO(), dayEnd: dayEnd.toISO(), rooms, slots, occupancy };
