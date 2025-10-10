@@ -1,0 +1,32 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8" />
+  <title>AC Room Availability</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta http-equiv="refresh" content="1800">
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+  <div id="app">
+    <header class="bar">
+      <div class="title">
+        <h1>AC Room Availability</h1>
+        <div id="sub"></div>
+      </div>
+      <div class="legend">
+        <span class="chip booked">Booked</span>
+        <span class="chip free">Available</span>
+      </div>
+    </header>
+
+    <div id="grid-wrap">
+      <div id="grid" class="grid"></div>
+      <div id="nowline" class="nowline" hidden></div>
+    </div>
+
+    <footer class="foot"><span id="stamp"></span></footer>
+  </div>
+  <script src="app.js"></script>
+</body>
+</html>
