@@ -16,12 +16,12 @@ jobs:
       - name: Install deps
         run: npm ci || npm i
 
-      - name: Fetch latest CSV via IMAP (Gmail)
+            - name: Fetch latest CSV via IMAP (Gmail)
         run: node scripts/fetch_email.js
         env:
           IMAP_HOST: imap.gmail.com
-          IMAP_USER: ${{ secrets.IMAP_USER }}    # raecroominfo.board@gmail.com
-          IMAP_PASS: ${{ secrets.IMAP_PASS }}    # 16-char App Password
+          IMAP_USER: raecroominfo.board@gmail.com
+          IMAP_PASS: ${{ secrets.GMAILIMAP }}
           IMAP_FOLDER: INBOX
           OUT_CSV: data/inbox/latest.csv
 
