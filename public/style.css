@@ -1,0 +1,23 @@
+:root{ --bg:#0c0f14; --fg:#e9eef6; --muted:#9bb0c5; --grid:#1a2331; --booked:#d04b4b; --free:#2d9c5a; --accent:#5aa0ff; --sticky:280px; }
+*{box-sizing:border-box}
+html,body{height:100%;margin:0;background:var(--bg);color:var(--fg);font-family:system-ui,Segoe UI,Roboto,Helvetica,Arial}
+#app{display:flex;flex-direction:column;height:100%;padding:20px;gap:14px}
+.bar{display:flex;align-items:baseline;gap:18px}
+h1{margin:0;font-size:42px}
+#sub{color:var(--muted);font-size:18px}
+.legend{margin-left:auto;display:flex;gap:8px}
+.chip{padding:6px 10px;border-radius:999px;font-weight:600;font-size:14px}
+.chip.booked{background:var(--booked);color:#fff}
+.chip.free{background:var(--free);color:#fff}
+#grid-wrap{position:relative;flex:1;min-height:0}
+.grid{display:grid;grid-template-columns:var(--sticky) repeat(var(--cols, 16), 1fr);gap:4px;height:100%;align-content:start}
+.header,.roomname{position:sticky;left:0;z-index:3;background:var(--bg)}
+.header{font-weight:700}
+.cell,.roomname,.timehead{background:var(--grid);border-radius:8px;padding:8px;display:flex;align-items:center;justify-content:center;text-align:center}
+.timehead{font-weight:600;color:#cfe0ff;background:#142033}
+.roomname{justify-content:flex-start;font-weight:700}
+.slot{height:100%;border-radius:8px}
+.slot.booked{background:var(--booked)}
+.slot.free{background:var(--free)}
+.nowline{position:absolute;top:0;bottom:0;width:3px;background:linear-gradient(180deg,#fff,#5aa0ff);box-shadow:0 0 8px rgba(90,160,255,.8);pointer-events:none;z-index:4}
+.foot{font-size:14px;color:var(--muted);display:flex;justify-content:space-between}
