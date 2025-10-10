@@ -1,163 +1,160 @@
 // scripts/transform.js
-// RecTrac CSV -> events.json (root) for AC display with 30-min slots and "now" line support.
-//
-// Usage in GitHub Actions step:
-//   TZ=America/Chicago CSV_PATH="data/inbox/latest.csv" JSON_OUT="events.json" node scripts/transform.js
-//
-// Env vars:
-//   CSV_PATH   : path to incoming CSV (default: data/inbox/latest.csv)
-//   JSON_OUT   : output JSON path (default: events.json at repo root)
-//   TZ         : IANA timezone (default: America/Chicago)
-//   SLOT_MIN   : slot minutes (default: 30)
-//   ROOM_KEYS  : optional comma list to override room header guesses
-//   FACIL_KEYS : optional comma list to override facility header guesses
-//   RTIME_KEYS : optional comma list to override time header guesses
-
 import fs from 'fs';
 import { parse } from 'csv-parse/sync';
-import { DateTime, Interval } from 'luxon';
+import { DateTime } from 'luxon';
 
-// ---------- Config ----------
-const IN       = process.env.CSV_PATH || 'data/inbox/latest.csv';
-const OUT      = process.env.JSON_OUT || 'events.json';          // root output
-const TZ       = process.env.TZ || 'America/Chicago';
-const SLOT_MIN = parseInt(process.env.SLOT_MIN || '30', 10);
+const CSV_PATH = process.env.CSV_PATH || 'data/inbox/latest.csv';
+const OUT = process.env.JSON_OUT || 'events.json';
 
-// Header mapping (heuristics; can be overridden with env)
-const ROOM_KEYS  = (process.env.ROOM_KEYS  || 'location:,location,room,resource,space,facility')
-  .split(',').map(s => s.trim().toLowerCase());
-const FACIL_KEYS = (process.env.FACIL_KEYS || 'facility,building,site')
-  .split(',').map(s => s.trim().toLowerCase());
-const RTIME_KEYS = (process.env.RTIME_KEYS || 'reserved time,reservation time,time')
-  .split(',').map(s => s.trim().toLowerCase());
+// 30-min slots default (you can change to 60 if you prefer)
+const SLOT_MIN = Number(process.env.SLOT_MIN || 30);
 
-// ---------- Helpers ----------
-const norm = s => (s ?? '').toString().trim();
-const lc   = o => Object.fromEntries(Object.entries(o).map(([k, v]) => [k.toLowerCase(), v]));
-const pick = (row, keys) => {
-  const l = lc(row);
-  for (const want of keys) {
-    for (const k in l) {
-      if (k.includes(want)) return l[k];
-    }
+// Normalize header names: lower, strip non-alphanum
+const norm = s => (s || '')
+  .toString()
+  .trim()
+  .toLowerCase()
+  .replace(/[^a-z0-9]+/g, '');
+
+// Try to parse a “Reserved Time” cell into start/end (America/Chicago)
+const tz = 'America/Chicago';
+function parseTimeRange(value) {
+  if (!value) return null;
+  const v = String(value).trim();
+
+  // Format A: M/d/yyyy h:mm a - h:mm a (same-day)
+  // Example: 10/10/2025 6:00 PM - 8:00 PM
+  let m = v.match(/^(\d{1,2}\/\d{1,2}\/\d{4})\s+(\d{1,2}:\d{2}\s*[AP]M)\s*-\s*(\d{1,2}:\d{2}\s*[AP]M)$/i);
+  if (m) {
+    const [ , d1, t1, t2 ] = m;
+    const start = DateTime.fromFormat(`${d1} ${t1}`, 'M/d/yyyy h:mm a', { zone: tz });
+    let end = DateTime.fromFormat(`${d1} ${t2}`, 'M/d/yyyy h:mm a', { zone: tz });
+    if (end <= start) end = end.plus({ days: 1 }); // handle overnight just in case
+    return { start, end };
   }
-  return '';
-};
 
-function parseRange(t) {
-  if (!t) return null;
-  const txt = t.replace('–', '-'); // normalize en-dash
-  const parts = txt.split(/\s+-\s+|\s+to\s+|-/i);
-  if (parts.length !== 2) return null;
+  // Format B: M/d/yyyy h:mm a - M/d/yyyy h:mm a (explicit end date)
+  // Example: 10/10/2025 6:00 PM - 10/10/2025 8:00 PM
+  m = v.match(/^(\d{1,2}\/\d{1,2}\/\d{4})\s+(\d{1,2}:\d{2}\s*[AP]M)\s*-\s*(\d{1,2}\/\d{1,2}\/\d{4})\s+(\d{1,2}:\d{2}\s*[AP]M)$/i);
+  if (m) {
+    const [ , d1, t1, d2, t2 ] = m;
+    const start = DateTime.fromFormat(`${d1} ${t1}`, 'M/d/yyyy h:mm a', { zone: tz });
+    const end = DateTime.fromFormat(`${d2} ${t2}`, 'M/d/yyyy h:mm a', { zone: tz });
+    return { start, end };
+  }
 
-  const [a, b] = parts.map(s => s.trim());
-
-  // Start — try common formats, then ISO
-  let start = DateTime.fromFormat(a, 'M/d/yyyy h:mm a', { zone: TZ });
-  if (!start.isValid) start = DateTime.fromFormat(a, 'M/d/yyyy H:mm', { zone: TZ });
-  if (!start.isValid) start = DateTime.fromISO(a, { zone: TZ });
-  if (!start.isValid) return null;
-
-  // End — may omit date; default to start’s date
-  let end = DateTime.fromFormat(b, 'M/d/yyyy h:mm a', { zone: TZ });
-  if (!end.isValid) end = DateTime.fromFormat(b, 'h:mm a', { zone: TZ })
-    .set({ year: start.year, month: start.month, day: start.day });
-  if (!end.isValid) end = DateTime.fromFormat(b, 'H:mm', { zone: TZ })
-    .set({ year: start.year, month: start.month, day: start.day });
-  if (!end.isValid) end = DateTime.fromISO(b, { zone: TZ });
-  if (!end.isValid) return null;
-
-  if (end <= start) end = start.plus({ minutes: 30 });
-  return { start, end };
+  return null;
 }
 
-// ---------- Read CSV ----------
-if (!fs.existsSync(IN)) {
-  console.error(`Input CSV not found: ${IN}`);
-  fs.writeFileSync(OUT, JSON.stringify({ rooms: [], slotMinutes: SLOT_MIN }, null, 2));
-  process.exit(0);
+// Read CSV
+const raw = fs.readFileSync(CSV_PATH, 'utf8');
+const rows = parse(raw, {
+  bom: true,
+  columns: header => header.map(h => norm(h.replace(/:$/, ''))), // strip trailing ":" too
+  skip_empty_lines: true,
+  relax_column_count: true,
+  trim: true
+});
+
+// Detect likely header keys across RecTrac variants
+// We’ll probe several possible names for each logical field.
+function pick(obj, keys) {
+  for (const k of keys) {
+    if (k in obj && obj[k] !== undefined && obj[k] !== '') return obj[k];
+  }
+  return undefined;
 }
 
-const csv = fs.readFileSync(IN, 'utf8');
-const rows = parse(csv, { columns: true, skip_empty_lines: true });
+// Keys we’ll consider equal
+const ROOM_KEYS     = ['location', 'resourcelabel', 'resource', 'facilityname', 'room', 'areaname'];
+const FACILITY_KEYS = ['facility', 'site', 'locationfacility', 'building'];
+const TIME_KEYS     = ['reservedtime', 'time', 'reservationtime', 'startend', 'starttoend'];
+const PURPOSE_KEYS  = ['reservationpurpose', 'purpose', 'event', 'program'];
 
-// ---------- Build records (AC-only) ----------
-const rec = [];
+const events = [];
 for (const r of rows) {
-  const room = norm(pick(r, ROOM_KEYS));
-  const fac  = norm(pick(r, FACIL_KEYS));
-  const t    = norm(pick(r, RTIME_KEYS));
+  const room = pick(r, ROOM_KEYS);
+  const fac  = pick(r, FACILITY_KEYS);
+  const when = pick(r, TIME_KEYS);
+  const purpose = pick(r, PURPOSE_KEYS);
 
-  // AC-only filter; adjust the regex if your Facility text differs
+  // Broad AC filter:
+  const facStr  = (fac  || '').toLowerCase();
+  const roomStr = (room || '').toLowerCase();
   const isAC =
-    /(^|\b)AC\b/i.test(fac) ||
-    /Athletic\s*&\s*Event\s*Center/i.test(fac) ||
-    /Fieldhouse|Gym/i.test(room);
+    facStr.includes('ac') ||
+    facStr.includes('athletic') || facStr.includes('event center') ||
+    roomStr.includes('ac ') || roomStr.includes('fieldhouse') ||
+    roomStr.includes('gym') || roomStr.includes('court') || roomStr.includes('turf');
 
-  if (!isAC || !room || !t) continue;
+  if (!room || !when || !isAC) continue;
 
-  const rng = parseRange(t);
-  if (!rng) continue;
+  const range = parseTimeRange(when);
+  if (!range) continue;
 
-  rec.push({ room, ...rng });
+  events.push({
+    room: String(room).trim(),
+    purpose: (purpose || '').toString().trim(),
+    startISO: range.start.toISO(),
+    endISO: range.end.toISO()
+  });
 }
 
-// If nothing parsed, write an empty payload to avoid 404 on the page
-if (!rec.length) {
-  console.warn('No parsable AC rows. Check headers or Facility values.');
-  const empty = {
-    generatedAt: DateTime.now().setZone(TZ).toISO(),
-    date: DateTime.now().setZone(TZ).toFormat('cccc, LLL d, yyyy'),
-    timeZone: TZ,
-    slotMinutes: SLOT_MIN,
-    windowStart: DateTime.now().setZone(TZ).startOf('day').toISO(),
-    windowEnd: DateTime.now().setZone(TZ).endOf('day').toISO(),
-    rooms: []
-  };
-  fs.writeFileSync(OUT, JSON.stringify(empty, null, 2));
-  process.exit(0);
+// Build day grid bounds from events (fallback to 5:00–23:00 if no events)
+let dayStart = DateTime.now().setZone(tz).startOf('day').plus({ hours: 5 });
+let dayEnd   = DateTime.now().setZone(tz).startOf('day').plus({ hours: 23 });
+
+if (events.length) {
+  const min = events.reduce((a, e) => DateTime.fromISO(e.startISO) < a ? DateTime.fromISO(e.startISO) : a, DateTime.fromISO(events[0].startISO));
+  const max = events.reduce((a, e) => DateTime.fromISO(e.endISO)   > a ? DateTime.fromISO(e.endISO)   : a, DateTime.fromISO(events[0].endISO));
+  // pad 30 minutes
+  dayStart = min.minus({ minutes: 30 }).startOf('hour');
+  dayEnd   = max.plus({ minutes: 30 }).endOf('hour');
 }
 
-// ---------- Compute window & slots ----------
-let dayStart = rec.reduce((m, x) => (x.start < m ? x.start : m), rec[0].start);
-let dayEnd   = rec.reduce((m, x) => (x.end   > m ? x.end   : m), rec[0].end);
-
-// Snap to slot boundaries
-dayStart = dayStart.set({ second: 0, millisecond: 0 }).minus({ minutes: dayStart.minute % SLOT_MIN });
-dayEnd   = dayEnd.set({ second: 0, millisecond: 0 }).plus({ minutes: (SLOT_MIN - (dayEnd.minute % SLOT_MIN)) % SLOT_MIN });
-
-// Compose slot edges
+// Build slots
 const slots = [];
 for (let t = dayStart; t < dayEnd; t = t.plus({ minutes: SLOT_MIN })) {
-  slots.push([t, t.plus({ minutes: SLOT_MIN })]);
+  slots.push(t.toISO());
 }
 
-// ---------- Build timeline ----------
-const rooms = [...new Set(rec.map(x => x.room))].sort();
-const book  = new Map();
+// Room list and occupancy map
+const rooms = Array.from(new Set(events.map(e => e.room))).sort((a, b) => a.localeCompare(b));
+
+const occupancy = {};
+for (const room of rooms) occupancy[room] = [];
+
+for (const e of events) {
+  const s = DateTime.fromISO(e.startISO);
+  const en = DateTime.fromISO(e.endISO);
+  for (let i = 0; i < slots.length; i++) {
+    const slotStart = DateTime.fromISO(slots[i]);
+    const slotEnd = slotStart.plus({ minutes: SLOT_MIN });
+    const overlaps = s < slotEnd && en > slotStart;
+    occupancy[e.room][i] = occupancy[e.room][i] || (overlaps ? { busy: true, label: e.purpose } : { busy: false });
+  }
+}
+
+// Fill any holes with "available" flags
 for (const room of rooms) {
-  book.set(room, rec.filter(x => x.room === room).map(x => Interval.fromDateTimes(x.start, x.end)));
+  occupancy[room] = (occupancy[room] || []).map(x => x || { busy: false });
 }
 
-const timeline = rooms.map(room => ({
-  room,
-  slots: slots.map(([s, e]) => {
-    const si = Interval.fromDateTimes(s, e);
-    const booked = book.get(room).some(iv => iv.overlaps(si));
-    return { start: s.toISO(), end: e.toISO(), booked };
-  })
-}));
-
-// ---------- Output payload ----------
-const payload = {
-  generatedAt: DateTime.now().setZone(TZ).toISO(),
-  date: dayStart.toFormat('cccc, LLL d, yyyy'),
-  timeZone: TZ,
-  slotMinutes: SLOT_MIN,
-  windowStart: dayStart.toISO(),
-  windowEnd: dayEnd.toISO(),
-  rooms: timeline
+// Emit JSON
+const out = {
+  tz,
+  slotMin: SLOT_MIN,
+  dayStart: dayStart.toISO(),
+  dayEnd: dayEnd.toISO(),
+  rooms,
+  slots,
+  occupancy
 };
 
-fs.writeFileSync(OUT, JSON.stringify(payload, null, 2));
-console.log(`Wrote ${OUT} • rooms=${rooms.length} • slots=${slots.length}`);
+if (!rooms.length) {
+  console.log('No parsable AC rows. Check headers or Facility values.');
+} else {
+  console.log(`Wrote ${OUT} • rooms=${rooms.length} • slots=${slots.length}`);
+}
+
+fs.writeFileSync(OUT, JSON.stringify(out));
