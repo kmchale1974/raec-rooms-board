@@ -1,48 +1,52 @@
 name: Build AC availability (every 30 min)
-
 on:
   schedule:
-    - cron: "*/30 * * * *"   # run every 30 minutes
-  workflow_dispatch:          # allow manual runs from the Actions tab
+    - cron: "*/30 * * * *"
+  workflow_dispatch:
 
 jobs:
   build:
     runs-on: ubuntu-latest
-    permissions:
-      contents: write         # needed to commit events.json back to the repo
-
+    permissions: { contents: write }
     steps:
-      - name: Checkout repo
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
 
-      - name: Setup Node
-        uses: actions/setup-node@v4
+      - uses: actions/setup-node@v4
         with:
           node-version: 20
 
-      - name: Install dependencies
+      - name: Install deps
         run: npm ci || npm i
 
+      # Always create inbox folder so later steps don't fail
+      - name: Prepare inbox folder
+        run: mkdir -p data/inbox
+
       - name: Fetch latest CSV via IMAP (Gmail)
-        run: node scripts/fetch_email.js
         env:
           IMAP_HOST: imap.gmail.com
           IMAP_USER: raecroominfo.board@gmail.com
-          IMAP_PASS: ${{ secrets.GMAILIMAP }}   # your 16-char App Password
+          IMAP_PASS: ${{ secrets.GMAILIMAP }}
           IMAP_FOLDER: INBOX
           OUT_CSV: data/inbox/latest.csv
+        run: |
+          set -e
+          node scripts/fetch_email.js || echo "No CSV fetched this run."
+
+      # If no CSV yet, create an empty file so transform step doesn't crash
+      - name: Ensure CSV placeholder
+        run: |
+          test -f data/inbox/latest.csv || echo "" > data/inbox/latest.csv
 
       - name: Transform to events.json (AC-only)
-        run: |
-          TZ=America/Chicago \
-          CSV_PATH="data/inbox/latest.csv" \
-          JSON_OUT="events.json" \
-          node scripts/transform.js
+        env:
+          TZ: America/Chicago
+        run: JSON_OUT="events.json" CSV_PATH="data/inbox/latest.csv" node scripts/transform.js
 
       - name: Commit updates
         run: |
           git config user.name  "auto-bot"
           git config user.email "actions@users.noreply.github.com"
-          git add events.json
+          git add events.json || true
           git commit -m "Update events.json [skip ci]" || echo "No changes"
           git push
