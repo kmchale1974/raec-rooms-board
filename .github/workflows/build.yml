@@ -1,37 +1,48 @@
 name: Build AC availability (every 30 min)
+
 on:
   schedule:
-    - cron: "*/30 * * * *"
-  workflow_dispatch:
+    - cron: "*/30 * * * *"   # run every 30 minutes
+  workflow_dispatch:          # allow manual runs from the Actions tab
 
 jobs:
   build:
     runs-on: ubuntu-latest
-    permissions: { contents: write }
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
-        with: { node-version: 20 }
+    permissions:
+      contents: write         # needed to commit events.json back to the repo
 
-      - name: Install deps
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Install dependencies
         run: npm ci || npm i
 
-            - name: Fetch latest CSV via IMAP (Gmail)
+      - name: Fetch latest CSV via IMAP (Gmail)
         run: node scripts/fetch_email.js
         env:
           IMAP_HOST: imap.gmail.com
           IMAP_USER: raecroominfo.board@gmail.com
-          IMAP_PASS: ${{ secrets.GMAILIMAP }}
+          IMAP_PASS: ${{ secrets.GMAILIMAP }}   # your 16-char App Password
           IMAP_FOLDER: INBOX
           OUT_CSV: data/inbox/latest.csv
 
       - name: Transform to events.json (AC-only)
-        run: TZ=America/Chicago CSV_PATH="data/inbox/latest.csv" node scripts/transform.js
+        run: |
+          TZ=America/Chicago \
+          CSV_PATH="data/inbox/latest.csv" \
+          JSON_OUT="events.json" \
+          node scripts/transform.js
 
       - name: Commit updates
         run: |
           git config user.name  "auto-bot"
           git config user.email "actions@users.noreply.github.com"
-          git add public/events.json
+          git add events.json
           git commit -m "Update events.json [skip ci]" || echo "No changes"
           git push
