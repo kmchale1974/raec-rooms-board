@@ -1,10 +1,9 @@
-// app.js (ESM) — Board, Now/Next, Timeline + centered date + live clock
+// app.js (ESM) — no placeholders; empty state only when there are zero events
 
 /* ------------------ Config: building hours ------------------ */
-/** Adjust these to match the building schedule */
-const BUILDING_OPEN_HOUR = 6;   // e.g., 6 = 6:00 AM
+const BUILDING_OPEN_HOUR = 6;
 const BUILDING_OPEN_MIN  = 0;
-const BUILDING_CLOSE_HOUR = 22; // e.g., 22 = 10:00 PM
+const BUILDING_CLOSE_HOUR = 22;
 const BUILDING_CLOSE_MIN  = 0;
 
 /* ------------------ Banner: date + clock ------------------ */
@@ -12,31 +11,28 @@ const bannerDay = document.querySelector("#banner-day");
 const bannerDate = document.querySelector("#banner-date");
 const bannerClock = document.querySelector("#banner-clock");
 
-const today = new Date();
 const dayFmt = new Intl.DateTimeFormat(undefined, { weekday: "long" });
 const dateFmt = new Intl.DateTimeFormat(undefined, { month: "long", day: "numeric", year: "numeric" });
-
 function ordinal(n){ const s=["th","st","nd","rd"]; const v=n%100; return n+(s[(v-20)%10]||s[v]||s[0]); }
 function setBannerDate(now = new Date()){
   const d = now.getDate();
-  const [month] = dateFmt.format(now).split(" ");
+  const parts = dateFmt.formatToParts(now);
+  const month = parts.find(p=>p.type==="month")?.value ?? "";
   bannerDay.textContent = dayFmt.format(now).toUpperCase();
   bannerDate.innerHTML = `${month} ${ordinal(d)}, ${now.getFullYear()}`;
 }
 function tickClock(){
-  const s = new Intl.DateTimeFormat(undefined, { hour:"numeric", minute:"2-digit", second:"2-digit" }).format(new Date());
-  bannerClock.textContent = s.replace(" ", "");
+  bannerClock.textContent = new Intl.DateTimeFormat(undefined, {
+    hour:"numeric", minute:"2-digit", second:"2-digit"
+  }).format(new Date()).replace(" ", "");
 }
-setBannerDate(today);
-tickClock();
-setInterval(tickClock, 1000);
+setBannerDate(new Date()); tickClock(); setInterval(tickClock, 1000);
 
-/* ------------------ Views switch (non-essential for display) ------------------ */
+/* ------------------ Tabs (nonessential for display) ------------------ */
 const btns = [...document.querySelectorAll(".view-btn")];
 const viewGrid = document.getElementById("view-grid");
 const viewCompact = document.getElementById("view-compact");
 const viewTimeline = document.getElementById("view-timeline");
-
 btns.forEach(b=>{
   b.addEventListener("click", ()=>{
     btns.forEach(x=>x.classList.remove("active"));
@@ -48,7 +44,7 @@ btns.forEach(b=>{
   });
 });
 
-/* ------------------ Buckets for grid ------------------ */
+/* ------------------ Rooms & mapping ------------------ */
 const buckets = {
   "1A": document.getElementById("room-1A"),
   "1B": document.getElementById("room-1B"),
@@ -65,11 +61,8 @@ const buckets = {
   "10A": document.getElementById("room-10A"),
   "10B": document.getElementById("room-10B")
 };
-
-/** Ordered for display: 1A → … → 10B */
 const ALL_ROOMS = ["1A","1B","2A","2B","3","4","5","6","7","8","9A","9B","10A","10B"];
 
-/* Facility → board room(s) mapper (extend as needed) */
 function roomsFromFacility(str = "") {
   const s = str.toLowerCase();
   if (s.includes("court 10-ab") || s.includes("court 10 - ab")) return ["10A","10B"];
@@ -79,16 +72,14 @@ function roomsFromFacility(str = "") {
   if (s.includes("half court 9a"))  return ["9A"];
   if (s.includes("half court 9b"))  return ["9B"];
   for (const n of ["3","4","5","6","7","8"]) {
-    if (s.includes(` ${n}`) || s.endsWith(`-${n}`) || s.includes(`court ${n}`)) return [n];
+    if (s.includes(`court ${n}`) || s.endsWith(`-${n}`) || s.includes(` ${n}`)) return [n];
   }
   for (const code of ["1A","1B","2A","2B"]) if (s.includes(code.toLowerCase())) return [code];
   return [];
 }
 
-/* ------------ Time helpers (parse & format) ------------ */
-function toTodayAt(h, m){
-  const d = new Date(); d.setHours(h, m, 0, 0); return d;
-}
+/* ------------ Time helpers ------------ */
+function toTodayAt(h, m){ const d=new Date(); d.setHours(h,m,0,0); return d; }
 function parseAmPmToken(tok){
   const m = tok.toLowerCase().match(/^(\d{1,2})(?::(\d{2}))?\s*(a|p)\.?m?\.?$/i);
   if(!m) return null;
@@ -97,23 +88,19 @@ function parseAmPmToken(tok){
   const ap = m[3].toLowerCase();
   if(ap === "p" && hh !== 12) hh += 12;
   if(ap === "a" && hh === 12) hh = 0;
-  return {h:hh, m:mm};
+  return {h:hh,m:mm};
 }
-/** Accepts "6:30pm - 8:00pm" (with optional double spaces) and returns [startDate, endDate] for today. */
 function parseTimeRangeText(txt){
   if(!txt) return [null, null];
   const [a,b] = txt.split("-").map(s=>s.trim().replace(/\s+/g," "));
-  const A = parseAmPmToken(a);
-  const B = parseAmPmToken(b);
+  const A = parseAmPmToken(a); const B = parseAmPmToken(b);
   if(!A || !B) return [null, null];
-  return [toTodayAt(A.h, A.m), toTodayAt(B.h, B.m)];
+  return [toTodayAt(A.h,A.m), toTodayAt(B.h,B.m)];
 }
-
 function parseISOish(x){ try{ return x ? new Date(x) : null; } catch { return null; } }
 function fmtTime(d){
   if (!d) return "";
-  const f = new Intl.DateTimeFormat(undefined,{hour:"numeric",minute:"2-digit"});
-  return f.format(d).replace(" ", "");
+  return new Intl.DateTimeFormat(undefined,{hour:"numeric",minute:"2-digit"}).format(d).replace(" ", "");
 }
 function timeRangeText(startISO, endISO, fallback) {
   if (fallback) return fallback;
@@ -122,7 +109,7 @@ function timeRangeText(startISO, endISO, fallback) {
   return `${fmtTime(s)} - ${fmtTime(e)}`;
 }
 
-/* ------------------ UI builders ------------------ */
+/* ------------------ UI helpers ------------------ */
 function slotLine({ time, who, purpose }) {
   const el = document.createElement("div");
   el.className = "slot";
@@ -132,7 +119,6 @@ function slotLine({ time, who, purpose }) {
   el.append(t, w, p);
   return el;
 }
-
 function card(room){
   const c = document.createElement("div");
   c.className="card";
@@ -150,7 +136,6 @@ function fillEntry(el, ev, emptyWord){
   const who = el.querySelector(".who");
   const desc = el.querySelector(".desc");
   const when = el.querySelector(".when");
-
   if (!ev){
     who.textContent = emptyWord || "";
     desc.textContent = "";
@@ -163,21 +148,33 @@ function fillEntry(el, ev, emptyWord){
   desc.textContent = ev.purpose || "";
 }
 
+/* ------------------ Empty state ------------------ */
+function showGlobalEmptyState(){
+  // Clear all buckets and add a single subtle message at the top of the grid view.
+  Object.values(buckets).forEach(b => b && (b.innerHTML = ""));
+  const existing = document.getElementById("empty-msg");
+  if (existing) return;
+  const msg = document.createElement("div");
+  msg.id = "empty-msg";
+  msg.className = "empty-banner";
+  msg.textContent = "No scheduled events today.";
+  document.querySelector("#view-grid")?.prepend(msg);
+}
+
 /* ------------------ Load & render ------------------ */
 async function loadEvents() {
   try {
-    const res = await fetch("events.json", { cache: "no-store" });
+    // cache-bust to avoid GH Pages serving stale JSON
+    const res = await fetch(`events.json?v=${Date.now()}`, { cache: "no-store" });
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
     const data = await res.json();
     const events = Array.isArray(data?.events) ? data.events : [];
 
-    // Normalize to {rooms[], start, end, who, purpose, timeText}
     const normalized = [];
     for (const raw of events){
       const rooms = raw.roomCode ? [raw.roomCode] : roomsFromFacility(raw.facility || "");
       if (!rooms.length) continue;
 
-      // Prefer ISO times; else parse reservedtime text (“6:30pm - 8:00pm”) as today
       let start = parseISOish(raw.start), end = parseISOish(raw.end), timeText = raw.timeText;
       if ((!start || !end) && (raw.reservedtime || raw.timeText)) {
         const [s,e] = parseTimeRangeText(raw.reservedtime || raw.timeText);
@@ -193,26 +190,33 @@ async function loadEvents() {
       });
     }
 
-    /* ---------- Board (grid) ---------- */
-    if (!normalized.length) {
-      demoPlaceholders();
-    } else {
-      for (const ev of normalized) {
-        const displayTime = timeRangeText(ev.start?.toISOString(), ev.end?.toISOString(), ev.timeText);
-        const line = slotLine({ time: displayTime, who: ev.who, purpose: ev.purpose });
-        for (const rc of ev.rooms) buckets[rc]?.appendChild(line.cloneNode(true));
-      }
+    // Always clear any previous content/empty banners
+    document.getElementById("empty-msg")?.remove();
+    Object.values(buckets).forEach(b => b && (b.innerHTML = ""));
+
+    // If nothing: show empty banner and build empty views
+    if (!normalized.length){
+      showGlobalEmptyState();
+      buildCompact([]);
+      buildTimeline([]);
+      return;
     }
 
-    /* ---------- Now / Next ---------- */
-    buildCompact(normalized);
+    // Board (grid)
+    for (const ev of normalized) {
+      const displayTime = timeRangeText(ev.start?.toISOString(), ev.end?.toISOString(), ev.timeText);
+      const line = slotLine({ time: displayTime, who: ev.who, purpose: ev.purpose });
+      for (const rc of ev.rooms) buckets[rc]?.appendChild(line.cloneNode(true));
+    }
 
-    /* ---------- Timeline (fixed building hours) ---------- */
+    // Compact & Timeline
+    buildCompact(normalized);
     buildTimeline(normalized);
 
   } catch (err) {
     console.error("Failed to load events.json:", err);
-    demoPlaceholders();
+    // In error state we still avoid placeholders
+    showGlobalEmptyState();
     buildCompact([]);
     buildTimeline([]);
   }
@@ -225,13 +229,7 @@ function buildCompact(events){
 
   const byRoom = Object.fromEntries(ALL_ROOMS.map(r=>[r,[]]));
   for (const ev of events){
-    const payload = {
-      start: ev.start,
-      end: ev.end,
-      who: ev.who,
-      purpose: ev.purpose,
-      timeText: ev.timeText
-    };
+    const payload = { start: ev.start, end: ev.end, who: ev.who, purpose: ev.purpose, timeText: ev.timeText };
     for (const c of ev.rooms) byRoom[c]?.push(payload);
   }
   for (const r of ALL_ROOMS) byRoom[r].sort((a,b)=>(a.start?.getTime()||0)-(b.start?.getTime()||0));
@@ -260,23 +258,19 @@ function buildCompact(events){
   }
 }
 
-/* ----------- Timeline (hours left→right) ----------- */
+/* ----------- Timeline (fixed hours) ----------- */
 function minutesSince(d0, d){ return (d.getTime() - d0.getTime())/60000; }
-
 function buildTimeline(events){
   const hoursEl = document.getElementById("tl-hours");
   const gridEl  = document.getElementById("tl-grid");
   hoursEl.innerHTML = "";
   gridEl.innerHTML  = "";
 
-  // Fixed to building hours
   const dayStart = toTodayAt(BUILDING_OPEN_HOUR, BUILDING_OPEN_MIN);
   const dayEnd   = toTodayAt(BUILDING_CLOSE_HOUR, BUILDING_CLOSE_MIN);
-
   const totalMinutes = Math.max(60, minutesSince(dayStart, dayEnd));
   const pxPerMinute  = parseFloat(getComputedStyle(document.documentElement).getPropertyValue("--tl-hour-w")) / 60;
 
-  // Hours header
   const hourCount = Math.round(totalMinutes / 60);
   for (let i = 0; i <= hourCount; i++){
     const d = new Date(dayStart.getTime() + i*60*60000);
@@ -287,39 +281,22 @@ function buildTimeline(events){
     hoursEl.appendChild(h);
   }
 
-  // Rows per room (ordered)
   const byRoom = Object.fromEntries(ALL_ROOMS.map(r=>[r,[]]));
-  for (const ev of events){
-    for (const r of ev.rooms){
-      byRoom[r]?.push(ev);
-    }
-  }
+  for (const ev of events){ for (const r of ev.rooms) byRoom[r]?.push(ev); }
   for (const r of ALL_ROOMS) byRoom[r].sort((a,b)=>(a.start?.getTime()||0)-(b.start?.getTime()||0));
 
-  // Build rows
   for (const r of ALL_ROOMS){
-    const row = document.createElement("div");
-    row.className = "tl-row";
+    const row = document.createElement("div"); row.className = "tl-row";
+    const name = document.createElement("div"); name.className = "tl-room"; name.textContent = r;
+    const track = document.createElement("div"); track.className = "tl-track"; track.style.width = `${totalMinutes * pxPerMinute}px`;
 
-    const name = document.createElement("div");
-    name.className = "tl-room";
-    name.textContent = r;
-
-    const track = document.createElement("div");
-    track.className = "tl-track";
-    track.style.width = `${totalMinutes * pxPerMinute}px`;
-
-    // “Now” line
     const now = new Date();
     if (now >= dayStart && now <= dayEnd){
       const x = minutesSince(dayStart, now) * pxPerMinute;
-      const nowLine = document.createElement("div");
-      nowLine.className = "tl-now";
-      nowLine.style.left = `${x}px`;
+      const nowLine = document.createElement("div"); nowLine.className = "tl-now"; nowLine.style.left = `${x}px`;
       track.appendChild(nowLine);
     }
 
-    // Events (clamped to building hours; parse fallback if needed)
     for (const ev of byRoom[r]){
       let s = ev.start, e = ev.end;
       if ((!s || !e) && ev.timeText){
@@ -328,7 +305,6 @@ function buildTimeline(events){
       }
       if (!s || !e) continue;
 
-      // Clamp to building hours
       const sClamped = s < dayStart ? dayStart : s;
       const eClamped = e > dayEnd   ? dayEnd   : e;
       if (eClamped <= dayStart || sClamped >= dayEnd) continue;
@@ -353,14 +329,6 @@ function buildTimeline(events){
     row.append(name, track);
     gridEl.appendChild(row);
   }
-}
-
-/* ----------- Placeholders if no data ----------- */
-function demoPlaceholders(){
-  const sample = slotLine({ time:"7:00p - 9:00p", who:"PINK Elite", purpose:"" });
-  const sample2= slotLine({ time:"7:30p - 9:30p", who:"FFB", purpose:"" });
-  buckets["7"]?.appendChild(sample.cloneNode(true));
-  buckets["5"]?.appendChild(sample2.cloneNode(true));
 }
 
 loadEvents();
