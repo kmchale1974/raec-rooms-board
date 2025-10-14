@@ -5,7 +5,8 @@
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>RAEC Rooms Board</title>
 
-  <link href="https://fonts.googleapis.com/css2?family=Patrick+Hand&display=swap" rel="stylesheet">
+  <!-- Professional font -->
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@500;700;800&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="style.css" />
 </head>
 <body class="theme-dark">
@@ -14,21 +15,23 @@
     <!-- Top banner -->
     <header class="banner">
       <div class="banner-left">
-        <span class="banner-day" id="banner-day">FRIDAY</span>
-        <span class="banner-date" id="banner-date">October 10<sup>th</sup>, 2025</span>
-      </div>
-
-      <div class="banner-controls">
         <nav class="view-switch" role="tablist" aria-label="View">
           <button class="view-btn active" data-view="grid" role="tab" aria-selected="true">Board</button>
           <button class="view-btn" data-view="compact" role="tab" aria-selected="false">Now / Next</button>
+          <button class="view-btn" data-view="timeline" role="tab" aria-selected="false">Timeline</button>
         </nav>
-
-        <aside class="wifi">
-          <div><strong>Public WiFi:</strong> RAEC Public</div>
-          <div><strong>WiFi Password:</strong> Public00</div>
-        </aside>
       </div>
+
+      <div class="banner-center">
+        <span class="banner-day" id="banner-day">FRIDAY</span>
+        <span class="banner-date" id="banner-date">October 10<sup>th</sup>, 2025</span>
+        <span class="banner-clock" id="banner-clock">10:24 AM</span>
+      </div>
+
+      <aside class="banner-right wifi">
+        <div><strong>Public WiFi:</strong> RAEC Public</div>
+        <div><strong>WiFi Password:</strong> Public00</div>
+      </aside>
     </header>
 
     <!-- GRID (whiteboard look) -->
@@ -62,13 +65,22 @@
 
     <!-- COMPACT (Now / Next) -->
     <section id="view-compact" class="compact hidden" role="tabpanel" aria-labelledby="Now / Next">
-      <div class="compact-grid" id="now-next-grid">
-        <!-- cards injected by app.js -->
-      </div>
+      <div class="compact-grid" id="now-next-grid"></div>
       <footer class="legend">
         <span class="chip now">NOW</span>
         <span class="chip next">NEXT</span>
         <span class="chip free">FREE</span>
+      </footer>
+    </section>
+
+    <!-- TIMELINE (hours left→right) -->
+    <section id="view-timeline" class="timeline hidden" role="tabpanel" aria-labelledby="Timeline">
+      <div class="tl-wrap">
+        <div class="tl-hours" id="tl-hours"></div>
+        <div class="tl-grid" id="tl-grid"></div>
+      </div>
+      <footer class="legend">
+        <span class="chip now">CURRENT TIME</span>
       </footer>
     </section>
 
