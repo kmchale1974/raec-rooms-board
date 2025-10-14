@@ -1,23 +1,36 @@
 :root{
-  --board-bg:#fff;
-  --board-line:#111;
-  --banner-blue:#2f70ff;
-  --banner-red:#c7352b;
-  --text:#111;
-  --label:#111;
-  --slot-blue:#1570ef;
-  --slot-red:#d92d20;
-  --slot-black:#111;
-  --border:6px;          /* thick board lines */
-  --gap:6px;             /* spacing between boxes (board joints) */
+  /* Dark board palette */
+  --bg:#0c0f14;               /* page backdrop */
+  --board-bg:#0f141b;         /* board surface */
+  --board-line:#2b3442;       /* grid lines */
+  --board-glow:rgba(16, 150, 255, .08);
+
+  --banner-blue:#68a8ff;
+  --banner-red:#ff6b5f;
+  --text:#dbe1ea;
+  --muted:#9aa6b2;
+
+  /* “marker” colors */
+  --label:#e7eef9;
+  --slot-blue:#7cb8ff;
+  --slot-red:#ff7b72;
+  --slot-green:#73e2a7;
+  --slot-yellow:#ffd166;
+
+  --border:6px;
+  --gap:6px;
+  --radius:10px;
+  --btn-bg:#18202a;
+  --btn-active:#274058;
+  --btn-border:#2b3b4b;
 }
 
 *{box-sizing:border-box}
 html,body{height:100%}
 body{
   margin:0;
-  background:#e6eaee; /* light wall color */
   font-family: system-ui, -apple-system, Segoe UI, Roboto, "Patrick Hand", sans-serif;
+  background:linear-gradient(160deg, #0a0d12, #0c1016 35%, #0a0e15);
   color:var(--text);
 }
 
@@ -26,10 +39,13 @@ body{
   margin:24px auto;
   background:var(--board-bg);
   border:var(--border) solid var(--board-line);
-  box-shadow:0 20px 40px rgba(0,0,0,.15);
+  border-radius:var(--radius);
+  box-shadow:
+    0 20px 40px rgba(0,0,0,.45),
+    0 0 0 1px rgba(255,255,255,.03),
+    0 0 100px 10px var(--board-glow) inset;
 }
 
-/* Top banner (like the photo) */
 .banner{
   position:relative;
   display:flex;
@@ -41,55 +57,76 @@ body{
 
 .banner-day{
   display:block;
-  font-weight:700;
+  font-weight:800;
   color:var(--banner-red);
   font-size:28px;
   letter-spacing:.5px;
   margin-right:12px;
+  text-shadow:0 0 8px rgba(255,107,95,.25);
 }
 
 .banner-date{
   font-size:28px;
   color:var(--banner-blue);
-  font-weight:600;
+  font-weight:700;
+  text-shadow:0 0 10px rgba(104,168,255,.25);
 }
 
 .banner-left{ display:flex; align-items:baseline; gap:12px; }
 
-.wifi{
-  border:3px solid var(--board-line);
-  padding:8px 10px;
-  font-size:13px;
-  line-height:1.25;
+.banner-controls{
+  display:flex; align-items:center; gap:12px;
 }
 
-/* Three-column shell */
+.wifi{
+  border:2px solid var(--board-line);
+  padding:8px 10px;
+  font-size:13px; line-height:1.25;
+  color:var(--muted);
+  border-radius:8px;
+}
+
+.toggles{ display:flex; gap:8px; }
+
+.btn{
+  appearance:none;
+  border:1px solid var(--btn-border);
+  background:var(--btn-bg);
+  color:var(--text);
+  padding:8px 10px;
+  border-radius:8px;
+  cursor:pointer;
+  font-weight:600;
+}
+.btn:hover{ filter:brightness(1.1); }
+.btn.active{
+  background:var(--btn-active);
+  border-color:var(--banner-blue);
+  box-shadow:0 0 0 2px rgba(104,168,255,.25) inset;
+}
+
+/* BOARD VIEW */
 .shell{
   display:grid;
-  grid-template-columns: 1fr 3fr 1fr; /* left skinny / big middle / right skinny */
+  grid-template-columns: 1fr 3fr 1fr;
   gap:var(--gap);
   padding:var(--gap);
 }
 
-/* Inner rails (left/right have 4 stacked boxes each) */
-.rail{
-  display:grid;
-  gap:var(--gap);
-}
+.rail{ display:grid; gap:var(--gap); }
 
-.grid-4{
-  grid-template-rows: repeat(4, 1fr);
-}
+.grid-4{ grid-template-rows: repeat(4, 1fr); }
 
 .rail-cell,
 .center-cell{
   border:var(--border) solid var(--board-line);
   background:var(--board-bg);
   position:relative;
-  min-height:140px; /* nice big writing space */
+  min-height:140px;
+  border-radius:8px;
+  box-shadow: inset 0 0 40px rgba(255,255,255,.02);
 }
 
-/* Center: 3 high rows × 2 columns */
 .center{
   display:grid;
   grid-template-rows: repeat(3, minmax(160px, 1fr));
@@ -97,17 +134,18 @@ body{
   gap:var(--gap);
 }
 
-/* Room labels (the little numbers in each box) */
+/* Room marker */
 .room-label{
   position:absolute;
-  top:6px;
-  left:10px;
+  top:6px; left:10px;
   font-size:22px;
   color:var(--label);
-  font-weight:700;
+  font-weight:800;
+  letter-spacing:.5px;
+  text-shadow:0 0 8px rgba(255,255,255,.08);
 }
 
-/* Slots (the “handwritten” event lines) */
+/* Handwritten slots */
 .slots{
   position:absolute;
   inset:0;
@@ -116,22 +154,70 @@ body{
   flex-direction:column;
   gap:8px;
   font-size:22px;
-  font-family:"Patrick Hand", system-ui, sans-serif; /* adds marker vibe */
+  font-family:"Patrick Hand", system-ui, sans-serif;
 }
 
-/* A “line” (time + text) */
 .slot{
   display:flex;
   align-items:baseline;
   gap:10px;
   flex-wrap:wrap;
+  filter: drop-shadow(0 1px 0 rgba(0,0,0,.5));
+}
+.slot .time{ color:var(--slot-red); font-weight:800; }
+.slot .who { color:var(--slot-blue); font-weight:800; }
+.slot .note{ color:#eaeef5; opacity:.95; }
+
+/* SCHEDULE VIEW */
+.schedule{
+  padding:12px 12px 18px;
 }
 
-.slot .time{ color:var(--slot-red); font-weight:700; }
-.slot .who { color:var(--slot-blue); font-weight:700; }
-.slot .note{ color:var(--slot-black); opacity:.9; }
+.schedule-root{
+  display:flex;
+  flex-direction:column;
+  gap:10px;
+}
 
-/* Small screens: scale down gracefully */
+.time-group{
+  border:2px solid var(--board-line);
+  border-radius:10px;
+  padding:10px 12px;
+  background:linear-gradient(180deg, #111823, #0f141b);
+  box-shadow: inset 0 0 30px rgba(255,255,255,.025);
+}
+
+.time-header{
+  font-weight:900;
+  font-size:18px;
+  letter-spacing:.3px;
+  color:var(--slot-yellow);
+  text-shadow:0 0 8px rgba(255,209,102,.18);
+  margin-bottom:6px;
+}
+
+.line{
+  display:flex;
+  align-items:center;
+  gap:10px;
+  flex-wrap:wrap;
+  padding:2px 0;
+  font-size:18px;
+}
+.line .rooms{
+  color:var(--label);
+  font-weight:800;
+}
+.line .who{
+  color:var(--slot-blue);
+  font-weight:800;
+}
+.line .purpose{
+  color:#cfd7e3;
+  opacity:.95;
+}
+
+/* Responsive */
 @media (max-width: 860px){
   .banner-day, .banner-date{ font-size:22px; }
   .room-label{ font-size:18px; }
@@ -141,9 +227,7 @@ body{
 }
 
 @media (max-width: 640px){
-  .shell{
-    grid-template-columns: 1fr;    /* stack columns on phones */
-  }
+  .shell{ grid-template-columns: 1fr; }
   .left-rail, .right-rail{ grid-template-rows: repeat(4, minmax(110px,1fr)); }
   .center{ grid-template-rows: repeat(3, minmax(120px,1fr)); }
 }
