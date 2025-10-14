@@ -4,8 +4,6 @@
 // CONFIG
 // --------------------------
 const BUILDING_HOURS = {
-  // Per-area overrides. If your events include e.area ("Gym", "Fieldhouse", etc.)
-  // these hours will be used; otherwise the DEFAULT applies.
   DEFAULT: { open: "06:00", close: "22:00" },
   Gym:     { open: "06:00", close: "22:00" },
   Fieldhouse: { open: "06:00", close: "22:00" },
@@ -19,7 +17,7 @@ const ROOMS_ORDER = [
 // How often to refresh events (ms)
 const REFRESH_MS = 60_000;
 
-// URL to your generated data (GitHub Pages)
+// URL to your generated data
 const EVENTS_URL = "events.json";
 
 // --------------------------
@@ -32,7 +30,7 @@ function injectFontsAndTheme() {
   link.href = "https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap";
   document.head.appendChild(link);
 
-  // Dark theme styles (scoped to this app)
+  // Dark theme
   const css = `
     :root {
       --bg: #0b0f14;
@@ -48,10 +46,11 @@ function injectFontsAndTheme() {
     }
     * { box-sizing: border-box; }
     body { margin:0; background:var(--bg); color:var(--text); font-family: Inter, system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif; }
-    #app { padding: 24px; max-width: 1920px; margin: 0 auto; }
+    #app { padding: 24px; max-width: 1920px; height: 100vh; margin: 0 auto; display:flex; flex-direction:column; }
 
     .header {
       display:flex; flex-direction:column; gap:8px; align-items:center; justify-content:center; margin-bottom: 12px;
+      flex: 0 0 auto;
     }
     .title-row {
       display:flex; align-items:center; gap:16px; justify-content:center;
@@ -78,6 +77,7 @@ function injectFontsAndTheme() {
     .tabs {
       display:flex; gap:8px; justify-content:center; margin: 10px 0 18px;
       flex-wrap: wrap;
+      flex: 0 0 auto;
     }
     .tab {
       padding: 8px 14px;
@@ -85,7 +85,6 @@ function injectFontsAndTheme() {
       border: 1px solid #1b2838;
       color: var(--muted);
       border-radius: 10px;
-      cursor: default; /* non-interactive display */
       user-select: none;
     }
     .tab.active {
@@ -100,12 +99,16 @@ function injectFontsAndTheme() {
       background: var(--panel);
       border-radius: 14px;
       overflow: hidden;
+      flex: 1 1 auto;
+      min-height: 0; /* allow timeline to size inside vh */
+      display:flex; flex-direction:column;
     }
 
     .grid {
       display:grid;
       grid-template-columns: 220px 1fr;
-      min-height: 70vh;
+      min-height: 0;
+      flex: 1 1 auto;
     }
 
     .rooms {
@@ -113,6 +116,7 @@ function injectFontsAndTheme() {
       background: var(--panel-2);
       display:grid;
       grid-auto-rows: minmax(48px, auto);
+      min-height: 0;
     }
     .room {
       border-bottom:1px solid var(--grid);
@@ -123,6 +127,7 @@ function injectFontsAndTheme() {
     .timeline {
       position:relative;
       overflow:hidden;
+      min-height: 0;
     }
     .hours {
       display:flex;
@@ -190,10 +195,6 @@ function injectFontsAndTheme() {
       font-size: 12px;
       margin-left: 6px;
     }
-    .empty-hint {
-      text-align:center; color: var(--muted);
-      padding: 20px 0 26px; font-size: 14px;
-    }
   `;
   const style = document.createElement("style");
   style.textContent = css;
@@ -211,7 +212,6 @@ function fmtClock(d = new Date()) {
 }
 
 function parseTimeToMinutes(t24) {
-  // t24 like "06:00" -> minutes from midnight
   const [h, m] = t24.split(":").map(Number);
   return h * 60 + m;
 }
@@ -246,8 +246,8 @@ async function loadEvents() {
   return (Array.isArray(data) ? data : data.events || []).map(e => ({
     room: String(e.room || "").trim(),
     title: e.title || "",
-    start: e.start, // ISO
-    end:   e.end,   // ISO
+    start: e.start,
+    end:   e.end,
     area:  e.area || undefined,
     who:   e.reservee || e.who || "",
   })).filter(e => e.room && e.start && e.end);
@@ -279,14 +279,13 @@ function buildHeader(container) {
 }
 
 function buildTabs(container, areas, activeArea) {
-  if (areas.length <= 1) return; // no tabs needed
+  if (areas.length <= 1) return;
   const tabs = document.createElement("div");
   tabs.className = "tabs";
   for (const a of areas) {
     const el = document.createElement("div");
     el.className = "tab" + (a === activeArea ? " active" : "");
     el.textContent = a;
-    // non-interactive display, but we still indicate active
     tabs.appendChild(el);
   }
   container.appendChild(tabs);
@@ -305,11 +304,9 @@ function computeLayout(openMins, closeMins, areaEvents) {
   // Keep only rooms in ROOMS_ORDER (and keep order)
   const known = upcoming.filter(e => ROOMS_ORDER.includes(e.room));
 
-  // Group by room
   const byRoom = new Map(ROOMS_ORDER.map(r => [r, []]));
   for (const e of known) byRoom.get(e.room).push(e);
 
-  // Compute pixel positions relative to open/close
   const totalMinutes = closeMins - openMins;
   return { byRoom, totalMinutes };
 }
@@ -320,15 +317,12 @@ function buildBoard(container, area, areaEvents) {
   const closeMins = parseTimeToMinutes(close);
   const totalMinutes = closeMins - openMins;
 
-  // Root
   const board = document.createElement("div");
   board.className = "board";
 
-  // Grid
   const grid = document.createElement("div");
   grid.className = "grid";
 
-  // Rooms rail
   const roomsCol = document.createElement("div");
   roomsCol.className = "rooms";
   for (const room of ROOMS_ORDER) {
@@ -338,11 +332,9 @@ function buildBoard(container, area, areaEvents) {
     roomsCol.appendChild(row);
   }
 
-  // Timeline col
   const timeline = document.createElement("div");
   timeline.className = "timeline";
 
-  // Hour header
   const hoursHead = document.createElement("div");
   hoursHead.className = "hours";
   const hourSpan = Math.max(1, Math.ceil((closeMins - openMins) / 60));
@@ -356,30 +348,25 @@ function buildBoard(container, area, areaEvents) {
     hoursHead.appendChild(hour);
   }
 
-  // Rows + background grid columns
   const rows = document.createElement("div");
   rows.className = "rows";
-  // expose CSS var for hour width: rows.clientWidth is not yet known; use percentage grid backdrop
   const colGrid = document.createElement("div");
   colGrid.className = "col-grid";
   colGrid.style.setProperty("--hourW", `${100 / hourSpan}%`);
   rows.appendChild(colGrid);
 
-  // Events layout
   const { byRoom } = computeLayout(openMins, closeMins, areaEvents);
 
-  const rowHeight = 48; // must match CSS grid auto rows
+  const rowHeight = 48;
   const timelineRectWidth = () => rows.clientWidth;
 
-  // Place events as absolute blocks
   function placeEvents() {
-    // clear previous blocks (if re-rendering)
     rows.querySelectorAll(".event, .now").forEach(n => n.remove());
 
     const width = timelineRectWidth();
     const pxPerMin = width / totalMinutes;
 
-    // Current time red line (only if inside building hours today)
+    // Now line (within hours)
     const nowM = minutesSinceMidnight();
     if (nowM >= openMins && nowM <= closeMins) {
       const nowX = (nowM - openMins) * pxPerMin;
@@ -389,11 +376,9 @@ function buildBoard(container, area, areaEvents) {
       rows.appendChild(now);
     }
 
-    let any = false;
     ROOMS_ORDER.forEach((room, idx) => {
       const list = byRoom.get(room);
       for (const e of list) {
-        any = true;
         const s = new Date(e.start);
         const en = new Date(e.end);
         const sM = s.getHours() * 60 + s.getMinutes();
@@ -419,28 +404,16 @@ function buildBoard(container, area, areaEvents) {
         rows.appendChild(block);
       }
     });
-
-    // Empty hint
-    if (!any) {
-      const hint = document.createElement("div");
-      hint.className = "empty-hint";
-      hint.textContent = "No reservations during building hours.";
-      rows.appendChild(hint);
-    }
   }
 
-  // Initial build
   timeline.append(hoursHead, rows);
   grid.append(roomsCol, timeline);
   board.appendChild(grid);
   container.appendChild(board);
 
-  // After attached to DOM, we can measure widths and place events
   requestAnimationFrame(placeEvents);
-  // Reflow on resize (e.g., Yodeck player resizes)
   window.addEventListener("resize", placeEvents, { passive: true });
 
-  // Return a tiny API to update only the moving parts (now line) without rebuilding everything
   return {
     updateNowLine: placeEvents,
   };
@@ -450,7 +423,7 @@ function buildBoard(container, area, areaEvents) {
 // APP
 // --------------------------
 let currentArea = "All";
-let boards = []; // one per area
+let boards = [];
 
 async function render() {
   const root = document.getElementById("app");
@@ -467,7 +440,6 @@ async function render() {
   if (!areas.includes(currentArea)) currentArea = areas[0];
   buildTabs(root, areas, currentArea);
 
-  // Build one board per area (non-interactive tabs => still show only active)
   const showingAreas = [currentArea];
   boards = [];
 
@@ -483,7 +455,6 @@ function tickHeaderClock() {
   const clockEl = document.getElementById("clockText");
   if (dateEl) dateEl.textContent = fmtDateHeader();
   if (clockEl) clockEl.textContent = fmtClock();
-  // Move the "now" line if the minutes changed
   for (const b of boards) b?.updateNowLine?.();
 }
 
@@ -491,14 +462,13 @@ async function boot() {
   injectFontsAndTheme();
   await render();
 
-  // Clock + now-line every 60s
+  // Update clock + now line every minute
   setInterval(tickHeaderClock, 60 * 1000);
 
-  // Full data refresh every REFRESH_MS
+  // Full data refresh
   setInterval(async () => {
-    try { await render(); } catch (e) { /* keep screen up even on fetch hiccup */ }
+    try { await render(); } catch {}
   }, REFRESH_MS);
 }
 
-// Start
 boot().catch(console.error);
