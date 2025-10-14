@@ -1,4 +1,11 @@
-// app.js (ESM) — Board, Now/Next, and Timeline + centered date + live clock
+// app.js (ESM) — Board, Now/Next, Timeline + centered date + live clock
+
+/* ------------------ Config: building hours ------------------ */
+/** Adjust these to match the building schedule */
+const BUILDING_OPEN_HOUR = 6;   // e.g., 6 = 6:00 AM
+const BUILDING_OPEN_MIN  = 0;
+const BUILDING_CLOSE_HOUR = 22; // e.g., 22 = 10:00 PM
+const BUILDING_CLOSE_MIN  = 0;
 
 /* ------------------ Banner: date + clock ------------------ */
 const bannerDay = document.querySelector("#banner-day");
@@ -24,7 +31,7 @@ setBannerDate(today);
 tickClock();
 setInterval(tickClock, 1000);
 
-/* ------------------ Views switch ------------------ */
+/* ------------------ Views switch (non-essential for display) ------------------ */
 const btns = [...document.querySelectorAll(".view-btn")];
 const viewGrid = document.getElementById("view-grid");
 const viewCompact = document.getElementById("view-compact");
@@ -58,7 +65,9 @@ const buckets = {
   "10A": document.getElementById("room-10A"),
   "10B": document.getElementById("room-10B")
 };
-const ALL_ROOMS = ["2B","2A","1B","1A","5","8","4","7","3","6","10B","10A","9B","9A"];
+
+/** Ordered for display: 1A → … → 10B */
+const ALL_ROOMS = ["1A","1B","2A","2B","3","4","5","6","7","8","9A","9B","10A","10B"];
 
 /* Facility → board room(s) mapper (extend as needed) */
 function roomsFromFacility(str = "") {
@@ -168,7 +177,7 @@ async function loadEvents() {
       const rooms = raw.roomCode ? [raw.roomCode] : roomsFromFacility(raw.facility || "");
       if (!rooms.length) continue;
 
-      // Prefer ISO times; else parse reservedtime text (“6:30pm - 8:00pm”)
+      // Prefer ISO times; else parse reservedtime text (“6:30pm - 8:00pm”) as today
       let start = parseISOish(raw.start), end = parseISOish(raw.end), timeText = raw.timeText;
       if ((!start || !end) && (raw.reservedtime || raw.timeText)) {
         const [s,e] = parseTimeRangeText(raw.reservedtime || raw.timeText);
@@ -198,7 +207,7 @@ async function loadEvents() {
     /* ---------- Now / Next ---------- */
     buildCompact(normalized);
 
-    /* ---------- Timeline ---------- */
+    /* ---------- Timeline (fixed building hours) ---------- */
     buildTimeline(normalized);
 
   } catch (err) {
@@ -260,22 +269,17 @@ function buildTimeline(events){
   hoursEl.innerHTML = "";
   gridEl.innerHTML  = "";
 
-  // Determine day window: default 6:00 → 22:00, expand to fit events if needed
-  let dayStart = toTodayAt(6,0);
-  let dayEnd   = toTodayAt(22,0);
-  for (const e of events){
-    if (e.start && e.start < dayStart) dayStart = toTodayAt(e.start.getHours(), e.start.getMinutes());
-    if (e.end && e.end > dayEnd) dayEnd = toTodayAt(e.end.getHours(), e.end.getMinutes());
-  }
-  // Snap to hour edges
-  dayStart.setMinutes(0,0,0);
-  dayEnd.setMinutes(0,0,0);
+  // Fixed to building hours
+  const dayStart = toTodayAt(BUILDING_OPEN_HOUR, BUILDING_OPEN_MIN);
+  const dayEnd   = toTodayAt(BUILDING_CLOSE_HOUR, BUILDING_CLOSE_MIN);
 
   const totalMinutes = Math.max(60, minutesSince(dayStart, dayEnd));
   const pxPerMinute  = parseFloat(getComputedStyle(document.documentElement).getPropertyValue("--tl-hour-w")) / 60;
 
   // Hours header
-  for (let d = new Date(dayStart); d <= dayEnd; d.setHours(d.getHours()+1)){
+  const hourCount = Math.round(totalMinutes / 60);
+  for (let i = 0; i <= hourCount; i++){
+    const d = new Date(dayStart.getTime() + i*60*60000);
     const h = document.createElement("div");
     h.className = "tl-hour";
     h.style.minWidth = `calc(var(--tl-hour-w))`;
@@ -283,7 +287,7 @@ function buildTimeline(events){
     hoursEl.appendChild(h);
   }
 
-  // Rows per room
+  // Rows per room (ordered)
   const byRoom = Object.fromEntries(ALL_ROOMS.map(r=>[r,[]]));
   for (const ev of events){
     for (const r of ev.rooms){
@@ -315,20 +319,18 @@ function buildTimeline(events){
       track.appendChild(nowLine);
     }
 
-    // Events
+    // Events (clamped to building hours; parse fallback if needed)
     for (const ev of byRoom[r]){
-      const s = ev.start, e = ev.end;
-      // If missing ISO but we have timeText, try parsing that
-      let s2 = s, e2 = e;
-      if ((!s2 || !e2) && ev.timeText){
+      let s = ev.start, e = ev.end;
+      if ((!s || !e) && ev.timeText){
         const [ps,pe] = parseTimeRangeText(ev.timeText);
-        s2 = s2 || ps; e2 = e2 || pe;
+        s = s || ps; e = e || pe;
       }
-      if (!s2 || !e2) continue;
+      if (!s || !e) continue;
 
-      // Clamp within the visible window
-      const sClamped = s2 < dayStart ? dayStart : s2;
-      const eClamped = e2 > dayEnd   ? dayEnd   : e2;
+      // Clamp to building hours
+      const sClamped = s < dayStart ? dayStart : s;
+      const eClamped = e > dayEnd   ? dayEnd   : e;
       if (eClamped <= dayStart || sClamped >= dayEnd) continue;
 
       const left = minutesSince(dayStart, sClamped) * pxPerMinute;
@@ -340,7 +342,7 @@ function buildTimeline(events){
       box.style.width= `${width}px`;
       box.title = `${r}: ${ev.who || ""} — ${ev.purpose || ""}`;
 
-      const t = document.createElement("span"); t.className="t"; t.textContent = `${fmtTime(s2)}–${fmtTime(e2)}`;
+      const t = document.createElement("span"); t.className="t"; t.textContent = `${fmtTime(s)}–${fmtTime(e)}`;
       const w = document.createElement("span"); w.className="w"; w.textContent = ev.who || "";
       const d = document.createElement("span"); d.className="d"; d.textContent = ev.purpose || "";
 
