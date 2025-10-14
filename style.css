@@ -1,48 +1,149 @@
-:root {
-  --bg: #f7f7fb;
-  --card: #fff;
-  --ink: #111827;
-  --mute: #6b7280;
-  --line: #e5e7eb;
-  --brand: #2563eb;
-}
-* { box-sizing: border-box; }
-html, body { margin: 0; padding: 0; background: var(--bg); color: var(--ink); font: 16px/1.45 system-ui, -apple-system, Segoe UI, Roboto, sans-serif; }
-
-.topbar {
-  position: sticky; top: 0; z-index: 10;
-  display: flex; align-items: baseline; gap: 16px;
-  padding: 16px 20px; background: var(--card); border-bottom: 1px solid var(--line);
-}
-.topbar h1 { margin: 0; font-size: 20px; }
-#date { color: var(--mute); }
-
-.board {
-  padding: 20px; max-width: 1100px; margin: 0 auto; display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: 16px;
-}
-.room-card {
-  background: var(--card); border: 1px solid var(--line); border-radius: 14px;
-  overflow: hidden; display: flex; flex-direction: column; min-height: 180px;
-}
-.room-header {
-  display: flex; justify-content: space-between; align-items: center;
-  padding: 10px 14px; border-bottom: 1px solid var(--line); background: #fafafa;
-}
-.room-header h2 { margin: 0; font-size: 16px; letter-spacing: .3px; }
-.room-header .badge { font-size: 12px; color: var(--mute); }
-
-.room-body { padding: 8px 12px; display: flex; flex-direction: column; gap: 6px; }
-
-.event {
-  border: 1px solid var(--line); border-radius: 10px; padding: 8px 10px; background: #fff;
-}
-.event .time { font-weight: 600; }
-.event .title { color: var(--mute); }
-
-.empty {
-  color: var(--mute); text-align: center; padding: 22px 8px;
-  border: 1px dashed var(--line); border-radius: 12px; background: #fafafa;
+:root{
+  --board-bg:#fff;
+  --board-line:#111;
+  --banner-blue:#2f70ff;
+  --banner-red:#c7352b;
+  --text:#111;
+  --label:#111;
+  --slot-blue:#1570ef;
+  --slot-red:#d92d20;
+  --slot-black:#111;
+  --border:6px;          /* thick board lines */
+  --gap:6px;             /* spacing between boxes (board joints) */
 }
 
-.foot { text-align: center; color: var(--mute); padding: 24px; }
+*{box-sizing:border-box}
+html,body{height:100%}
+body{
+  margin:0;
+  background:#e6eaee; /* light wall color */
+  font-family: system-ui, -apple-system, Segoe UI, Roboto, "Patrick Hand", sans-serif;
+  color:var(--text);
+}
+
+#board{
+  max-width:1100px;
+  margin:24px auto;
+  background:var(--board-bg);
+  border:var(--border) solid var(--board-line);
+  box-shadow:0 20px 40px rgba(0,0,0,.15);
+}
+
+/* Top banner (like the photo) */
+.banner{
+  position:relative;
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  padding:12px 14px;
+  border-bottom:var(--border) solid var(--board-line);
+}
+
+.banner-day{
+  display:block;
+  font-weight:700;
+  color:var(--banner-red);
+  font-size:28px;
+  letter-spacing:.5px;
+  margin-right:12px;
+}
+
+.banner-date{
+  font-size:28px;
+  color:var(--banner-blue);
+  font-weight:600;
+}
+
+.banner-left{ display:flex; align-items:baseline; gap:12px; }
+
+.wifi{
+  border:3px solid var(--board-line);
+  padding:8px 10px;
+  font-size:13px;
+  line-height:1.25;
+}
+
+/* Three-column shell */
+.shell{
+  display:grid;
+  grid-template-columns: 1fr 3fr 1fr; /* left skinny / big middle / right skinny */
+  gap:var(--gap);
+  padding:var(--gap);
+}
+
+/* Inner rails (left/right have 4 stacked boxes each) */
+.rail{
+  display:grid;
+  gap:var(--gap);
+}
+
+.grid-4{
+  grid-template-rows: repeat(4, 1fr);
+}
+
+.rail-cell,
+.center-cell{
+  border:var(--border) solid var(--board-line);
+  background:var(--board-bg);
+  position:relative;
+  min-height:140px; /* nice big writing space */
+}
+
+/* Center: 3 high rows × 2 columns */
+.center{
+  display:grid;
+  grid-template-rows: repeat(3, minmax(160px, 1fr));
+  grid-template-columns: 1fr 1fr;
+  gap:var(--gap);
+}
+
+/* Room labels (the little numbers in each box) */
+.room-label{
+  position:absolute;
+  top:6px;
+  left:10px;
+  font-size:22px;
+  color:var(--label);
+  font-weight:700;
+}
+
+/* Slots (the “handwritten” event lines) */
+.slots{
+  position:absolute;
+  inset:0;
+  padding:34px 12px 10px 12px;
+  display:flex;
+  flex-direction:column;
+  gap:8px;
+  font-size:22px;
+  font-family:"Patrick Hand", system-ui, sans-serif; /* adds marker vibe */
+}
+
+/* A “line” (time + text) */
+.slot{
+  display:flex;
+  align-items:baseline;
+  gap:10px;
+  flex-wrap:wrap;
+}
+
+.slot .time{ color:var(--slot-red); font-weight:700; }
+.slot .who { color:var(--slot-blue); font-weight:700; }
+.slot .note{ color:var(--slot-black); opacity:.9; }
+
+/* Small screens: scale down gracefully */
+@media (max-width: 860px){
+  .banner-day, .banner-date{ font-size:22px; }
+  .room-label{ font-size:18px; }
+  .slots{ font-size:18px; }
+  .center{ grid-template-rows: repeat(3, minmax(120px,1fr)); }
+  .rail-cell, .center-cell{ min-height:120px; }
+}
+
+@media (max-width: 640px){
+  .shell{
+    grid-template-columns: 1fr;    /* stack columns on phones */
+  }
+  .left-rail, .right-rail{ grid-template-rows: repeat(4, minmax(110px,1fr)); }
+  .center{ grid-template-rows: repeat(3, minmax(120px,1fr)); }
+}
