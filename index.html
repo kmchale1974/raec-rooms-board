@@ -1,32 +1,25 @@
 <!doctype html>
-<html>
+<html lang="en">
 <head>
   <meta charset="utf-8" />
-  <title>AC Room Availability</title>
-  <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <meta http-equiv="refresh" content="1800">
-  <link rel="stylesheet" href="style.css" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>RAEC Rooms Board</title>
+  <link rel="stylesheet" href="styles.css" />
 </head>
 <body>
-  <div id="app">
-    <header class="bar">
-      <div class="title">
-        <h1>AC Room Availability</h1>
-        <div id="sub"></div>
-      </div>
-      <div class="legend">
-        <span class="chip booked">Booked</span>
-        <span class="chip free">Available</span>
-      </div>
-    </header>
+  <header class="topbar">
+    <h1>RAEC Rooms Board</h1>
+    <div id="date"></div>
+  </header>
 
-    <div id="grid-wrap">
-      <div id="grid" class="grid"></div>
-      <div id="nowline" class="nowline" hidden></div>
-    </div>
+  <main id="app" class="board"></main>
 
-    <footer class="foot"><span id="stamp"></span></footer>
-  </div>
-  <script src="app.js"></script>
+  <footer class="foot">
+    <small>
+      Data source: <code>events.json</code> • updates whenever the CSV email arrives
+    </small>
+  </footer>
+
+  <script type="module" src="board.js"></script>
 </body>
 </html>
