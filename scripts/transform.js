@@ -1,182 +1,265 @@
-import fs from "fs";
-import { parse as parseCSV } from "csv-parse/sync";
+// ESM compatible transform for GitHub Actions runner
+// Usage: JSON_OUT="events.json" CSV_PATH="data/inbox/latest.csv" node scripts/transform.js
 
-// --- Config ---
-const TZ = process.env.TZ || "America/Chicago";
-const CSV_PATH = process.env.CSV_PATH || "data/inbox/latest.csv";
-const JSON_OUT = process.env.JSON_OUT || "events.json";
+import fs from 'node:fs/promises';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 
-// ----- helpers: “today” window in local tz -----
-function makeLocalDate(y, m, d, hh = 0, mm = 0, ss = 0, ms = 0) {
-  // Build a Date representing local time in TZ by formatting and reparsing.
-  // (Node Dates are UTC internally, but this yields the correct wall time.)
-  const pad = (n, len = 2) => String(n).padStart(len, "0");
-  const s = `${pad(y, 4)}-${pad(m)}-${pad(d)}T${pad(hh)}:${pad(mm)}:${pad(ss)}.${pad(ms, 3)}`;
-  // Force parse as if in TZ by using Intl to get UTC millis for that wall time.
-  // We do this by formatting an instant that has those wall-time components.
-  const fmt = new Intl.DateTimeFormat("en-US", {
-    timeZone: TZ,
-    year: "numeric",
-    month: "2-digit",
-    day: "2-digit",
-    hour: "2-digit",
-    minute: "2-digit",
-    second: "2-digit",
-    hour12: false,
-  });
-  // Trick: find today's date parts in TZ, then replace with our parts.
-  const now = new Date();
-  const parts = Object.fromEntries(fmt.formatToParts(now).map(p => [p.type, p.value]));
-  const asLocal = new Date(
-    `${s}` // ISO-like
-  );
-  // asLocal will be interpreted in local machine TZ; we’ll correct with getOffset:
-  // Instead of fighting Date quirks, compute millis for desired local wall time in TZ:
-  const utcMillis = Date.parse(`${s}Z`); // base
-  // We want wall time s in TZ, so find its UTC millis by asking what UTC corresponds to s in TZ:
-  const z = new Date(utcMillis);
-  // The more robust way: use the today anchor in TZ, then set hours/minutes relative:
-  return new Date(s); // Works for our use here; we'll align “today” using below function.
+// ---------------------- Config ----------------------
+const CSV_PATH = process.env.CSV_PATH || 'data/inbox/latest.csv';
+const JSON_OUT = process.env.JSON_OUT || 'events.json';
+
+// Building hours for “today only” timeline in the UI
+const HOURS = { open: '06:00', close: '22:00' };
+
+// Rooms that the UI knows about (must match app.js)
+const ROOMS_ORDER = [
+  '1A','1B','2A','2B','3A','3B','4A','4B','5A','5B',
+  '6A','6B','7A','7B','8A','8B','9A','9B','10A','10B',
+];
+
+// ---------------------- Helpers ----------------------
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+
+function todayBase() {
+  const d = new Date();
+  return new Date(d.getFullYear(), d.getMonth(), d.getDate(), 0, 0, 0, 0);
 }
 
-// Get start/end of “today” in TZ
-function todayRangeInTZ() {
-  const now = new Date();
-  const f = new Intl.DateTimeFormat("en-US", {
-    timeZone: TZ, year: "numeric", month: "2-digit", day: "2-digit",
-    hour: "2-digit", minute: "2-digit", second: "2-digit", hour12: false
-  });
-  const parts = Object.fromEntries(f.formatToParts(now).map(p => [p.type, p.value]));
-  const y = Number(parts.year), m = Number(parts.month), d = Number(parts.day);
-
-  // Create day start/end as if wall time in TZ, then convert to real Date via toLocaleString
-  const dayStartLocal = new Date(`${y}-${String(m).padStart(2,"0")}-${String(d).padStart(2,"0")}T00:00:00`);
-  const dayEndLocal   = new Date(`${y}-${String(m).padStart(2,"0")}-${String(d).padStart(2,"0")}T23:59:59.999`);
-
-  return { dayStart: dayStartLocal, dayEnd: dayEndLocal, y, m, d };
+function to24hMinutes(hhmm, ampm) {
+  let [h, m] = hhmm.split(':').map(Number);
+  const a = ampm.trim().toLowerCase();
+  if (a === 'pm' && h !== 12) h += 12;
+  if (a === 'am' && h === 12) h = 0;
+  return h * 60 + m;
 }
 
-// Parse “3:00pm - 4:30pm” into Date objects on **today** in TZ
-function parseTimeRangeText(txt, y, m, d) {
-  if (!txt) return [null, null];
-  const parts = String(txt).split("-").map(p => p.trim().replace(/\s+/g, " "));
-  if (parts.length !== 2) return [null, null];
+function parseTimeWindow(text) {
+  // e.g. "6:00pm - 9:00pm" or "3:00pm -  4:30pm"
+  // returns [startDate, endDate] (today)
+  if (!text) return null;
+  const t = String(text).replace(/\s+/g, ' ').trim();
+  const m = t.match(/(\d{1,2}:\d{2})\s*([ap]m)\s*-\s*(\d{1,2}:\d{2})\s*([ap]m)/i);
+  if (!m) return null;
 
-  const tok = (t) => {
-    const m = t.toLowerCase().match(/^(\d{1,2})(?::(\d{2}))?\s*(a|p)\.?m?\.?$/);
-    if (!m) return null;
-    let hh = parseInt(m[1], 10);
-    const mm = m[2] ? parseInt(m[2], 10) : 0;
-    const ap = m[3];
-    if (ap === "p" && hh !== 12) hh += 12;
-    if (ap === "a" && hh === 12) hh = 0;
-    return { hh, mm };
-  };
+  const startMins = to24hMinutes(m[1], m[2]);
+  const endMins = to24hMinutes(m[3], m[4]);
 
-  const A = tok(parts[0]);
-  const B = tok(parts[1]);
-  if (!A || !B) return [null, null];
+  const base = todayBase();
+  const start = new Date(base.getTime() + startMins * 60000);
+  let end = new Date(base.getTime() + endMins * 60000);
 
-  const start = new Date(`${y}-${String(m).padStart(2,"0")}-${String(d).padStart(2,"0")}T${String(A.hh).padStart(2,"0")}:${String(A.mm).padStart(2,"0")}:00`);
-  const end   = new Date(`${y}-${String(m).padStart(2,"0")}-${String(d).padStart(2,"0")}T${String(B.hh).padStart(2,"0")}:${String(B.mm).padStart(2,"0")}:00`);
+  // handle overnight (unlikely here but keep safe)
+  if (end <= start) end = new Date(end.getTime() + 24 * 60 * 60000);
+
   return [start, end];
 }
 
-// Room mapping (Courts 3–8, 9A/9B, 10A/10B, combos)
-function roomsFromFacility(fac = "") {
-  const s = String(fac).trim().toLowerCase();
+function isPast(end) {
+  return new Date(end).getTime() <= Date.now();
+}
 
-  // Gym 9/10 combos
-  if (s.includes("court 10-ab") || s.includes("court 10 - ab")) return ["10A", "10B"];
-  if (s.includes("court 9-ab")  || s.includes("court 9 - ab"))  return ["9A", "9B"];
+function expandGymRooms(facility) {
+  // Accepts strings like:
+  // "AC Gym - Half Court 10A"
+  // "AC Gym - Court 9-AB"
+  // "AC Gym - Court 3-8"
+  // Returns array of room codes like ["9A","9B"] or []
 
-  // Half courts
-  if (s.includes("half court 10a")) return ["10A"];
-  if (s.includes("half court 10b")) return ["10B"];
-  if (s.includes("half court 9a"))  return ["9A"];
-  if (s.includes("half court 9b"))  return ["9B"];
+  const s = String(facility || '').trim();
 
-  // Full courts 3–8 (e.g., “AC Gym - Court 3”)
-  for (const n of [3,4,5,6,7,8]) {
-    if (s.includes(`court ${n}`)) return [String(n)];
+  // Only handle AC Gym for now
+  if (!/^AC\s*Gym/i.test(s)) return [];
+
+  // Half Court X[A|B]
+  let m = s.match(/Half\s*Court\s*(\d{1,2})([AB])/i);
+  if (m) {
+    const num = Number(m[1]);
+    const side = m[2].toUpperCase();
+    const room = `${num}${side}`;
+    return ROOMS_ORDER.includes(room) ? [room] : [];
   }
 
-  // Fallback: explicit codes in free text
-  for (const code of ["1A","1B","2A","2B","3","4","5","6","7","8","9A","9B","10A","10B"]) {
-    if (s.includes(code.toLowerCase())) return [code];
+  // Court N-AB  (both halves)
+  m = s.match(/Court\s*(\d{1,2})-?AB\b/i);
+  if (m) {
+    const num = Number(m[1]);
+    const rooms = [`${num}A`, `${num}B`].filter(r => ROOMS_ORDER.includes(r));
+    return rooms;
+  }
+
+  // Court N-A  or Court N-B (rare but handle)
+  m = s.match(/Court\s*(\d{1,2})-([AB])\b/i);
+  if (m) {
+    const num = Number(m[1]);
+    const side = m[2].toUpperCase();
+    const room = `${num}${side}`;
+    return ROOMS_ORDER.includes(room) ? [room] : [];
+  }
+
+  // Court N (full court). Assume both halves A and B
+  m = s.match(/Court\s*(\d{1,2})\b(?!-)/i);
+  if (m) {
+    const num = Number(m[1]);
+    const rooms = [`${num}A`, `${num}B`].filter(r => ROOMS_ORDER.includes(r));
+    if (rooms.length) return rooms;
+  }
+
+  // Court X-Y (range). Assume both halves for each number.
+  m = s.match(/Court\s*(\d{1,2})\s*-\s*(\d{1,2})/i);
+  if (m) {
+    const start = Number(m[1]);
+    const end = Number(m[2]);
+    if (!Number.isNaN(start) && !Number.isNaN(end) && start <= end) {
+      const rooms = [];
+      for (let n = start; n <= end; n++) {
+        for (const half of ['A','B']) {
+          const r = `${n}${half}`;
+          if (ROOMS_ORDER.includes(r)) rooms.push(r);
+        }
+      }
+      return rooms;
+    }
   }
 
   return [];
 }
 
-// Keep events that overlap today in TZ (should always be true once we build them for today)
-function overlapsToday(start, end, dayStart, dayEnd) {
-  return start < dayEnd && end > dayStart;
+// Simple CSV parser that supports quoted fields
+function parseCSV(text) {
+  const rows = [];
+  let i = 0, field = '', row = [], inQuotes = false;
+
+  const pushField = () => { row.push(field); field = ''; };
+  const pushRow = () => { rows.push(row); row = []; };
+
+  while (i < text.length) {
+    const c = text[i];
+
+    if (inQuotes) {
+      if (c === '"') {
+        const next = text[i + 1];
+        if (next === '"') { field += '"'; i += 2; continue; } // escaped quote
+        inQuotes = false; i++; continue;
+      } else {
+        field += c; i++; continue;
+      }
+    } else {
+      if (c === '"') { inQuotes = true; i++; continue; }
+      if (c === ',') { pushField(); i++; continue; }
+      if (c === '\n') { pushField(); pushRow(); i++; continue; }
+      if (c === '\r') { // handle CRLF
+        const next = text[i + 1];
+        pushField(); pushRow(); i += (next === '\n') ? 2 : 1; continue;
+      }
+      field += c; i++; continue;
+    }
+  }
+  // last field/row
+  pushField();
+  if (row.length > 1 || (row.length === 1 && row[0] !== '')) pushRow();
+
+  return rows;
 }
 
-// --- main ---
-(async () => {
-  if (!fs.existsSync(CSV_PATH)) {
-    await fs.promises.writeFile(JSON_OUT, JSON.stringify({ events: [] }, null, 2));
-    console.log(`No CSV. Wrote ${JSON_OUT} with 0 events.`);
+function indexHeaders(headers) {
+  const map = {};
+  headers.forEach((h, idx) => map[h.trim().toLowerCase()] = idx);
+  return (name) => {
+    const k = String(name).trim().toLowerCase();
+    return map[k] ?? -1;
+  };
+}
+
+// ---------------------- Main ----------------------
+async function main() {
+  // Read CSV
+  const csvBuf = await fs.readFile(path.resolve(__dirname, '..', CSV_PATH)).catch(async () => {
+    // also allow absolute / already-correct paths
+    return fs.readFile(CSV_PATH);
+  });
+  const csv = csvBuf.toString('utf8');
+
+  const rows = parseCSV(csv);
+  if (!rows.length) {
+    await fs.writeFile(JSON_OUT, '[]');
+    console.log('No rows in CSV. Wrote empty events.json');
     return;
   }
 
-  const csvBuf = await fs.promises.readFile(CSV_PATH);
-  const text = csvBuf.toString();
+  const headers = rows[0].map(h => h.trim());
+  const getIdx = indexHeaders(headers);
 
-  // Detect delimiter (comma or semicolon), then parse
-  const delimiter = text.includes(";") && !text.includes(",") ? ";" : ",";
-  const rows = parseCSV(text, { columns: true, skip_empty_lines: true, delimiter });
-
-  const { dayStart, dayEnd, y, m, d } = todayRangeInTZ();
+  const idxLocation  = getIdx('location');           // "Athletic & Event Center" etc.
+  const idxFacility  = getIdx('facility');           // "AC Gym - Court 9-AB" etc.
+  const idxTime      = getIdx('reservedtime');       // "6:00pm - 9:00pm"
+  const idxReservee  = getIdx('reservee');           // "Illinois Flight, Brandon Brown"
+  const idxPurpose   = getIdx('reservationpurpose'); // optional
 
   const out = [];
-  for (const row of rows) {
-    const facility = row.facility ?? row.Facility ?? row["Facility"] ?? "";
-    const rooms = roomsFromFacility(facility);
+  let samples = { location: [], facility: [], reservedtime: [] };
+
+  for (let r = 1; r < rows.length; r++) {
+    const row = rows[r];
+
+    const facility = idxFacility >= 0 ? row[idxFacility] : '';
+    const reservedTime = idxTime >= 0 ? row[idxTime] : '';
+    const reservee = idxReservee >= 0 ? row[idxReservee] : '';
+    const purpose = idxPurpose >= 0 ? row[idxPurpose] : '';
+    const location = idxLocation >= 0 ? row[idxLocation] : '';
+
+    if (samples.location.length < 1 && location) samples.location.push(location);
+    if (samples.facility.length < 8 && facility) samples.facility.push(facility);
+    if (samples.reservedtime.length < 8 && reservedTime) samples.reservedtime.push(reservedTime);
+
+    // Only handle AC Gym rows right now
+    if (!/^AC\s*Gym/i.test(String(facility))) continue;
+
+    const rooms = expandGymRooms(facility);
     if (!rooms.length) continue;
 
-    // who / purpose
-    const who = row.reservee ?? row["Reservee"] ?? "";
-    const purpose = row.reservationpurpose ?? row["Reservation Purpose"] ?? "";
+    const timeWindow = parseTimeWindow(reservedTime);
+    if (!timeWindow) continue;
 
-    // Times: prefer explicit start/end fields if they exist; else parse reservedtime text (e.g., “6:00pm - 9:00pm”)
-    let start = row.start ? new Date(row.start) : null;
-    let end   = row.end   ? new Date(row.end)   : null;
+    const [start, end] = timeWindow;
 
-    if ((!start || !end) && (row.reservedtime || row["ReservedTime"])) {
-      const [s, e] = parseTimeRangeText(row.reservedtime ?? row["ReservedTime"], y, m, d);
-      start = start || s;
-      end   = end   || e;
-    }
+    // Skip events already ended (so they disappear)
+    if (isPast(end)) continue;
 
-    if (!start || !end) continue;
-    if (!overlapsToday(start, end, dayStart, dayEnd)) continue;
+    const title = purpose?.trim() || 'Reserved';
+    const who = reservee?.trim() || '';
 
     for (const room of rooms) {
       out.push({
         room,
+        title,
         start: start.toISOString(),
         end: end.toISOString(),
+        area: 'Gym',
         who,
-        purpose,
-        facility
       });
     }
   }
 
-  // Sort output by room then start time (helps the renderer)
+  // Sort by start time then room for deterministic output
   out.sort((a, b) => {
-    const roomOrder = [
-      "1A","1B","2A","2B","3","4","5","6","7","8","9A","9B","10A","10B"
-    ];
-    const ra = roomOrder.indexOf(a.room);
-    const rb = roomOrder.indexOf(b.room);
-    if (ra !== rb) return ra - rb;
-    return new Date(a.start) - new Date(b.start);
-  });
+    const t = new Date(a.start) - new Date(b.start);
+    if (t !== 0) return t;
+    return ROOMS_ORDER.indexOf(a.room) - ROOMS_ORDER.indexOf(b.room);
+    });
 
-  await fs.promises.writeFile(JSON_OUT, JSON.stringify({ events: out }, null, 2));
-  console.log(`Wrote ${JSON_OUT} • events=${out.length}`);
-})();
+  await fs.writeFile(JSON_OUT, JSON.stringify(out, null, 2));
+  console.log(`Detected headers: ${headers.map(h => h.toLowerCase()).join(', ')} | delimiter=","`);
+  if (samples.location.length) console.log(`Samples • location: ${samples.location.join(' || ')}`);
+  if (samples.facility.length) console.log(`Samples • facility: ${samples.facility.join(' || ')}`);
+  if (samples.reservedtime.length) console.log(`Samples • reservedtime: ${samples.reservedtime.join(' || ')}`);
+  console.log(`Rows parsed: ${rows.length - 1}`);
+  console.log(`Events written: ${out.length}`);
+  console.log(`Wrote ${JSON_OUT}`);
+}
+
+main().catch(err => {
+  console.error(err);
+  process.exit(1);
+});
