@@ -1,91 +1,42 @@
-<!doctype html>
+<!DOCTYPE html>
 <html lang="en">
 <head>
   <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>RAEC Rooms Board</title>
+  <meta
+    name="viewport"
+    content="width=device-width, initial-scale=1, viewport-fit=cover"
+  />
+  <title>RAEC — Room Availability</title>
 
-  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@500;700;800&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="style.css" />
+  <!-- Professional font -->
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;800&display=swap" rel="stylesheet">
+
+  <link rel="stylesheet" href="./styles.css" />
 </head>
-<body class="theme-dark">
-  <main id="board">
+<body>
+  <header class="site-header">
+    <div class="brand">RAEC — Room Availability</div>
 
-    <!-- Top banner -->
-    <header class="banner">
-      <div class="banner-left">
-        <!-- Tabs remain (non-interactive is fine on Yodeck; default view renders regardless) -->
-        <nav class="view-switch" role="tablist" aria-label="View">
-          <button class="view-btn active" data-view="grid" role="tab" aria-selected="true">Board</button>
-          <button class="view-btn" data-view="compact" role="tab" aria-selected="false">Now / Next</button>
-          <button class="view-btn" data-view="timeline" role="tab" aria-selected="false">Timeline</button>
-        </nav>
-      </div>
+    <div class="centered-date">
+      <span id="today-text">Friday, Oct 10</span>
+      <span class="clock" id="clock" aria-label="current time">12:00</span>
+    </div>
 
-      <div class="banner-center">
-        <span class="banner-day" id="banner-day">FRIDAY</span>
-        <span class="banner-date" id="banner-date">October 10<sup>th</sup>, 2025</span>
-        <span class="banner-clock" id="banner-clock">10:24 AM</span>
-      </div>
+    <!-- Tabs (kept for parity with your current board; not interactive in Yodeck) -->
+    <nav class="tabs" aria-label="sections">
+      <span class="tab active" data-tab="gym">Gym Courts</span>
+      <span class="tab" data-tab="fieldhouse">Fieldhouse</span>
+    </nav>
+  </header>
 
-      <aside class="banner-right wifi">
-        <div><strong>Public WiFi:</strong> RAEC Public</div>
-        <div><strong>WiFi Password:</strong> Public00</div>
-      </aside>
-    </header>
-
-    <!-- GRID (whiteboard look) -->
-    <section class="shell" id="view-grid" role="tabpanel" aria-labelledby="Board">
-      <!-- LEFT rail — top to bottom: 1A, 1B, 2A, 2B -->
-      <div class="left-rail rail grid-4">
-        <div class="rail-cell" data-room="1A"><div class="room-label">1A</div><div class="slots" id="room-1A"></div></div>
-        <div class="rail-cell" data-room="1B"><div class="room-label">1B</div><div class="slots" id="room-1B"></div></div>
-        <div class="rail-cell" data-room="2A"><div class="room-label">2A</div><div class="slots" id="room-2A"></div></div>
-        <div class="rail-cell" data-room="2B"><div class="room-label">2B</div><div class="slots" id="room-2B"></div></div>
-      </div>
-
-      <!-- CENTER — reading order: 3,4,5,6,7,8 -->
-      <div class="center grid-3x2">
-        <div class="center-cell" data-room="3"><div class="room-label">3</div><div class="slots" id="room-3"></div></div>
-        <div class="center-cell" data-room="4"><div class="room-label">4</div><div class="slots" id="room-4"></div></div>
-        <div class="center-cell" data-room="5"><div class="room-label">5</div><div class="slots" id="room-5"></div></div>
-        <div class="center-cell" data-room="6"><div class="room-label">6</div><div class="slots" id="room-6"></div></div>
-        <div class="center-cell" data-room="7"><div class="room-label">7</div><div class="slots" id="room-7"></div></div>
-        <div class="center-cell" data-room="8"><div class="room-label">8</div><div class="slots" id="room-8"></div></div>
-      </div>
-
-      <!-- RIGHT rail — top to bottom: 9A, 9B, 10A, 10B (so 10B ends bottom-right) -->
-      <div class="right-rail rail grid-4">
-        <div class="rail-cell" data-room="9A"><div class="room-label">9A</div><div class="slots" id="room-9A"></div></div>
-        <div class="rail-cell" data-room="9B"><div class="room-label">9B</div><div class="slots" id="room-9B"></div></div>
-        <div class="rail-cell" data-room="10A"><div class="room-label">10A</div><div class="slots" id="room-10A"></div></div>
-        <div class="rail-cell" data-room="10B"><div class="room-label">10B</div><div class="slots" id="room-10B"></div></div>
-      </div>
-    </section>
-
-    <!-- COMPACT (Now / Next) -->
-    <section id="view-compact" class="compact hidden" role="tabpanel" aria-labelledby="Now / Next">
-      <div class="compact-grid" id="now-next-grid"></div>
-      <footer class="legend">
-        <span class="chip now">NOW</span>
-        <span class="chip next">NEXT</span>
-        <span class="chip free">FREE</span>
-      </footer>
-    </section>
-
-    <!-- TIMELINE (hours left→right) -->
-    <section id="view-timeline" class="timeline hidden" role="tabpanel" aria-labelledby="Timeline">
-      <div class="tl-wrap">
-        <div class="tl-hours" id="tl-hours"></div>
-        <div class="tl-grid" id="tl-grid"></div>
-      </div>
-      <footer class="legend">
-        <span class="chip now">CURRENT TIME</span>
-      </footer>
-    </section>
-
+  <main id="app">
+    <!-- The time grid renders here -->
+    <section id="grid" class="grid"></section>
+    <!-- Fieldhouse placeholder section; will render empty grid (no placeholders) -->
+    <section id="grid-fieldhouse" class="grid hidden"></section>
   </main>
 
-  <script src="app.js" type="module"></script>
+  <script src="./app.js" type="module"></script>
 </body>
 </html>
