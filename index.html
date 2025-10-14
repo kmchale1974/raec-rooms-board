@@ -5,31 +5,33 @@
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>RAEC Rooms Board</title>
 
-  <!-- Optional: handwriting-style font for that marker-board vibe -->
   <link href="https://fonts.googleapis.com/css2?family=Patrick+Hand&display=swap" rel="stylesheet">
-
   <link rel="stylesheet" href="style.css" />
 </head>
 <body>
-  <main id="board">
-
-    <!-- Top banner (date, like the photo) -->
+  <main id="board" data-view="board">
     <header class="banner">
       <div class="banner-left">
         <span class="banner-day" id="banner-day">FRIDAY</span>
         <span class="banner-date" id="banner-date">October 10<sup>th</sup>, 2025</span>
       </div>
 
-      <aside class="wifi">
-        <div><strong>Public WiFi:</strong> RAEC Public</div>
-        <div><strong>WiFi Password:</strong> Public00</div>
-      </aside>
+      <div class="banner-controls">
+        <aside class="wifi">
+          <div><strong>Public WiFi:</strong> RAEC Public</div>
+          <div><strong>WiFi Password:</strong> Public00</div>
+        </aside>
+
+        <div class="toggles">
+          <button id="view-board" class="btn active" data-target="board" aria-pressed="true">Board</button>
+          <button id="view-schedule" class="btn" data-target="schedule" aria-pressed="false">Schedule</button>
+        </div>
+      </div>
     </header>
 
-    <!-- Three-column shell: left skinny (2B/2A/1B/1A), big middle (5–8 / 4–7 / 3–6), right skinny (10B/10A/9B/9A) -->
-    <section class="shell">
-
-      <!-- LEFT: 4 stacked boxes -->
+    <!-- Three-column board shell -->
+    <section class="shell view-board">
+      <!-- LEFT rail -->
       <div class="left-rail rail grid-4">
         <div class="rail-cell" data-room="2B"><div class="room-label">2B</div><div class="slots" id="room-2B"></div></div>
         <div class="rail-cell" data-room="2A"><div class="room-label">2A</div><div class="slots" id="room-2A"></div></div>
@@ -37,29 +39,28 @@
         <div class="rail-cell" data-room="1A"><div class="room-label">1A</div><div class="slots" id="room-1A"></div></div>
       </div>
 
-      <!-- MIDDLE: 3 tall rows × 2 columns -->
+      <!-- CENTER 3x2 -->
       <div class="center grid-3x2">
-        <!-- Row 1 -->
         <div class="center-cell" data-room="5"><div class="room-label">5</div><div class="slots" id="room-5"></div></div>
         <div class="center-cell" data-room="8"><div class="room-label">8</div><div class="slots" id="room-8"></div></div>
-
-        <!-- Row 2 -->
         <div class="center-cell" data-room="4"><div class="room-label">4</div><div class="slots" id="room-4"></div></div>
         <div class="center-cell" data-room="7"><div class="room-label">7</div><div class="slots" id="room-7"></div></div>
-
-        <!-- Row 3 -->
         <div class="center-cell" data-room="3"><div class="room-label">3</div><div class="slots" id="room-3"></div></div>
         <div class="center-cell" data-room="6"><div class="room-label">6</div><div class="slots" id="room-6"></div></div>
       </div>
 
-      <!-- RIGHT: 4 stacked boxes -->
+      <!-- RIGHT rail -->
       <div class="right-rail rail grid-4">
         <div class="rail-cell" data-room="10B"><div class="room-label">10B</div><div class="slots" id="room-10B"></div></div>
         <div class="rail-cell" data-room="10A"><div class="room-label">10A</div><div class="slots" id="room-10A"></div></div>
         <div class="rail-cell" data-room="9B"><div class="room-label">9B</div><div class="slots" id="room-9B"></div></div>
         <div class="rail-cell" data-room="9A"><div class="room-label">9A</div><div class="slots" id="room-9A"></div></div>
       </div>
+    </section>
 
+    <!-- Compact schedule view -->
+    <section class="schedule view-schedule" hidden>
+      <div id="schedule-root" class="schedule-root" aria-live="polite"></div>
     </section>
   </main>
 
