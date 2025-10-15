@@ -4,179 +4,102 @@
   <meta charset="utf-8" />
   <title>RAEC Rooms Board</title>
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-
-  <!-- Silence favicon 404s -->
   <link rel="icon" href="data:,">
-
-  <!-- Dark theme, 1920x1080 canvas, professional font stack -->
   <style>
     :root{
-      --bg:#0f1115;
-      --panel:#12151c;
-      --ink:#e7eaf1;
-      --muted:#9aa3b2;
-      --accent:#2b87ff;
-      --grid:#1b202a;
-      --now:#ff6b6b;
-      --chip:#2a3140;
-      --chip-text:#e7eaf1;
+      --bg:#0f1115; --panel:#12151c; --ink:#e7eaf1; --muted:#9aa3b2;
+      --accent:#2b87ff; --grid:#1b202a; --now:#ff6b6b;
+      --chip:#2a3140; --chip-text:#e7eaf1;
     }
-    html,body{
-      margin:0; height:100%; background:var(--bg); color:var(--ink);
-      font-family: Inter, "SF Pro Text", Segoe UI, Roboto, Arial, sans-serif;
-    }
-    /* Fixed 1920x1080 stage for signage players like Yodeck */
-    .stage{
-      width:1920px; height:1080px; margin:0 auto; overflow:hidden;
-      display:grid; grid-template-rows: 96px 52px 1fr; gap:16px; padding:24px;
-      box-sizing:border-box;
-    }
-    /* Header */
-    .header{
-      display:flex; align-items:center; justify-content:center;
-      background:var(--panel); border-radius:16px; position:relative;
-    }
-    .brand{
-      position:absolute; left:24px; font-weight:600; color:var(--muted); letter-spacing:.04em;
-    }
-    .dateclock{
-      display:flex; gap:16px; align-items:baseline; font-weight:700;
-    }
-    #headerDate{ font-size:36px; }
-    #headerClock{ font-size:28px; color:var(--muted); }
+    html,body{ margin:0; height:100%; background:var(--bg); color:var(--ink);
+      font-family: Inter, "SF Pro Text", Segoe UI, Roboto, Arial, sans-serif; }
+    .stage{ width:1920px; height:1080px; margin:0 auto; overflow:hidden;
+      display:grid; grid-template-rows:96px 52px 1fr; gap:16px; padding:24px; box-sizing:border-box; }
+    .header{ display:flex; align-items:center; justify-content:center; background:var(--panel); border-radius:16px; position:relative; }
+    .brand{ position:absolute; left:24px; font-weight:600; color:var(--muted); letter-spacing:.04em; }
+    .dateclock{ display:flex; gap:16px; align-items:baseline; font-weight:700; }
+    #headerDate{ font-size:36px; } #headerClock{ font-size:28px; color:var(--muted); }
 
-    /* Tabs (non-interactive look, first tab highlighted) */
-    .tabs{
-      display:flex; gap:8px; align-items:center;
-    }
-    .tab{
-      padding:10px 16px; border-radius:999px; background:var(--panel);
-      color:var(--muted); text-transform:uppercase; letter-spacing:.06em; font-size:14px;
-    }
-    .tab.is-active{ background:var(--accent); color:white; }
+    /* Tabs (still non-interactive on players, but we highlight which is showing) */
+    .tabs{ display:flex; gap:8px; align-items:center; }
+    .tab{ padding:10px 16px; border-radius:999px; background:var(--panel);
+      color:var(--muted); text-transform:uppercase; letter-spacing:.06em; font-size:14px; }
+    .tab.is-active{ background:var(--accent); color:#fff; }
 
-    /* Board container */
-    .board{
-      display:grid; grid-template-columns: 180px 1fr; gap:16px; min-height:0;
-    }
-    /* Row labels (rooms) */
-    .rooms{
-      background:var(--panel); border-radius:16px; padding:12px; overflow:hidden;
-      display:grid; grid-template-rows: 40px repeat(10, 1fr); /* header + 10 rows */
-      gap:8px;
-    }
-    .rooms .label-header{
-      color:var(--muted); font-size:14px; display:flex; align-items:center; padding:0 8px;
-      border-bottom:1px solid var(--grid);
-    }
-    .room{
-      display:grid; grid-template-columns: 1fr 1fr; gap:8px;
-    }
-    .room > div{
-      background:var(--panel); border:1px solid var(--grid); border-radius:12px;
-      display:flex; align-items:center; justify-content:center;
-      font-weight:600; color:var(--ink);
-    }
+    /* === TIMELINE VIEW (existing) === */
+    .board{ display:grid; grid-template-columns:180px 1fr; gap:16px; min-height:0; }
+    .rooms{ background:var(--panel); border-radius:16px; padding:12px; overflow:hidden;
+      display:grid; grid-template-rows:40px repeat(10, 1fr); gap:8px; }
+    .rooms .label-header{ color:var(--muted); font-size:14px; display:flex; align-items:center; padding:0 8px; border-bottom:1px solid var(--grid); }
+    .room{ display:grid; grid-template-columns:1fr 1fr; gap:8px; }
+    .room > div{ background:var(--panel); border:1px solid var(--grid); border-radius:12px; display:flex; align-items:center; justify-content:center; font-weight:600; color:var(--ink); }
 
-    /* Timeline area */
-    .timeline-wrap{
-      background:var(--panel); border-radius:16px; position:relative; overflow:hidden;
-      display:grid; grid-template-rows: 40px 1fr;
-    }
-    /* Hour ticks header */
-    .hours{
-      display:grid; align-items:center;
-      border-bottom:1px solid var(--grid);
-    }
-    .hours .row{
-      display:grid; height:40px; align-items:center;
-      /* columns set dynamically by JS to match hour slots */
-      color:var(--muted); font-size:14px;
-    }
+    .timeline-wrap{ background:var(--panel); border-radius:16px; position:relative; overflow:hidden; display:grid; grid-template-rows:40px 1fr; }
+    .hours{ border-bottom:1px solid var(--grid); }
+    .hours .row{ display:grid; height:40px; align-items:center; color:var(--muted); font-size:14px; }
     .hours .row div{ justify-self:center; }
-
-    /* Grid body */
-    .grid{
-      position:relative;
-    }
-    /* Backdrop gridlines */
-    #gridBackdrop{
-      position:absolute; inset:0; display:grid;
-      grid-template-rows: repeat(10, 1fr);
-      grid-template-columns: var(--cols);
-      gap:0;
-    }
-    #gridBackdrop .cell{
-      border-right:1px solid var(--grid);
-      border-bottom:1px solid var(--grid);
-    }
-    /* Room lanes container */
-    .lanes{
-      position:absolute; inset:0; display:grid; grid-template-rows: repeat(10, 1fr);
-      pointer-events:none;
-    }
-    /* Event chips */
-    .chip{
-      position:absolute; top:0; bottom:0; border-radius:10px;
-      background:var(--chip); color:var(--chip-text); border:1px solid var(--grid);
-      display:flex; align-items:center; padding:0 10px; font-size:14px; line-height:1.2;
-      overflow:hidden; text-wrap:balance;
-    }
-    .chip strong{ font-weight:700; }
+    .grid{ position:relative; }
+    #gridBackdrop{ position:absolute; inset:0; display:grid; grid-template-rows:repeat(10, 1fr); grid-template-columns:var(--cols); }
+    #gridBackdrop .cell{ border-right:1px solid var(--grid); border-bottom:1px solid var(--grid); }
+    .lanes{ position:absolute; inset:0; display:grid; grid-template-rows:repeat(10, 1fr); pointer-events:none; }
+    .chip{ position:absolute; top:0; bottom:0; border-radius:10px; background:var(--chip); color:var(--chip-text); border:1px solid var(--grid);
+      display:flex; align-items:center; padding:0 10px; font-size:14px; line-height:1.2; overflow:hidden; text-wrap:balance; }
     .chip small{ color:var(--muted); margin-left:8px; }
+    .now{ position:absolute; top:0; bottom:0; width:2px; background:var(--now); box-shadow:0 0 8px rgba(255,107,107,.8); }
+    .legend{ position:absolute; right:16px; bottom:12px; color:var(--muted); font-size:12px; }
 
-    /* Now line */
-    .now{
-      position:absolute; top:0; bottom:0; width:2px; background:var(--now);
-      box-shadow:0 0 8px rgba(255,107,107,.8);
+    /* === GRID BOARD VIEW (new, mirrors the whiteboard) === */
+    .gridboard{ display:none; background:var(--panel); border-radius:16px; padding:16px; }
+    .gridboard.is-active{ display:block; }
+    .gridboard .grid-wrap{
+      height:100%; display:grid; grid-template-columns:repeat(2, 1fr); grid-template-rows:repeat(10, 1fr); gap:12px;
     }
-
-    /* Subtle in-corner legend */
-    .legend{
-      position:absolute; right:16px; bottom:12px; color:var(--muted); font-size:12px;
+    .gb-cell{
+      border:2px solid var(--grid); border-radius:12px; padding:10px; display:flex; flex-direction:column; gap:8px; overflow:hidden;
+      background:linear-gradient(180deg, rgba(255,255,255,0.02), rgba(0,0,0,0.02));
     }
+    .gb-room{ font-weight:700; font-size:18px; opacity:.9; }
+    .gb-event{ font-size:16px; line-height:1.25; }
+    .gb-time{ color:var(--muted); font-weight:600; margin-right:8px; }
+    .gb-empty{ color:var(--muted); opacity:.7; }
+    /* Two-column order visually mirrors the real board: left column shows 1A…10A, right column 1B…10B */
   </style>
 </head>
 <body>
   <div class="stage">
     <div class="header">
       <div class="brand">Romeoville Athletic & Event Center</div>
-      <div class="dateclock">
-        <div id="headerDate">—</div>
-        <div id="headerClock">—</div>
-      </div>
+      <div class="dateclock"><div id="headerDate">—</div><div id="headerClock">—</div></div>
     </div>
 
     <div class="tabs" id="tabBar" aria-hidden="true">
-      <div class="tab is-active">Fieldhouse</div>
-      <div class="tab">North Gym</div>
-      <div class="tab">South Gym</div>
+      <div class="tab is-active" data-view="timeline">Timeline</div>
+      <div class="tab" data-view="grid">Grid</div>
     </div>
 
-    <div class="board">
-      <!-- Left: room labels (1A…10B) arranged as 10 rows × 2 columns -->
+    <!-- TIMELINE VIEW -->
+    <div class="board" id="timelineView">
       <div class="rooms">
         <div class="label-header">Rooms</div>
-        <!-- 10 rows filled by JS to ensure correct order -->
-        <!-- JS will inject .room rows, each containing two cells (A | B) -->
+        <!-- JS injects 10 rows × 2 cells -->
       </div>
-
-      <!-- Right: timeline -->
       <div class="timeline-wrap">
-        <div class="hours">
-          <div class="row" id="hoursRow"><!-- hour labels injected here --></div>
-        </div>
+        <div class="hours"><div class="row" id="hoursRow"></div></div>
         <div class="grid" id="grid">
           <div id="gridBackdrop"></div>
           <div class="lanes" id="lanes"></div>
           <div class="now" id="nowLine" hidden></div>
-          <div class="legend">Times shown in local time • Past events hidden</div>
+          <div class="legend">Times in local time • Past events hidden</div>
         </div>
       </div>
     </div>
+
+    <!-- GRID BOARD VIEW -->
+    <div class="gridboard" id="gridView">
+      <div class="grid-wrap" id="gridWrap"></div>
+    </div>
   </div>
 
-  <!-- IMPORTANT: per your choice, keep app.js filename -->
   <script type="module" src="./app.js"></script>
 </body>
 </html>
