@@ -1,62 +1,244 @@
 <!doctype html>
 <html lang="en">
-  <head>
-    <meta charset="utf-8" />
-    <meta
-      name="viewport"
-      content="width=device-width, initial-scale=1, viewport-fit=cover"
-    />
-    <title>RAEC Rooms Board</title>
+<head>
+  <meta charset="utf-8" />
+  <meta
+    name="viewport"
+    content="width=device-width, initial-scale=1, viewport-fit=cover"
+  />
+  <title>RAEC | Gym Schedule</title>
 
-    <!-- Quiet the favicon 404 with a tiny inline favicon -->
-    <link
-      rel="icon"
-      href="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVQIW2P4//8/AwAI/AL+0yXqVQAAAABJRU5ErkJggg=="
-    />
+  <!-- Professional font -->
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@500;600;700&display=swap" rel="stylesheet">
 
-    <style>
-      :root {
-        --bg: #0e1116;
-      }
-      html, body {
-        margin: 0;
-        padding: 0;
-        background: var(--bg);
-        color: #e5e7eb;
-        height: 100%;
-        width: 100%;
-        font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI",
-          Roboto, "Helvetica Neue", Arial, "Noto Sans", "Liberation Sans",
-          sans-serif;
-        overflow: hidden; /* digital signage */
-      }
-      /* Layout tuned for 1920x1080 but responsive */
-      #app {
-        position: relative;
-        height: 100vh;
-        width: 100vw;
-      }
-      #header {
-        position: absolute;
-        top: 24px;
-        left: 0;
-        right: 0;
-        text-align: center;
-      }
-      #grid {
-        position: absolute;
-        inset: 0;
-      }
-    </style>
-  </head>
-  <body>
-    <div id="app">
-      <!-- JS expects these two ids -->
-      <div id="header"></div>
-      <div id="grid"></div>
+  <style>
+    :root{
+      --bg:#0b0e12;
+      --panel:#0f1319;
+      --text:#e6ebf2;
+      --muted:#95a2b3;
+      --grid:#1b2430;
+      --accent:#8ab4ff;
+      --pill:#1e2a3a;
+      --pillText:#d9e6ff;
+      --now:#ff6b6b;
+      --roomColW: 180px;     /* left label column */
+      --rowH: 64px;          /* each room row */
+      --gutter: 8px;         /* gap between rows */
+      --headerH: 120px;
+      --topTimeH: 44px;      /* top time ruler */
+    }
+    *{box-sizing:border-box}
+    html, body{
+      height:100%;
+      margin:0;
+      background:var(--bg);
+      color:var(--text);
+      font-family: Inter, system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, "Apple Color Emoji","Segoe UI Emoji";
+      overflow:hidden; /* digital signage */
+    }
+
+    /* Canvas */
+    .screen{
+      width:100vw;
+      height:100vh;
+      display:flex;
+      flex-direction:column;
+      padding:24px;
+      gap:16px;
+    }
+
+    /* Header */
+    .header{
+      height:var(--headerH);
+      display:grid;
+      grid-template-columns: 1fr auto 1fr;
+      align-items:center;
+      gap:12px;
+    }
+    .brand{
+      font-weight:700;
+      letter-spacing:.02em;
+      color:var(--muted);
+      opacity:.85;
+    }
+    .center{
+      justify-self:center;
+      text-align:center;
+    }
+    .date{
+      font-size:28px;
+      font-weight:700;
+      letter-spacing:.02em;
+    }
+    .clock{
+      margin-top:4px;
+      font-size:18px;
+      color:var(--muted);
+      font-variant-numeric: tabular-nums;
+    }
+
+    /* Board panel */
+    .board{
+      flex:1;
+      display:grid;
+      grid-template-rows: var(--topTimeH) 1fr;
+      background:var(--panel);
+      border-radius:16px;
+      box-shadow: 0 8px 32px rgba(0,0,0,.35);
+      overflow:hidden;
+      border:1px solid #151b23;
+    }
+
+    /* Time ruler row */
+    .ruler{
+      display:grid;
+      grid-template-columns: var(--roomColW) 1fr;
+      align-items:stretch;
+      border-bottom:1px solid var(--grid);
+      background:linear-gradient(180deg, #0f1319, #0d1117);
+    }
+    .ruler .left{
+      border-right:1px solid var(--grid);
+      display:flex;
+      align-items:center;
+      justify-content:center;
+      color:var(--muted);
+      font-weight:600;
+    }
+    .ruler .times{
+      position:relative;
+    }
+    .tick{
+      position:absolute;
+      top:0; bottom:0;
+      border-left:1px solid var(--grid);
+    }
+    .tick-label{
+      position:absolute;
+      top:8px;
+      transform:translateX(-50%);
+      font-size:14px;
+      color:var(--muted);
+      font-variant-numeric: tabular-nums;
+      white-space:nowrap;
+    }
+    .now-line{
+      position:absolute;
+      top:0; bottom:0;
+      width:2px;
+      background:var(--now);
+      box-shadow:0 0 0 1px rgba(255,107,107,.35);
+    }
+
+    /* Grid body */
+    .grid{
+      display:grid;
+      grid-template-columns: var(--roomColW) 1fr;
+      overflow:hidden;
+    }
+    .rooms{
+      overflow:hidden auto;
+      border-right:1px solid var(--grid);
+    }
+    .timeline{
+      position:relative;
+      overflow:hidden auto;
+    }
+
+    .row{
+      height:var(--rowH);
+      display:flex;
+      align-items:center;
+      padding:0 12px;
+      border-bottom:1px solid var(--grid);
+    }
+    .room-name{
+      font-weight:600;
+      color:var(--text);
+      opacity:.9;
+    }
+    .time-row{
+      position:relative;
+      height:var(--rowH);
+      border-bottom:1px solid var(--grid);
+    }
+
+    /* faint column lines in timeline */
+    .col-line{
+      position:absolute;
+      top:0; bottom:0;
+      border-left:1px dashed #192231;
+      opacity:.7;
+    }
+
+    /* reservation block */
+    .event{
+      position:absolute;
+      top:8px; bottom:8px; /* pill height */
+      background:var(--pill);
+      color:var(--pillText);
+      border:1px solid #243248;
+      border-radius:14px;
+      display:flex;
+      align-items:center;
+      padding:0 10px;
+      overflow:hidden;
+      white-space:nowrap;
+      text-overflow:ellipsis;
+      font-weight:600;
+      font-size:15px;
+    }
+
+    /* footer strip (optional) */
+    .footer{
+      position:absolute;
+      bottom:0; left:0; right:0;
+      height:8px;
+      background:linear-gradient(90deg, #21304a, #2a3d55);
+      opacity:.35;
+    }
+
+    /* 1080p fit hint */
+    .screen{ /* subtle zoom to make 1920×1080 pop nicely, still responsive */
+      transform-origin: top left;
+    }
+    @media (min-width: 1900px) and (min-height: 1000px){
+      .screen{ transform: scale(1.0); }
+    }
+  </style>
+</head>
+<body>
+  <div class="screen">
+    <!-- Header -->
+    <div class="header">
+      <div class="brand">Romeoville Athletic &amp; Event Center</div>
+      <div class="center">
+        <div id="date" class="date">—</div>
+        <div id="clock" class="clock">—</div>
+      </div>
+      <div></div>
     </div>
 
-    <!-- Load app.js after the DOM so #header/#grid exist -->
-    <script src="app.js" defer></script>
-  </body>
+    <!-- Board -->
+    <div class="board">
+      <!-- Time ruler -->
+      <div class="ruler">
+        <div class="left">Gym Courts</div>
+        <div id="rulerTimes" class="times"></div>
+      </div>
+
+      <!-- Grid -->
+      <div class="grid">
+        <div id="rooms" class="rooms" role="presentation"></div>
+        <div id="timeline" class="timeline" role="presentation"></div>
+      </div>
+    </div>
+  </div>
+
+  <div class="footer"></div>
+
+  <script type="module" src="./app.mjs"></script>
+</body>
 </html>
