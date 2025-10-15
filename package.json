@@ -1,10 +1,16 @@
 {
   "name": "raec-rooms-board",
+  "version": "1.0.0",
   "type": "module",
+  "scripts": {
+    "fetch": "node scripts/fetch_email.js",
+    "transform": "node scripts/transform.mjs",
+    "build": "npm run fetch && npm run transform"
+  },
   "dependencies": {
-    "csv-parse": "^5.5.6",
     "imapflow": "^1.0.199",
-    "luxon": "^3.5.0",
-    "mailparser": "^3.6.8"
+    "mailparser": "^3.8.0",
+    "papaparse": "^5.4.1",
+    "date-fns": "^4.1.0"
   }
 }
