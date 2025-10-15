@@ -3,25 +3,23 @@ name: build
 on:
   workflow_dispatch:
   schedule:
-    # Runs hourly to pick up new reports; adjust as you like
-    - cron: "0 * * * *"
+    - cron: "0 * * * *"   # hourly; adjust if you want
   push:
     branches: [ main ]
 
 permissions:
-  contents: write   # needed so we can commit updated events.json
+  contents: write
 
 jobs:
   build:
     runs-on: ubuntu-latest
     env:
-      TZ: America/Chicago           # show times in local facility TZ
-      CSV_PATH: data/inbox/latest.csv
+      TZ: America/Chicago
+      # keep one canonical path and reuse it for both fetch + transform
+      INBOX_CSV: data/inbox/latest.csv
       JSON_OUT: events.json
-      # Optional: show sample header values in logs for debugging
       SHOW_SAMPLES: "true"
-      # Optional: accept all AC rows even if facility naming is odd
-      FORCE_ALL: "true"
+      FORCE_ALL: "true"     # accept all AC rows even if names are odd
 
     steps:
       - name: Checkout
@@ -35,32 +33,41 @@ jobs:
         with:
           node-version: "20"
 
-      - name: Install deps (use npm i to avoid the npm ci lockfile warning)
-        run: npm i
+      - name: Install deps
+        run: |
+          npm i
+          # ensure these are present (idempotent if already in package.json)
+          npm i imapflow mailparser --save
 
-      - name: Ensure inbox directory
+      - name: Ensure inbox dir
         run: mkdir -p data/inbox
 
-      # ⬇️ Put the inbox fetch step back in
-      - name: Fetch latest CSV from Gmail
-        run: node scripts/fetch-inbox.mjs
+      - name: Fetch newest email CSV -> data/inbox/latest.csv
         env:
           IMAP_HOST: imap.gmail.com
           IMAP_USER: ${{ secrets.IMAP_USER }}
           IMAP_PASS: ${{ secrets.IMAP_PASS }}
+          OUT_CSV:   ${{ env.INBOX_CSV }}
+        run: node scripts/fetch_email.js
 
       - name: Transform CSV -> events.json
+        env:
+          CSV_PATH:  ${{ env.INBOX_CSV }}
+          JSON_OUT:  ${{ env.JSON_OUT }}
+          TZ:        ${{ env.TZ }}
+          SHOW_SAMPLES: ${{ env.SHOW_SAMPLES }}
+          FORCE_ALL: ${{ env.FORCE_ALL }}
         run: node scripts/transform.mjs
 
-      - name: Show top of events.json for sanity
+      - name: Peek at events.json (first ~120 lines)
         run: |
           echo "Top of events.json:"
-          head -n 80 events.json
+          sed -n '1,120p' events.json || true
 
-      - name: Commit & push changes (events.json)
+      - name: Commit & push events.json (if changed)
         run: |
-          git config user.name "auto-bot"
+          git config user.name  "auto-bot"
           git config user.email "actions@users.noreply.github.com"
-          git add -A
+          git add events.json
           git commit -m "Update events.json" || echo "No changes"
           git push
