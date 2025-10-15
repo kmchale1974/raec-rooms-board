@@ -1,24 +1,29 @@
-name: Build rooms board
+name: build
 
 on:
-  workflow_dispatch:
   push:
     branches: [ main ]
+  workflow_dispatch:
   schedule:
-    - cron: "*/15 * * * *" # every 15 min
+    - cron: "*/30 * * * *"  # optional: refresh every 30 minutes
+
+# 👇 allow the GITHUB_TOKEN to push commits
+permissions:
+  contents: write
 
 jobs:
   build:
     runs-on: ubuntu-latest
-
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+        with:
+          persist-credentials: true  # uses GITHUB_TOKEN
 
       - name: Setup Node
         uses: actions/setup-node@v4
         with:
-          node-version: "20"
+          node-version: 20
 
       - name: Install deps
         run: npm i
@@ -26,39 +31,27 @@ jobs:
       - name: Ensure inbox dir
         run: mkdir -p data/inbox
 
-      # (Optional) quick sanity check that envs are present
-      - name: Check IMAP envs
-        run: |
-          [ -n "${IMAP_USER:-}" ] && echo "IMAP_USER present" || (echo "IMAP_USER missing" && exit 1)
-          [ -n "${IMAP_PASS:-}" ] && echo "IMAP_PASS present (len ${#IMAP_PASS})" || (echo "IMAP_PASS missing" && exit 1)
+      # Optional: fetch latest CSV from the Gmail account (requires secrets set)
+      - name: Fetch latest CSV from email
         env:
           IMAP_USER: "raecroominfo.board@gmail.com"
-          IMAP_PASS: ${{ secrets.GMAILIMAP }}
-
-      - name: Fetch latest email attachment (CSV)
+          IMAP_PASS: ${{ secrets.GMAILIMAP }}  # your 16-char app password in repo secrets
         run: node scripts/fetch_email.js
-        env:
-          IMAP_USER: "raecroominfo.board@gmail.com"
-          IMAP_PASS: ${{ secrets.GMAILIMAP }}
-          IMAP_HOST: "imap.gmail.com"
-          IMAP_FOLDER: "INBOX"
-          OUT_CSV: "data/inbox/latest.csv"
 
       - name: Transform CSV -> events.json
+        # If you sometimes want to bypass site filter, append 'FORCE_ALL=true'
         run: node scripts/transform.mjs
-        env:
-          CSV_PATH: "data/inbox/latest.csv"
-          JSON_OUT: "events.json"
 
-      - name: Show top of events.json
+      - name: Show top of events.json (debug)
         run: |
           echo "Top of events.json:"
           head -n 60 events.json || true
 
-      - name: Commit events.json (if changed)
+      - name: Commit & push events.json
         run: |
-          git config user.name  "auto-bot"
-          git config user.email "auto-bot@users.noreply.github.com"
+          git config user.name  "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add events.json
-          git diff --cached --quiet && echo "No changes" || git commit -m "Update events.json [skip ci]"
+          git diff --quiet --cached && echo "No changes" && exit 0
+          git commit -m "Update events.json [skip ci]"
           git push
