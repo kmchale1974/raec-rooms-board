@@ -1,52 +1,66 @@
-# .github/workflows/build.yml
 name: build
+
 on:
   workflow_dispatch:
   schedule:
-    - cron: "*/30 * * * *"  # every 30 mins; adjust if you like
+    # Runs hourly to pick up new reports; adjust as you like
+    - cron: "0 * * * *"
+  push:
+    branches: [ main ]
 
 permissions:
-  contents: write
+  contents: write   # needed so we can commit updated events.json
 
 jobs:
   build:
     runs-on: ubuntu-latest
+    env:
+      TZ: America/Chicago           # show times in local facility TZ
+      CSV_PATH: data/inbox/latest.csv
+      JSON_OUT: events.json
+      # Optional: show sample header values in logs for debugging
+      SHOW_SAMPLES: "true"
+      # Optional: accept all AC rows even if facility naming is odd
+      FORCE_ALL: "true"
+
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+        with:
+          persist-credentials: true
+          fetch-depth: 0
 
       - name: Setup Node
         uses: actions/setup-node@v4
         with:
-          node-version: 20
+          node-version: "20"
 
-      # Use npm i since there's no package-lock.json
-      - name: Install deps
+      - name: Install deps (use npm i to avoid the npm ci lockfile warning)
         run: npm i
 
-      - name: Ensure inbox folder
+      - name: Ensure inbox directory
         run: mkdir -p data/inbox
 
-      # Your IMAP fetch step (if you have one). If not, keep the CSV upload path you already use.
-      # - name: Fetch latest CSV via IMAP
-      #   run: node scripts/fetch-imap.mjs
+      # ⬇️ Put the inbox fetch step back in
+      - name: Fetch latest CSV from Gmail
+        run: node scripts/fetch-inbox.mjs
+        env:
+          IMAP_HOST: imap.gmail.com
+          IMAP_USER: ${{ secrets.IMAP_USER }}
+          IMAP_PASS: ${{ secrets.IMAP_PASS }}
 
       - name: Transform CSV -> events.json
-        env:
-          CSV_PATH: data/inbox/latest.csv
-          JSON_OUT: events.json           # write to repo root for Pages
-          FORCE_ALL: "true"               # temporary: don’t filter AC site
         run: node scripts/transform.mjs
 
-      - name: Show summary
+      - name: Show top of events.json for sanity
         run: |
           echo "Top of events.json:"
-          head -n 40 events.json || true
+          head -n 80 events.json
 
-      - name: Commit and push events.json
+      - name: Commit & push changes (events.json)
         run: |
-          git config user.name  "auto-bot"
-          git config user.email "auto-bot@users.noreply.github.com"
+          git config user.name "auto-bot"
+          git config user.email "actions@users.noreply.github.com"
           git add -A
-          git commit -m "Publish events.json [skip ci]" || echo "No changes"
+          git commit -m "Update events.json" || echo "No changes"
           git push
