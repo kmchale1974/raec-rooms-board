@@ -1,197 +1,219 @@
-// app.js — dark theme, grid is blank if no events, uses startMin/endMin directly.
+// Dark board renderer for events.json produced by transform.mjs
+// - Hides past events (endMin < now)
+// - Blank cells when no events (no placeholders)
+// - Rooms ordered 1A..10B
+// - Time grid across building hours
+// - Date centered + live clock
 
-const BUILDING = { openMin: 6*60, closeMin: 22*60 }; // 06:00–22:00
+const ROOM_ORDER = ["1A","1B","2A","2B","3","4","5","6","7","8","9A","9B","10A","10B"];
 
-const ROOMS_ORDER = [
-  '1A','1B','2A','2B','3A','3B','4A','4B','5A','5B',
-  '6A','6B','7A','7B','8A','8B','9A','9B','10A','10B',
-];
-
-// layout constants tuned for 1920x1080
-const TIMELINE_LEFT_PX = 210;        // left gutter for room labels
-const TIMELINE_RIGHT_PX = 40;        // right padding
-const ROW_HEIGHT_PX = 48;            // per room
-const GRID_TOP_PX = 190;             // below the header/date
-const COLORS = {
-  bg: '#0E1116',
-  grid: '#1B222C',
-  tick: '#2A3342',
-  block: '#3B82F6',
-  blockText: '#FFFFFF',
-  label: '#C7D2FE',
-  header: '#E5E7EB'
+// Some rooms are single courts (3..8) — display label tweaks
+const DISPLAY_NAME = {
+  "1A":"Court 1A","1B":"Court 1B",
+  "2A":"Court 2A","2B":"Court 2B",
+  "3":"Court 3","4":"Court 4","5":"Court 5","6":"Court 6",
+  "7":"Court 7","8":"Court 8",
+  "9A":"Court 9A","9B":"Court 9B",
+  "10A":"Court 10A","10B":"Court 10B",
 };
 
-function minutesToX(min) {
-  const total = BUILDING.closeMin - BUILDING.openMin; // 960
-  const usable = window.innerWidth - TIMELINE_LEFT_PX - TIMELINE_RIGHT_PX;
-  return TIMELINE_LEFT_PX + ((min - BUILDING.openMin) / total) * usable;
-}
+const qs = (id) => document.getElementById(id);
 
-function rowTop(room) {
-  const idx = ROOMS_ORDER.indexOf(room);
-  return GRID_TOP_PX + idx * ROW_HEIGHT_PX;
-}
-
-function fmtClock() {
-  const d = new Date();
-  const h = d.getHours();
+function pad2(n){ return n<10 ? `0${n}` : `${n}`; }
+function formatClock(d){
+  let h = d.getHours();
   const m = d.getMinutes();
-  const pad = n => String(n).padStart(2, '0');
-  return `${pad(h)}:${pad(m)}`;
+  const ap = h >= 12 ? "PM" : "AM";
+  h = h % 12; if (h === 0) h = 12;
+  return `${h}:${pad2(m)} ${ap}`;
 }
-
-function renderHeader() {
-  const header = document.getElementById('header');
+function formatDate(d){
+  const opt = { weekday:"long", month:"long", day:"numeric", year:"numeric"};
+  return d.toLocaleDateString(undefined, opt);
+}
+function minutesNow(){
   const d = new Date();
-  const dateStr = d.toLocaleDateString(undefined, { weekday:'long', year:'numeric', month:'long', day:'numeric' });
-
-  header.innerHTML = `
-    <div style="display:flex; align-items:center; justify-content:center; gap:14px; color:${COLORS.header};">
-      <div style="font-size:34px; font-weight:700;">${dateStr}</div>
-      <div id="clock" style="font-size:30px; opacity:0.9;">${fmtClock()}</div>
-    </div>
-    <div style="margin-top:8px; text-align:center; color:${COLORS.label}; font-size:16px;">
-      Building Hours: 6:00–22:00
-    </div>
-  `;
+  return d.getHours()*60 + d.getMinutes();
 }
 
-function tickClock() {
-  const el = document.getElementById('clock');
-  if (!el) return;
-  el.textContent = fmtClock();
-}
+function px(n){ return `${n}px`; }
 
-function renderGridBackdrop() {
-  const root = document.getElementById('grid');
-  root.innerHTML = '';
-
-  // Room labels
-  for (const room of ROOMS_ORDER) {
-    const y = rowTop(room);
-    const label = document.createElement('div');
-    label.textContent = room;
-    Object.assign(label.style, {
-      position: 'absolute',
-      left: '20px',
-      top: `${y + 10}px`,
-      width: `${TIMELINE_LEFT_PX - 30}px`,
-      color: COLORS.label,
-      fontSize: '22px',
-      fontWeight: '600',
-      textAlign: 'right',
-      letterSpacing: '0.5px'
-    });
-    root.appendChild(label);
-
-    const rowLine = document.createElement('div');
-    Object.assign(rowLine.style, {
-      position: 'absolute',
-      left: `${TIMELINE_LEFT_PX}px`,
-      right: `${TIMELINE_RIGHT_PX}px`,
-      top: `${y + ROW_HEIGHT_PX - 1}px`,
-      height: '1px',
-      background: COLORS.grid
-    });
-    root.appendChild(rowLine);
-  }
-
-  // Hour ticks every 60 min
-  for (let m = BUILDING.openMin; m <= BUILDING.closeMin; m += 60) {
-    const x = minutesToX(m);
-    const tick = document.createElement('div');
-    Object.assign(tick.style, {
-      position: 'absolute',
-      top: `${GRID_TOP_PX - 14}px`,
-      left: `${x}px`,
-      width: '1px',
-      bottom: '30px',
-      background: COLORS.tick
-    });
-    root.appendChild(tick);
-
-    const label = document.createElement('div');
-    const hr = ((m/60)|0);
-    const hh = (hr % 12) || 12;
-    const suffix = hr < 12 ? 'am' : 'pm';
-    label.textContent = `${hh}${m%60===0?'':':30'}${m%60===0? '': ''}${suffix}`;
-    Object.assign(label.style, {
-      position: 'absolute',
-      left: `${x+6}px`,
-      top: `${GRID_TOP_PX - 34}px`,
-      color: COLORS.label,
-      fontSize: '14px'
-    });
-    root.appendChild(label);
-  }
-}
-
-function placeBlock(root, ev) {
-  // ev: { room, title, who, startMin, endMin }
-  const y = rowTop(ev.room) + 6;
-  const x1 = minutesToX(ev.startMin);
-  const x2 = minutesToX(ev.endMin);
-  const w = Math.max(4, x2 - x1);
-
-  const el = document.createElement('div');
-  Object.assign(el.style, {
-    position: 'absolute',
-    top: `${y}px`,
-    left: `${x1}px`,
-    width: `${w}px`,
-    height: `${ROW_HEIGHT_PX - 12}px`,
-    background: COLORS.block,
-    color: COLORS.blockText,
-    borderRadius: '10px',
-    padding: '8px 10px',
-    overflow: 'hidden',
-    whiteSpace: 'nowrap',
-    textOverflow: 'ellipsis',
-    fontSize: '18px',
-    boxShadow: '0 4px 12px rgba(0,0,0,0.35)'
-  });
-  el.textContent = ev.who ? `${ev.title} — ${ev.who}` : ev.title;
-  root.appendChild(el);
-}
-
-async function loadEvents() {
-  // cache-bust on GH Pages
-  const res = await fetch(`events.json?v=${Date.now()}`);
-  if (!res.ok) return [];
+async function fetchJson(url){
+  // Cache-bust so Yodeck/GH Pages always pull fresh
+  const res = await fetch(`${url}?v=${Date.now()}`, { cache: "no-store" });
+  if(!res.ok) throw new Error(`Failed to fetch ${url}: ${res.status}`);
   return res.json();
 }
 
-function blankBoard() {
-  // Do nothing: per your request, no placeholders when empty.
+function renderHeader(){
+  const d = new Date();
+  qs("date").textContent = formatDate(d);
+  qs("clock").textContent = formatClock(d);
 }
 
-async function init() {
-  document.body.style.background = '#0E1116';
+function startClock(){
   renderHeader();
-  renderGridBackdrop();
+  setInterval(renderHeader, 1000);
+}
 
-  const grid = document.getElementById('grid');
-  const events = await loadEvents();
+function buildScale(dayStartMin, dayEndMin){
+  const span = dayEndMin - dayStartMin;
+  const x = (min) => ( (min - dayStartMin) / span ); // 0..1
+  return { span, x };
+}
 
-  // Draw blocks (if any). If none → leave grid blank.
-  for (const ev of events) {
-    // sanity clamp to building hours
-    if (ev.endMin <= ev.startMin) continue;
-    if (ev.endMin <= BUILDING.openMin) continue;
-    if (ev.startMin >= BUILDING.closeMin) continue;
-    placeBlock(grid, ev);
+function renderRuler(timesEl, dayStartMin, dayEndMin){
+  timesEl.innerHTML = "";
+  const { x } = buildScale(dayStartMin, dayEndMin);
+
+  // Create container width using a wide inner to allow absolute ticks
+  const inner = document.createElement("div");
+  inner.style.position = "relative";
+  inner.style.width = "100%";
+  inner.style.height = "100%";
+  timesEl.appendChild(inner);
+
+  // Ticks at every hour
+  const startHour = Math.ceil(dayStartMin/60);
+  const endHour = Math.floor(dayEndMin/60);
+  for(let h = startHour; h <= endHour; h++){
+    const min = h*60;
+    const tick = document.createElement("div");
+    tick.className = "tick";
+    tick.style.left = `calc(${x(min)*100}% )`;
+    inner.appendChild(tick);
+
+    const label = document.createElement("div");
+    label.className = "tick-label";
+    label.style.left = `calc(${x(min)*100}% )`;
+    const hr12 = ((h % 12) === 0) ? 12 : (h % 12);
+    const ap = h >= 12 ? "PM" : "AM";
+    label.textContent = `${hr12}:00 ${ap}`;
+    inner.appendChild(label);
   }
 
-  setInterval(tickClock, 1000);
+  // Vertical "now" line if within range
+  const nowMin = minutesNow();
+  if(nowMin >= dayStartMin && nowMin <= dayEndMin){
+    const now = document.createElement("div");
+    now.className = "now-line";
+    now.style.left = `calc(${x(nowMin)*100}% )`;
+    inner.appendChild(now);
+  }
 }
 
-window.addEventListener('load', init);
-window.addEventListener('resize', () => {
-  // Re-render grid on resize to keep positions correct
-  renderGridBackdrop();
-  loadEvents().then(evts => {
-    const grid = document.getElementById('grid');
-    for (const e of evts) placeBlock(grid, e);
+function renderGridBackdrop(timelineEl, dayStartMin, dayEndMin, rowCount){
+  timelineEl.innerHTML = "";
+  const { x } = buildScale(dayStartMin, dayEndMin);
+
+  // Column lines each hour
+  const startHour = Math.ceil(dayStartMin/60);
+  const endHour = Math.floor(dayEndMin/60);
+
+  for(let h = startHour; h <= endHour; h++){
+    const min = h*60;
+    const col = document.createElement("div");
+    col.className = "col-line";
+    col.style.left = `calc(${x(min)*100}% )`;
+    timelineEl.appendChild(col);
+  }
+
+  // Create rows container
+  ROOM_ORDER.forEach(() => {
+    const row = document.createElement("div");
+    row.className = "time-row";
+    timelineEl.appendChild(row);
   });
-});
+}
+
+function renderRoomLabels(roomsEl){
+  roomsEl.innerHTML = "";
+  ROOM_ORDER.forEach(roomId => {
+    const r = document.createElement("div");
+    r.className = "row";
+    const name = document.createElement("div");
+    name.className = "room-name";
+    name.textContent = DISPLAY_NAME[roomId] || roomId;
+    r.appendChild(name);
+    roomsEl.appendChild(r);
+  });
+}
+
+function renderEvents(timelineEl, data){
+  const { rooms, dayStartMin, dayEndMin } = data;
+  const { x } = buildScale(dayStartMin, dayEndMin);
+  const rows = Array.from(timelineEl.querySelectorAll(".time-row"));
+
+  const nowMin = minutesNow();
+
+  ROOM_ORDER.forEach((roomId, idx) => {
+    const rowEl = rows[idx];
+    const list = rooms[roomId] || [];
+    // Render only events with end > now (hide past)
+    list
+      .filter(ev => ev.endMin > nowMin)
+      .forEach(ev => {
+        const evEl = document.createElement("div");
+        evEl.className = "event";
+
+        // Clamp into range
+        const start = Math.max(ev.startMin, dayStartMin);
+        const end   = Math.min(ev.endMin,   dayEndMin);
+        const left  = x(start)*100;
+        const width = Math.max(0, (x(end) - x(start))*100);
+
+        evEl.style.left = `${left}%`;
+        evEl.style.width = `${width}%`;
+        evEl.textContent = ev.label || "Reserved";
+
+        rowEl.appendChild(evEl);
+      });
+  });
+}
+
+async function init(){
+  // elements present?
+  const timesEl = qs("rulerTimes");
+  const roomsEl = qs("rooms");
+  const timelineEl = qs("timeline");
+  if(!timesEl || !roomsEl || !timelineEl){
+    console.error("Required DOM nodes not found. Check element IDs in index.html.");
+    return;
+  }
+
+  startClock();
+
+  let data;
+  try{
+    data = await fetchJson("./events.json");
+  }catch(err){
+    console.error(err);
+    // Show empty board gracefully
+    data = {
+      dayStartMin: 6*60,
+      dayEndMin: 23*60,
+      rooms: {},
+      slots: []
+    };
+  }
+
+  const { dayStartMin, dayEndMin } = data;
+
+  // Build static chrome
+  renderRuler(timesEl, dayStartMin, dayEndMin);
+  renderRoomLabels(roomsEl);
+  renderGridBackdrop(timelineEl, dayStartMin, dayEndMin, ROOM_ORDER.length);
+  renderEvents(timelineEl, data);
+
+  // Small timer to keep "now" line fresh & drop ended events
+  setInterval(async () => {
+    // Re-render ruler now-line only
+    renderRuler(timesEl, dayStartMin, dayEndMin);
+
+    // Re-render events from the same data but with updated "now"
+    Array.from(timelineEl.querySelectorAll(".time-row")).forEach(el => el.innerHTML = "");
+    renderEvents(timelineEl, data);
+  }, 60 * 1000);
+}
+
+init();
