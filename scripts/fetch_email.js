@@ -1,9 +1,10 @@
-// ESM version (node >=18), Option A: username inline in workflow, password from secret
+// ESM (Node 18+). Finds the newest email in the IMAP folder,
+// scans its MIME structure for a CSV attachment, and downloads it.
+
 import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import { ImapFlow } from 'imapflow';
-import { simpleParser } from 'mailparser';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -21,14 +22,25 @@ if (!user || !pass) {
 
 fs.mkdirSync(path.dirname(outCsv), { recursive: true });
 
-const client = new ImapFlow({ host, secure: true, auth: { user, pass } });
+const client = new ImapFlow({
+  host,
+  secure: true,
+  auth: { user, pass }
+});
+
+function filenameOf(part = {}) {
+  // Try headers first, then params
+  const disp = part.dispositionParameters || {};
+  const typep = part.parameters || {};
+  return disp.filename || typep.name || '';
+}
 
 try {
   await client.connect();
   await client.mailboxOpen(folder);
 
-  // Find newest message by INTERNALDATE
-  let newest;
+  // 1) Find newest message UID by INTERNALDATE
+  let newest = null;
   for await (const msg of client.fetch({ all: true }, { uid: true, internalDate: true })) {
     if (!newest || msg.internalDate > newest.internalDate) newest = msg;
   }
@@ -37,35 +49,56 @@ try {
     process.exit(0);
   }
 
-  // Download full raw message (RFC822)
-  let raw;
-  try {
-    const full = await client.download(newest.uid, '', { uid: true });
-    const chunks = [];
-    for await (const ch of full.content) chunks.push(ch);
-    raw = Buffer.concat(chunks);
-  } catch (e) {
-    console.error('Failed to download full message:', e.message);
+  // 2) Fetch BODYSTRUCTURE to locate CSV attachment part
+  const fetchRes = await client.fetchOne(newest.uid, { bodyStructure: true }, { uid: true });
+  const bs = fetchRes?.bodyStructure;
+  if (!bs) {
+    console.log('No BODYSTRUCTURE available.');
     process.exit(0);
   }
 
-  // Parse MIME, extract first .csv attachment
-  const parsed = await simpleParser(raw);
-  const atts = parsed.attachments || [];
-  if (!atts.length) {
-    console.log('Full message parsed, but no attachments found.');
+  // walk the structure to find first CSV attachment
+  const stack = [bs];
+  let csvPart = null;
+  while (stack.length && !csvPart) {
+    const node = stack.pop();
+
+    if (Array.isArray(node.childNodes)) {
+      for (const child of node.childNodes) stack.push(child);
+    }
+
+    const type = (node.type || '').toLowerCase();        // e.g. "text"
+    const subType = (node.subtype || '').toLowerCase();  // e.g. "csv", "plain"
+    const disp = (node.disposition || '').toLowerCase(); // "attachment" or "inline"
+    const name = filenameOf(node).toLowerCase();
+
+    const isCsvByMime = (type === 'text' && subType === 'csv') ||
+                        (type === 'application' && subType === 'vnd.ms-excel'); // some systems use this
+    const isCsvByName = name.endsWith('.csv');
+
+    if ((disp === 'attachment' || name) && (isCsvByMime || isCsvByName)) {
+      csvPart = node;
+      break;
+    }
+  }
+
+  if (!csvPart) {
+    console.log('No CSV attachment found in newest email.');
     process.exit(0);
   }
-  console.log('Attachments seen:', atts.map(a => `${a.filename || '(no name)'} [${a.contentType}]`).join(' | '));
 
-  const csv = atts.find(a => (a.filename || '').toLowerCase().endsWith('.csv'));
-  if (!csv) {
-    console.log('No .csv attachment found in newest email.');
-    process.exit(0);
-  }
+  const partId = csvPart.part;
+  const filename = filenameOf(csvPart) || 'attachment.csv';
+  console.log(`Downloading CSV part ${partId} (${filename})…`);
 
-  fs.writeFileSync(outCsv, csv.content);
-  console.log('Saved CSV to', outCsv, '(', csv.filename, ')');
+  // 3) Download that specific MIME part
+  const { content } = await client.download(newest.uid, partId, { uid: true });
+  const chunks = [];
+  for await (const chunk of content) chunks.push(chunk);
+  const buf = Buffer.concat(chunks);
+
+  fs.writeFileSync(outCsv, buf);
+  console.log('Saved CSV to', outCsv, '(', filename, ')');
 } finally {
   try { await client.logout(); } catch {}
 }
