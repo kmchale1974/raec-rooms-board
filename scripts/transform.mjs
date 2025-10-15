@@ -1,315 +1,207 @@
-// ESM version (works with "type": "module")
+// ES module transformer for the RAEC CSV -> events.json
+// Reads env: CSV_PATH (input), JSON_OUT (output)
+// Assumptions: report is for "today"; building hours 6:00–23:00 local.
+// Leaves past events in the JSON; the app hides events whose end < now.
+
 import fs from "fs";
-import fsp from "fs/promises";
 import path from "path";
 
-// --- Config --------------------------------------------------------------
-
-// Facilities we want to show on the gym board, mapped to board cells.
-// Multi-court entries like "9-AB" expand to both halves.
-const FACILITY_TO_BOARD_CELL = {
-  "AC Gym - Court 3": ["3"],
-  "AC Gym - Court 4": ["4"],
-  "AC Gym - Court 5": ["5"],
-  "AC Gym - Court 6": ["6"],
-  "AC Gym - Court 7": ["7"],
-  "AC Gym - Court 8": ["8"],
-
-  "AC Gym - Court 9-AB": ["9A", "9B"],
-  "AC Gym - Half Court 9A": ["9A"],
-  "AC Gym - Half Court 9B": ["9B"],
-
-  "AC Gym - Court 10-AB": ["10A", "10B"],
-  "AC Gym - Half Court 10A": ["10A"],
-  "AC Gym - Half Court 10B": ["10B"],
-
-  // If you ever decide to surface 1A/1B/2A/2B, just uncomment or add:
-  // "AC Gym - Half Court 1A": ["1A"],
-  // "AC Gym - Half Court 1B": ["1B"],
-  // "AC Gym - Half Court 2A": ["2A"],
-  // "AC Gym - Half Court 2B": ["2B"],
-};
-
-// Building hours (local) for the board timeline – used only for validation/clipping if needed
-const DAY_START_MIN = 6 * 60;   // 6:00 AM
-const DAY_END_MIN   = 23 * 60;  // 11:00 PM
-
-// Inputs/outputs via env (keeps your action step the same)
+// ---------- helpers ----------
 const CSV_PATH = process.env.CSV_PATH || "data/inbox/latest.csv";
 const JSON_OUT = process.env.JSON_OUT || "events.json";
 
-// --- Helpers -------------------------------------------------------------
+const ROOM_ORDER = ["1A","1B","2A","2B","3","4","5","6","7","8","9A","9B","10A","10B"];
+const BUILDING_OPEN_MIN = 6 * 60;   // 06:00
+const BUILDING_CLOSE_MIN = 23 * 60; // 23:00
 
-const todayLocal = () => {
-  const now = new Date();
-  // Normalize to today’s local yyyy-mm-dd
-  return new Date(now.getFullYear(), now.getMonth(), now.getDate());
-};
+const lc = (s) => (s ?? "").toString().trim().toLowerCase();
+const pad2 = (n) => (n < 10 ? `0${n}` : `${n}`);
 
-const toMinutes = (h, m, ampm) => {
-  let hh = parseInt(h, 10);
-  const mm = parseInt(m || "0", 10);
-  const ap = (ampm || "").toLowerCase();
-  if (ap === "pm" && hh !== 12) hh += 12;
-  if (ap === "am" && hh === 12) hh = 0;
-  return hh * 60 + mm;
-};
-
-// Parse strings like "6:00pm - 9:00pm" or "7:30am -  9:00am"
-const parseReservedTime = (s) => {
-  if (!s) return null;
-  const str = s.replace(/\s+/g, " ").trim().toLowerCase();
-  // e.g. "6:00pm - 9:00pm"
-  const m = str.match(
-    /^(\d{1,2})(?::(\d{2}))?\s*(am|pm)\s*-\s*(\d{1,2})(?::(\d{2}))?\s*(am|pm)$/
-  );
-  if (!m) return null;
-  const [, h1, m1, ap1, h2, m2, ap2] = m;
-  let startMin = toMinutes(h1, m1, ap1);
-  let endMin = toMinutes(h2, m2, ap2);
-
-  // Handle cases that roll past midnight (shouldn’t happen here, but safe)
-  if (endMin <= startMin) endMin += 24 * 60;
-  return { startMin, endMin };
-};
-
-// very small CSV parser good enough for CivicRec exports (comma, quotes)
-const parseCsv = (text) => {
+// naive CSV parser supporting quotes
+function parseCSV(text){
   const rows = [];
-  let i = 0;
-  let field = "";
-  let row = [];
-  let inQuotes = false;
-
-  const pushField = () => {
-    row.push(field);
-    field = "";
-  };
-  const pushRow = () => {
-    rows.push(row);
-    row = [];
-  };
-
-  while (i < text.length) {
-    const ch = text[i];
-
-    if (inQuotes) {
-      if (ch === '"') {
-        // check for escaped double quote
-        if (text[i + 1] === '"') {
-          field += '"';
-          i += 2;
-        } else {
-          inQuotes = false;
-          i++;
-        }
-      } else {
-        field += ch;
-        i++;
+  let i = 0, field = "", row = [], inQuotes = false;
+  while (i < text.length){
+    const c = text[i];
+    if (inQuotes){
+      if (c === '"'){
+        if (text[i+1] === '"'){ field += '"'; i += 2; continue; }
+        inQuotes = false; i++; continue;
       }
+      field += c; i++; continue;
     } else {
-      if (ch === '"') {
-        inQuotes = true;
-        i++;
-      } else if (ch === ",") {
-        pushField();
-        i++;
-      } else if (ch === "\n") {
-        pushField();
-        pushRow();
-        i++;
-      } else if (ch === "\r") {
-        // handle CRLF
-        i++;
-      } else {
-        field += ch;
-        i++;
-      }
+      if (c === '"'){ inQuotes = true; i++; continue; }
+      if (c === ','){ row.push(field.trim()); field = ""; i++; continue; }
+      if (c === '\r'){ i++; continue; }
+      if (c === '\n'){ row.push(field.trim()); rows.push(row); field = ""; row = []; i++; continue; }
+      field += c; i++; continue;
     }
   }
-  // last field/row
-  if (field.length > 0 || row.length > 0) {
-    pushField();
-    pushRow();
-  }
+  // flush last field/row
+  row.push(field.trim()); rows.push(row);
+  // drop empty trailing row if present
+  if (rows.length && rows[rows.length-1].every(x => x === "")) rows.pop();
   return rows;
-};
+}
 
-const indexHeaders = (headers) => {
+function indexHeaders(head){
   const map = {};
-  headers.forEach((h, idx) => {
-    const key = h.trim().toLowerCase();
-    map[key] = idx;
+  head.forEach((h, idx) => map[lc(h)] = idx);
+  // aliasing common names
+  return {
+    location: map["location"],
+    facility: map["facility"],
+    reservedtime: map["reservedtime"],
+    reservee: map["reservee"],
+    reservationpurpose: map["reservationpurpose"] ?? map["purpose"] ?? map["event"] ?? map["reservation purpose"],
+    headcount: map["headcount"],
+    qa: map["questionanswerall"] ?? map["questions/answers"] ?? map["qa"]
+  };
+}
+
+// "6:30pm -  8:00pm" -> {startMin, endMin}
+function parseTimeRange(s){
+  if (!s) return null;
+  const m = s.replace(/\s+/g, " ").trim().toLowerCase();
+  const parts = m.split("-").map(p => p.trim());
+  if (parts.length !== 2) return null;
+  const toMin = (t) => {
+    const mm = t.match(/^(\d{1,2})(?::(\d{2}))?\s*(am|pm)$/i);
+    if (!mm) return null;
+    let h = parseInt(mm[1],10);
+    let min = mm[2] ? parseInt(mm[2],10) : 0;
+    const ap = mm[3].toLowerCase();
+    if (ap === "pm" && h !== 12) h += 12;
+    if (ap === "am" && h === 12) h = 0;
+    return h*60 + min;
+  };
+  const startMin = toMin(parts[0]);
+  const endMin = toMin(parts[1]);
+  if (startMin == null || endMin == null) return null;
+  return { startMin, endMin };
+}
+
+// Map facility text to one or more room IDs in ROOM_ORDER
+function facilityToRooms(facilityRaw){
+  const f = lc(facilityRaw);
+  if (!f) return [];
+  if (!f.includes("ac gym")) return []; // only gym courts on the board
+
+  // Handle "Court 9-AB" -> ["9A","9B"]
+  let numAB = f.match(/court\s*(\d+)\s*-\s*ab/);
+  if (numAB){
+    const n = numAB[1];
+    if (n === "9") return ["9A","9B"];
+    if (n === "10") return ["10A","10B"];
+  }
+
+  // Handle "Half Court 10A", "Half Court 2B"
+  let half = f.match(/half\s*court\s*(\d+)\s*([ab])/);
+  if (half){
+    return [`${parseInt(half[1],10)}${half[2].toUpperCase()}`];
+  }
+
+  // Handle "Court 3", "Court 7"
+  let single = f.match(/court\s*(\d+)(?![-\w])/);
+  if (single){
+    const n = parseInt(single[1],10);
+    if (n >= 3 && n <= 8) return [`${n}`];
+  }
+
+  // Sometimes strings look like "AC Gym - Court 10-AB || AC Gym - Half Court 10B"
+  // Try to collect all occurrences
+  const hits = [];
+  f.replace(/half\s*court\s*(\d+)\s*([ab])/g, (_m, n, ab) => {
+    hits.push(`${parseInt(n,10)}${ab.toUpperCase()}`);
+    return _m;
   });
-  return map;
-};
+  f.replace(/court\s*(\d+)\s*-\s*ab/g, (_m, n) => {
+    if (n === "9"){ hits.push("9A","9B"); }
+    if (n === "10"){ hits.push("10A","10B"); }
+    return _m;
+  });
+  f.replace(/court\s*(\d+)(?![-\w])/g, (_m, n) => {
+    const num = parseInt(n,10);
+    if (num >= 3 && num <= 8) hits.push(`${num}`);
+    return _m;
+  });
+  return hits;
+}
 
-const pick = (row, headersIdx, name) => {
-  const idx = headersIdx[name];
-  return idx == null ? "" : String(row[idx] || "").trim();
-};
+function cleanLabel(purpose, reservee){
+  const a = (purpose || "").trim();
+  const b = (reservee || "").trim();
+  if (a && b) return `${a} — ${b}`;
+  return a || b || "Reserved";
+}
 
-// Compose an event label
-const makeLabel = (reservee, purpose) => {
-  const who = reservee || "";
-  const why = purpose ? ` — ${purpose}` : "";
-  return (who + why).trim();
-};
-
-// --- Main ---------------------------------------------------------------
-
-const run = async () => {
-  if (!fs.existsSync(CSV_PATH)) {
+// ---------- main ----------
+(async () => {
+  if (!fs.existsSync(CSV_PATH)){
     console.log(`CSV not found at ${CSV_PATH}. Writing empty ${JSON_OUT}.`);
-    await fsp.writeFile(
-      JSON_OUT,
-      JSON.stringify(
-        { generatedAt: new Date().toISOString(), rooms: {}, slots: [] },
-        null,
-        2
-      )
-    );
-    return;
+    const empty = { dayStartMin: BUILDING_OPEN_MIN, dayEndMin: BUILDING_CLOSE_MIN, rooms: {}, slots: [] };
+    fs.writeFileSync(JSON_OUT, JSON.stringify(empty, null, 2));
+    process.exit(0);
   }
 
-  const buf = await fsp.readFile(CSV_PATH, "utf8");
-  if (!buf.trim()) {
-    console.log(`CSV empty at ${CSV_PATH}. Writing empty ${JSON_OUT}.`);
-    await fsp.writeFile(
-      JSON_OUT,
-      JSON.stringify(
-        { generatedAt: new Date().toISOString(), rooms: {}, slots: [] },
-        null,
-        2
-      )
-    );
-    return;
+  const raw = fs.readFileSync(CSV_PATH, "utf8");
+  const rows = parseCSV(raw);
+  if (rows.length < 2){
+    console.log("No parsable rows. Writing empty output.");
+    const empty = { dayStartMin: BUILDING_OPEN_MIN, dayEndMin: BUILDING_CLOSE_MIN, rooms: {}, slots: [] };
+    fs.writeFileSync(JSON_OUT, JSON.stringify(empty, null, 2));
+    process.exit(0);
   }
 
-  const rows = parseCsv(buf);
-  if (rows.length === 0) {
-    console.log("No CSV rows parsed.");
-    return;
-  }
+  const head = rows[0];
+  const ix = indexHeaders(head);
 
-  const headers = rows[0].map((s) => s.trim());
-  const idx = indexHeaders(headers);
+  const out = { rooms: {}, slots: [] };
+  ROOM_ORDER.forEach(r => (out.rooms[r] = []));
 
-  // Expected CivicRec columns (case-insensitive):
-  // location, facility, reservedtime, reservee, reservationpurpose, headcount, questionanswerall
-  const required = ["location", "facility", "reservedtime"];
-  const missing = required.filter((k) => idx[k] == null);
-  if (missing.length) {
-    console.log(
-      `Missing headers: ${missing.join(
-        ", "
-      )}. Found headers=${headers.join(" | ")}`
-    );
-  }
+  let minSeen = Infinity;
+  let maxSeen = -Infinity;
 
-  // Sample logging (helps when Action runs)
-  const sample = (col) =>
-    rows
-      .slice(1, 9)
-      .map((r) => pick(r, idx, col))
-      .filter(Boolean)
-      .slice(0, 8);
+  for (let i = 1; i < rows.length; i++){
+    const r = rows[i];
 
-  const locSamples = sample("location");
-  const facSamples = sample("facility");
-  const timeSamples = sample("reservedtime");
+    const location = ix.location != null ? r[ix.location] : "";
+    const facility = ix.facility != null ? r[ix.facility] : "";
+    const reservedtime = ix.reservedtime != null ? r[ix.reservedtime] : "";
+    const reservee = ix.reservee != null ? r[ix.reservee] : "";
+    const purpose = ix.reservationpurpose != null ? r[ix.reservationpurpose] : "";
 
-  if (locSamples.length) {
-    console.log(`Samples • location: ${[...new Set(locSamples)].join(" || ")}`);
-  }
-  if (facSamples.length) {
-    console.log(`Samples • facility: ${[...new Set(facSamples)].join(" || ")}`);
-  }
-  if (timeSamples.length) {
-    console.log(
-      `Samples • reservedtime: ${[...new Set(timeSamples)].join(" || ")}`
-    );
-  }
+    // Only the Athletic & Event Center gym courts
+    const locOK = lc(location).includes("athletic") || lc(facility).includes("ac gym");
+    if (!locOK) continue;
 
-  // Build events per board-cell
-  const eventsByRoom = {}; // { "3": [ {startMin,endMin,label}, ... ], "9A": [...] }
+    const rooms = facilityToRooms(facility);
+    if (rooms.length === 0) continue;
 
-  const today = todayLocal(); // we assume report is for "today"
-  const dayStart = new Date(today.getFullYear(), today.getMonth(), today.getDate(), 0, 0, 0);
-
-  // Iterate CSV data rows
-  let parsedRows = 0;
-  for (let r = 1; r < rows.length; r++) {
-    const row = rows[r];
-    if (!row || row.length === 0) continue;
-
-    const facility = pick(row, idx, "facility");
-    const reservedTime = pick(row, idx, "reservedtime");
-    const reservee = pick(row, idx, "reservee");
-    const purpose = pick(row, idx, "reservationpurpose");
-
-    // Only gym items that we know how to map
-    const cells = FACILITY_TO_BOARD_CELL[facility];
-    if (!cells) continue;
-
-    const t = parseReservedTime(reservedTime);
+    const t = parseTimeRange(reservedtime);
     if (!t) continue;
 
-    // Clip to building hours just in case
-    const startMin = Math.max(t.startMin, DAY_START_MIN);
-    const endMin = Math.min(t.endMin, DAY_END_MIN);
-    if (endMin <= startMin) continue;
-
-    const label = makeLabel(reservee, purpose);
-
-    cells.forEach((cell) => {
-      if (!eventsByRoom[cell]) eventsByRoom[cell] = [];
-      eventsByRoom[cell].push({ startMin, endMin, label });
+    const label = cleanLabel(purpose, reservee);
+    rooms.forEach(roomId => {
+      if (!out.rooms[roomId]) out.rooms[roomId] = [];
+      out.rooms[roomId].push({ startMin: t.startMin, endMin: t.endMin, label });
     });
 
-    parsedRows++;
+    minSeen = Math.min(minSeen, t.startMin);
+    maxSeen = Math.max(maxSeen, t.endMin);
   }
 
-  // Normalize & sort
-  Object.keys(eventsByRoom).forEach((cell) => {
-    eventsByRoom[cell].sort((a, b) => a.startMin - b.startMin);
-  });
+  // Day bounds (clamp to building hours; if nothing found, use building hours)
+  let dayStartMin = isFinite(minSeen) ? Math.max(BUILDING_OPEN_MIN, Math.min(minSeen, BUILDING_CLOSE_MIN)) : BUILDING_OPEN_MIN;
+  let dayEndMin   = isFinite(maxSeen) ? Math.min(BUILDING_CLOSE_MIN, Math.max(maxSeen, BUILDING_OPEN_MIN)) : BUILDING_CLOSE_MIN;
 
-  // Build fixed slots (every 30 mins) for the front-end grid from DAY_START_MIN..DAY_END_MIN
-  const slots = [];
-  for (let m = DAY_START_MIN; m <= DAY_END_MIN; m += 30) {
-    slots.push(m); // minutes since midnight local
-  }
+  // snap outward to whole hours to look cleaner
+  dayStartMin = Math.floor(dayStartMin / 60) * 60;
+  dayEndMin   = Math.ceil(dayEndMin / 60) * 60;
 
-  // Write JSON in the shape the board expects
-  const out = {
-    generatedAt: new Date().toISOString(),
-    dayStartMin: DAY_START_MIN,
-    dayEndMin: DAY_END_MIN,
-    slotIntervalMin: 30,
-    rooms: eventsByRoom, // keyed by "3","4","5","6","7","8","9A","9B","10A","10B"
-    slots,                // array of minute marks used to draw columns
-  };
+  out.dayStartMin = dayStartMin;
+  out.dayEndMin = Math.max(dayEndMin, dayStartMin + 60); // ensure at least 1h
 
-  await fsp.writeFile(JSON_OUT, JSON.stringify(out, null, 2));
-
-  const roomCount = Object.keys(eventsByRoom).length;
-  console.log(
-    `Rows parsed: ${rows.length - 1}\nEvents found: ${roomCount ? Object.values(eventsByRoom).reduce((a, v) => a + v.length, 0) : 0}`
-  );
-
-  if (!roomCount) {
-    console.log(
-      "No AC Gym events matched. Check the “Samples • facility” lines above; the mapping can be extended if needed."
-    );
-  } else {
-    console.log(
-      `Wrote ${JSON_OUT} • rooms=${roomCount} • slots=${slots.length}`
-    );
-  }
-};
-
-run().catch((err) => {
-  console.error(err);
-  process.exit(1);
-});
+  fs.writeFileSync(JSON_OUT, JSON.stringify(out, null, 2));
+  console.log(`Wrote ${JSON_OUT} • rooms=${Object.values(out.rooms).filter(a=>a.length).length} • range ${pad2(Math.floor(out.dayStartMin/60))}:${pad2(out.dayStartMin%60)}–${pad2(Math.floor(out.dayEndMin/60))}:${pad2(out.dayEndMin%60)}`);
+})();
