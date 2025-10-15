@@ -2,243 +2,181 @@
 <html lang="en">
 <head>
   <meta charset="utf-8" />
-  <meta
-    name="viewport"
-    content="width=device-width, initial-scale=1, viewport-fit=cover"
-  />
-  <title>RAEC | Gym Schedule</title>
+  <title>RAEC Rooms Board</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
 
-  <!-- Professional font -->
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@500;600;700&display=swap" rel="stylesheet">
+  <!-- Silence favicon 404s -->
+  <link rel="icon" href="data:,">
 
+  <!-- Dark theme, 1920x1080 canvas, professional font stack -->
   <style>
     :root{
-      --bg:#0b0e12;
-      --panel:#0f1319;
-      --text:#e6ebf2;
-      --muted:#95a2b3;
-      --grid:#1b2430;
-      --accent:#8ab4ff;
-      --pill:#1e2a3a;
-      --pillText:#d9e6ff;
+      --bg:#0f1115;
+      --panel:#12151c;
+      --ink:#e7eaf1;
+      --muted:#9aa3b2;
+      --accent:#2b87ff;
+      --grid:#1b202a;
       --now:#ff6b6b;
-      --roomColW: 180px;     /* left label column */
-      --rowH: 64px;          /* each room row */
-      --gutter: 8px;         /* gap between rows */
-      --headerH: 120px;
-      --topTimeH: 44px;      /* top time ruler */
+      --chip:#2a3140;
+      --chip-text:#e7eaf1;
     }
-    *{box-sizing:border-box}
-    html, body{
-      height:100%;
-      margin:0;
-      background:var(--bg);
-      color:var(--text);
-      font-family: Inter, system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, "Apple Color Emoji","Segoe UI Emoji";
-      overflow:hidden; /* digital signage */
+    html,body{
+      margin:0; height:100%; background:var(--bg); color:var(--ink);
+      font-family: Inter, "SF Pro Text", Segoe UI, Roboto, Arial, sans-serif;
     }
-
-    /* Canvas */
-    .screen{
-      width:100vw;
-      height:100vh;
-      display:flex;
-      flex-direction:column;
-      padding:24px;
-      gap:16px;
+    /* Fixed 1920x1080 stage for signage players like Yodeck */
+    .stage{
+      width:1920px; height:1080px; margin:0 auto; overflow:hidden;
+      display:grid; grid-template-rows: 96px 52px 1fr; gap:16px; padding:24px;
+      box-sizing:border-box;
     }
-
     /* Header */
     .header{
-      height:var(--headerH);
-      display:grid;
-      grid-template-columns: 1fr auto 1fr;
-      align-items:center;
-      gap:12px;
+      display:flex; align-items:center; justify-content:center;
+      background:var(--panel); border-radius:16px; position:relative;
     }
     .brand{
-      font-weight:700;
-      letter-spacing:.02em;
-      color:var(--muted);
-      opacity:.85;
+      position:absolute; left:24px; font-weight:600; color:var(--muted); letter-spacing:.04em;
     }
-    .center{
-      justify-self:center;
-      text-align:center;
+    .dateclock{
+      display:flex; gap:16px; align-items:baseline; font-weight:700;
     }
-    .date{
-      font-size:28px;
-      font-weight:700;
-      letter-spacing:.02em;
-    }
-    .clock{
-      margin-top:4px;
-      font-size:18px;
-      color:var(--muted);
-      font-variant-numeric: tabular-nums;
-    }
+    #headerDate{ font-size:36px; }
+    #headerClock{ font-size:28px; color:var(--muted); }
 
-    /* Board panel */
+    /* Tabs (non-interactive look, first tab highlighted) */
+    .tabs{
+      display:flex; gap:8px; align-items:center;
+    }
+    .tab{
+      padding:10px 16px; border-radius:999px; background:var(--panel);
+      color:var(--muted); text-transform:uppercase; letter-spacing:.06em; font-size:14px;
+    }
+    .tab.is-active{ background:var(--accent); color:white; }
+
+    /* Board container */
     .board{
-      flex:1;
-      display:grid;
-      grid-template-rows: var(--topTimeH) 1fr;
-      background:var(--panel);
-      border-radius:16px;
-      box-shadow: 0 8px 32px rgba(0,0,0,.35);
-      overflow:hidden;
-      border:1px solid #151b23;
+      display:grid; grid-template-columns: 180px 1fr; gap:16px; min-height:0;
+    }
+    /* Row labels (rooms) */
+    .rooms{
+      background:var(--panel); border-radius:16px; padding:12px; overflow:hidden;
+      display:grid; grid-template-rows: 40px repeat(10, 1fr); /* header + 10 rows */
+      gap:8px;
+    }
+    .rooms .label-header{
+      color:var(--muted); font-size:14px; display:flex; align-items:center; padding:0 8px;
+      border-bottom:1px solid var(--grid);
+    }
+    .room{
+      display:grid; grid-template-columns: 1fr 1fr; gap:8px;
+    }
+    .room > div{
+      background:var(--panel); border:1px solid var(--grid); border-radius:12px;
+      display:flex; align-items:center; justify-content:center;
+      font-weight:600; color:var(--ink);
     }
 
-    /* Time ruler row */
-    .ruler{
-      display:grid;
-      grid-template-columns: var(--roomColW) 1fr;
-      align-items:stretch;
+    /* Timeline area */
+    .timeline-wrap{
+      background:var(--panel); border-radius:16px; position:relative; overflow:hidden;
+      display:grid; grid-template-rows: 40px 1fr;
+    }
+    /* Hour ticks header */
+    .hours{
+      display:grid; align-items:center;
       border-bottom:1px solid var(--grid);
-      background:linear-gradient(180deg, #0f1319, #0d1117);
     }
-    .ruler .left{
-      border-right:1px solid var(--grid);
-      display:flex;
-      align-items:center;
-      justify-content:center;
-      color:var(--muted);
-      font-weight:600;
+    .hours .row{
+      display:grid; height:40px; align-items:center;
+      /* columns set dynamically by JS to match hour slots */
+      color:var(--muted); font-size:14px;
     }
-    .ruler .times{
-      position:relative;
-    }
-    .tick{
-      position:absolute;
-      top:0; bottom:0;
-      border-left:1px solid var(--grid);
-    }
-    .tick-label{
-      position:absolute;
-      top:8px;
-      transform:translateX(-50%);
-      font-size:14px;
-      color:var(--muted);
-      font-variant-numeric: tabular-nums;
-      white-space:nowrap;
-    }
-    .now-line{
-      position:absolute;
-      top:0; bottom:0;
-      width:2px;
-      background:var(--now);
-      box-shadow:0 0 0 1px rgba(255,107,107,.35);
-    }
+    .hours .row div{ justify-self:center; }
 
     /* Grid body */
     .grid{
-      display:grid;
-      grid-template-columns: var(--roomColW) 1fr;
-      overflow:hidden;
+      position:relative;
     }
-    .rooms{
-      overflow:hidden auto;
+    /* Backdrop gridlines */
+    #gridBackdrop{
+      position:absolute; inset:0; display:grid;
+      grid-template-rows: repeat(10, 1fr);
+      grid-template-columns: var(--cols);
+      gap:0;
+    }
+    #gridBackdrop .cell{
       border-right:1px solid var(--grid);
-    }
-    .timeline{
-      position:relative;
-      overflow:hidden auto;
-    }
-
-    .row{
-      height:var(--rowH);
-      display:flex;
-      align-items:center;
-      padding:0 12px;
       border-bottom:1px solid var(--grid);
     }
-    .room-name{
-      font-weight:600;
-      color:var(--text);
-      opacity:.9;
+    /* Room lanes container */
+    .lanes{
+      position:absolute; inset:0; display:grid; grid-template-rows: repeat(10, 1fr);
+      pointer-events:none;
     }
-    .time-row{
-      position:relative;
-      height:var(--rowH);
-      border-bottom:1px solid var(--grid);
+    /* Event chips */
+    .chip{
+      position:absolute; top:0; bottom:0; border-radius:10px;
+      background:var(--chip); color:var(--chip-text); border:1px solid var(--grid);
+      display:flex; align-items:center; padding:0 10px; font-size:14px; line-height:1.2;
+      overflow:hidden; text-wrap:balance;
+    }
+    .chip strong{ font-weight:700; }
+    .chip small{ color:var(--muted); margin-left:8px; }
+
+    /* Now line */
+    .now{
+      position:absolute; top:0; bottom:0; width:2px; background:var(--now);
+      box-shadow:0 0 8px rgba(255,107,107,.8);
     }
 
-    /* faint column lines in timeline */
-    .col-line{
-      position:absolute;
-      top:0; bottom:0;
-      border-left:1px dashed #192231;
-      opacity:.7;
-    }
-
-    /* reservation block */
-    .event{
-      position:absolute;
-      top:8px; bottom:8px; /* pill height */
-      background:var(--pill);
-      color:var(--pillText);
-      border:1px solid #243248;
-      border-radius:14px;
-      display:flex;
-      align-items:center;
-      padding:0 10px;
-      overflow:hidden;
-      white-space:nowrap;
-      text-overflow:ellipsis;
-      font-weight:600;
-      font-size:15px;
-    }
-
-    /* footer strip (optional) */
-    .footer{
-      position:absolute;
-      bottom:0; left:0; right:0;
-      height:8px;
-      background:linear-gradient(90deg, #21304a, #2a3d55);
-      opacity:.35;
-    }
-
-    /* 1080p fit hint */
-    .screen{ /* subtle zoom to make 1920×1080 pop nicely, still responsive */
-      transform-origin: top left;
-    }
-    @media (min-width: 1900px) and (min-height: 1000px){
-      .screen{ transform: scale(1.0); }
+    /* Subtle in-corner legend */
+    .legend{
+      position:absolute; right:16px; bottom:12px; color:var(--muted); font-size:12px;
     }
   </style>
 </head>
 <body>
-  <div class="screen">
-    <!-- Header -->
+  <div class="stage">
     <div class="header">
-      <div class="brand">Romeoville Athletic &amp; Event Center</div>
-      <div class="center">
-        <div id="date" class="date">—</div>
-        <div id="clock" class="clock">—</div>
+      <div class="brand">Romeoville Athletic & Event Center</div>
+      <div class="dateclock">
+        <div id="headerDate">—</div>
+        <div id="headerClock">—</div>
       </div>
-      <div></div>
     </div>
 
-    <!-- Board -->
+    <div class="tabs" id="tabBar" aria-hidden="true">
+      <div class="tab is-active">Fieldhouse</div>
+      <div class="tab">North Gym</div>
+      <div class="tab">South Gym</div>
+    </div>
+
     <div class="board">
-      <!-- Time ruler -->
-      <div class="ruler">
-        <div class="left">Gym Courts</div>
-        <div id="rulerTimes" class="times"></div>
+      <!-- Left: room labels (1A…10B) arranged as 10 rows × 2 columns -->
+      <div class="rooms">
+        <div class="label-header">Rooms</div>
+        <!-- 10 rows filled by JS to ensure correct order -->
+        <!-- JS will inject .room rows, each containing two cells (A | B) -->
       </div>
 
-      <!-- Grid -->
-      <div class="grid">
-        <div id="rooms" class="rooms" role="presentation"></div>
-        <div id="timeline" class="timeline" role="presentation"></div>
+      <!-- Right: timeline -->
+      <div class="timeline-wrap">
+        <div class="hours">
+          <div class="row" id="hoursRow"><!-- hour labels injected here --></div>
+        </div>
+        <div class="grid" id="grid">
+          <div id="gridBackdrop"></div>
+          <div class="lanes" id="lanes"></div>
+          <div class="now" id="nowLine" hidden></div>
+          <div class="legend">Times shown in local time • Past events hidden</div>
+        </div>
       </div>
     </div>
   </div>
 
-  <div class="footer"></div>
-
-  <script type="module" src="./app.mjs"></script>
+  <!-- IMPORTANT: per your choice, keep app.js filename -->
+  <script type="module" src="./app.js"></script>
 </body>
 </html>
