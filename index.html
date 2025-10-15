@@ -4,104 +4,143 @@
   <meta charset="utf-8" />
   <title>RAEC Rooms Board</title>
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <link rel="icon" href="data:,">
+
+  <!-- Dark theme & fixed 1920x1080 stage for signage players -->
   <style>
     :root{
-      --bg:#0f1115; --panel:#12151c; --ink:#e7eaf1; --muted:#9aa3b2;
-      --accent:#2b87ff; --grid:#1b202a; --now:#ff6b6b;
-      --chip:#2a3140; --chip-text:#e7eaf1;
+      --bg:#0f1115;
+      --panel:#12151c;
+      --ink:#e7eaf1;
+      --muted:#9aa3b2;
+      --accent:#2b87ff;
+      --grid:#1b202a;
+      --chip:#2a3140;
+      --chip-text:#e7eaf1;
     }
-    html,body{margin:0;height:100%;background:var(--bg);color:var(--ink);
-      font-family: Inter,"SF Pro Text",Segoe UI,Roboto,Arial,sans-serif;}
-    .stage{width:1920px;height:1080px;margin:0 auto;overflow:hidden;
-      display:grid;grid-template-rows:96px 52px 1fr;gap:16px;padding:24px;box-sizing:border-box;}
-    .header{display:flex;align-items:center;justify-content:center;background:var(--panel);border-radius:16px;position:relative;}
-    .brand{position:absolute;left:24px;font-weight:600;color:var(--muted);letter-spacing:.04em;}
-    .dateclock{display:flex;gap:16px;align-items:baseline;font-weight:700;}
-    #headerDate{font-size:36px;} #headerClock{font-size:28px;color:var(--muted);}
+    html,body{
+      margin:0; height:100%; background:var(--bg); color:var(--ink);
+      font-family: Inter, "SF Pro Text", Segoe UI, Roboto, Arial, sans-serif;
+    }
+    .stage{
+      width:1920px; height:1080px; margin:0 auto; overflow:hidden;
+      display:grid; grid-template-rows: 104px 1fr; gap:16px; padding:32px; box-sizing:border-box;
+    }
 
-    .tabs{display:flex;gap:8px;align-items:center;}
-    .tab{padding:10px 16px;border-radius:999px;background:var(--panel);
-      color:var(--muted);text-transform:uppercase;letter-spacing:.06em;font-size:14px;}
-    .tab.is-active{background:var(--accent);color:#fff;}
+    /* HEADER BAR (logo left, wifi right) */
+    .header{
+      background:var(--panel); border-radius:16px; display:flex; align-items:center;
+      justify-content:space-between; padding:16px 20px; box-sizing:border-box;
+    }
+    .logo{
+      display:flex; align-items:center; gap:14px;
+    }
+    .logo img{
+      height:68px; width:auto; object-fit:contain; display:block;
+      filter: drop-shadow(0 2px 6px rgba(0,0,0,.35));
+    }
+    .logo .fallback{
+      font-weight:700; letter-spacing:.02em; color:var(--ink);
+    }
+    .wifi{
+      display:flex; align-items:center; gap:16px; color:var(--ink);
+      background:#141824; border:1px solid var(--grid); border-radius:12px; padding:10px 14px;
+    }
+    .wifi div{ line-height:1.2 }
+    .wifi label{ color:var(--muted); font-size:12px; display:block; }
+    .wifi .value{ font-weight:700; font-size:16px; }
 
-    /* ===== Timeline view (unchanged) ===== */
-    .board{display:grid;grid-template-columns:180px 1fr;gap:16px;min-height:0;}
-    .rooms{background:var(--panel);border-radius:16px;padding:12px;overflow:hidden;
-      display:grid;grid-template-rows:40px repeat(10,1fr);gap:8px;}
-    .rooms .label-header{color:var(--muted);font-size:14px;display:flex;align-items:center;padding:0 8px;border-bottom:1px solid var(--grid);}
-    .room{display:grid;grid-template-columns:1fr 1fr;gap:8px;}
-    .room>div{background:var(--panel);border:1px solid var(--grid);border-radius:12px;display:flex;align-items:center;justify-content:center;font-weight:600;color:var(--ink);}
+    /* BOARD GRID (left: South Gym 2×2, middle: Fieldhouse 3×2, right: North Gym 2×2) */
+    .board{
+      display:grid; grid-template-columns: 1fr 1.5fr 1fr; gap:16px; min-height:0;
+    }
+    .section{
+      background:var(--panel); border-radius:16px; padding:14px; display:grid; gap:12px;
+      grid-template-rows: auto 1fr;
+    }
+    .section h2{
+      margin:0; font-size:18px; color:var(--muted); font-weight:700; letter-spacing:.06em; text-transform:uppercase;
+    }
+    .cells{
+      display:grid; gap:12px;
+      /* layout set per section via classes */
+    }
+    .cells.south, .cells.north{ grid-template-columns: repeat(2, 1fr); grid-auto-rows: 1fr; }
+    .cells.fieldhouse{ grid-template-columns: repeat(3, 1fr); grid-auto-rows: 1fr; }
 
-    .timeline-wrap{background:var(--panel);border-radius:16px;position:relative;overflow:hidden;display:grid;grid-template-rows:40px 1fr;}
-    .hours{border-bottom:1px solid var(--grid);}
-    .hours .row{display:grid;height:40px;align-items:center;color:var(--muted);font-size:14px;}
-    .hours .row div{justify-self:center;}
-    .grid{position:relative;}
-    #gridBackdrop{position:absolute;inset:0;display:grid;grid-template-rows:repeat(10,1fr);grid-template-columns:var(--cols);}
-    #gridBackdrop .cell{border-right:1px solid var(--grid);border-bottom:1px solid var(--grid);}
-    .lanes{position:absolute;inset:0;display:grid;grid-template-rows:repeat(10,1fr);pointer-events:none;}
-    .chip{position:absolute;top:0;bottom:0;border-radius:10px;background:var(--chip);color:var(--chip-text);border:1px solid var(--grid);
-      display:flex;align-items:center;padding:0 10px;font-size:14px;line-height:1.2;overflow:hidden;text-wrap:balance;}
-    .chip small{color:var(--muted);margin-left:8px;}
-    .now{position:absolute;top:0;bottom:0;width:2px;background:var(--now);box-shadow:0 0 8px rgba(255,107,107,.8);}
-    .legend{position:absolute;right:16px;bottom:12px;color:var(--muted);font-size:12px;}
+    /* ROOM CARD */
+    .room{
+      border:1px solid var(--grid); border-radius:12px; padding:10px 12px; display:flex; flex-direction:column;
+      background:linear-gradient(180deg, rgba(255,255,255,0.02), rgba(255,255,255,0)) ;
+      min-height:140px;
+    }
+    .room .title{
+      font-weight:800; letter-spacing:.02em; margin-bottom:8px; display:flex; align-items:center; justify-content:space-between;
+    }
+    .room .title .badge{
+      font-size:11px; font-weight:700; color:#d1d6e3; padding:3px 8px; border-radius:999px; background:#1b2333; border:1px solid var(--grid);
+    }
+    .empty{
+      margin-top:2px; color:var(--muted); font-size:13px; font-weight:600;
+    }
 
-    /* ===== New whiteboard-style GRID view ===== */
-    .gridboard{display:none;background:var(--panel);border-radius:16px;padding:16px;}
-    .gridboard.is-active{display:block;}
-    .gb-columns{height:100%;display:grid;grid-template-columns:1fr 2fr 1fr;gap:16px;}
-    /* Left (South) and Right (North) columns: 4 stacked boxes each */
-    .gb-left,.gb-right{display:grid;grid-template-rows:repeat(4,1fr);gap:12px;}
-    /* Middle Fieldhouse: two columns (left & right), each with 3 boxes */
-    .gb-middle{display:grid;grid-template-columns:1fr 1fr;gap:12px;}
-    .gb-mid{display:grid;grid-template-rows:repeat(3,1fr);gap:12px;}
+    /* EVENT LINE */
+    .event{
+      background:var(--chip); border:1px solid var(--grid); color:var(--chip-text);
+      border-radius:8px; padding:6px 8px; margin-top:6px; display:flex; gap:10px; align-items:baseline;
+    }
+    .event .time{ font-weight:800; font-size:13px; letter-spacing:.02em; }
+    .event .who{ font-weight:700; font-size:14px; }
+    .event .note{ color:var(--muted); font-size:12px; margin-left:auto; }
 
-    .gb-cell{border:2px solid var(--grid);border-radius:12px;padding:10px;display:flex;flex-direction:column;gap:8px;overflow:hidden;
-      background:linear-gradient(180deg,rgba(255,255,255,.02),rgba(0,0,0,.02));}
-    .gb-room{font-weight:700;font-size:18px;opacity:.92;}
-    .gb-event{font-size:16px;line-height:1.25;}
-    .gb-time{color:var(--muted);font-weight:600;margin-right:8px;}
-    .gb-empty{color:var(--muted);opacity:.6;}
+    /* small footer legend (optional) */
+    .legend{
+      position:absolute; right:36px; bottom:28px; color:var(--muted); font-size:12px;
+    }
   </style>
 </head>
 <body>
   <div class="stage">
+
+    <!-- HEADER -->
     <div class="header">
-      <div class="brand">Romeoville Athletic & Event Center</div>
-      <div class="dateclock"><div id="headerDate">—</div><div id="headerClock">—</div></div>
-    </div>
+      <!-- Left: RAEC logo (place your logo file at ./logo.png). If missing, show fallback text -->
+      <div class="logo">
+        <img id="raecLogo" src="./logo.png" alt="Romeoville Athletic & Event Center" onerror="this.style.display='none';document.getElementById('logoFallback').style.display='block';">
+        <div id="logoFallback" class="fallback" style="display:none">Romeoville Athletic & Event Center</div>
+      </div>
 
-    <div class="tabs" id="tabBar" aria-hidden="true">
-      <div class="tab is-active" data-view="timeline">Timeline</div>
-      <div class="tab" data-view="grid">Grid</div>
-    </div>
-
-    <!-- Timeline -->
-    <div class="board" id="timelineView">
-      <div class="rooms"><div class="label-header">Rooms</div></div>
-      <div class="timeline-wrap">
-        <div class="hours"><div class="row" id="hoursRow"></div></div>
-        <div class="grid" id="grid">
-          <div id="gridBackdrop"></div>
-          <div class="lanes" id="lanes"></div>
-          <div class="now" id="nowLine" hidden></div>
-          <div class="legend">Times in local time • Past events hidden</div>
+      <!-- Right: Wi-Fi info -->
+      <div class="wifi">
+        <div>
+          <label>Wi-Fi</label>
+          <div id="wifiSsid" class="value">RAEC_Public</div>
+        </div>
+        <div>
+          <label>Password</label>
+          <div id="wifiPass" class="value">see front desk</div>
         </div>
       </div>
     </div>
 
-    <!-- Whiteboard-style Grid -->
-    <div class="gridboard" id="gridView">
-      <div class="gb-columns">
-        <div class="gb-left"   id="gbLeft"></div>
-        <div class="gb-middle">
-          <div class="gb-mid"  id="gbMidL"></div>
-          <div class="gb-mid"  id="gbMidR"></div>
-        </div>
-        <div class="gb-right"  id="gbRight"></div>
-      </div>
+    <!-- BOARD: three sections -->
+    <div class="board">
+      <section class="section">
+        <h2>South Gym</h2>
+        <div class="cells south" id="southCells"></div>
+      </section>
+
+      <section class="section">
+        <h2>Fieldhouse</h2>
+        <div class="cells fieldhouse" id="fieldCells"></div>
+      </section>
+
+      <section class="section">
+        <h2>North Gym</h2>
+        <div class="cells north" id="northCells"></div>
+      </section>
     </div>
+
+    <div class="legend">Current & upcoming only • Past reservations are hidden</div>
   </div>
 
   <script type="module" src="./app.js"></script>
