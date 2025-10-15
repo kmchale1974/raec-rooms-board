@@ -2,28 +2,61 @@
 <html lang="en">
   <head>
     <meta charset="utf-8" />
+    <meta
+      name="viewport"
+      content="width=device-width, initial-scale=1, viewport-fit=cover"
+    />
     <title>RAEC Rooms Board</title>
-    <meta name="viewport" content="width=device-width, height=device-height, initial-scale=1, viewport-fit=cover" />
-    <meta http-equiv="refresh" content="3600"> <!-- hard refresh hourly as a safety -->
+
+    <!-- Quiet the favicon 404 with a tiny inline favicon -->
+    <link
+      rel="icon"
+      href="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVQIW2P4//8/AwAI/AL+0yXqVQAAAABJRU5ErkJggg=="
+    />
+
     <style>
-      /* Full-HD friendly canvas */
+      :root {
+        --bg: #0e1116;
+      }
       html, body {
         margin: 0;
         padding: 0;
-        background: #0b0f14; /* matches app.js theme */
+        background: var(--bg);
+        color: #e5e7eb;
         height: 100%;
-        overflow: hidden;    /* signage: no scrollbars */
+        width: 100%;
+        font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI",
+          Roboto, "Helvetica Neue", Arial, "Noto Sans", "Liberation Sans",
+          sans-serif;
+        overflow: hidden; /* digital signage */
       }
+      /* Layout tuned for 1920x1080 but responsive */
       #app {
-        /* Center within a 1920x1080 stage. If player is exactly 1920x1080, this fills it.
-           If not, content remains centered and scales responsively within. */
-        width: 100vw;
+        position: relative;
         height: 100vh;
+        width: 100vw;
+      }
+      #header {
+        position: absolute;
+        top: 24px;
+        left: 0;
+        right: 0;
+        text-align: center;
+      }
+      #grid {
+        position: absolute;
+        inset: 0;
       }
     </style>
   </head>
   <body>
-    <div id="app"></div>
-    <script type="module" src="app.js"></script>
+    <div id="app">
+      <!-- JS expects these two ids -->
+      <div id="header"></div>
+      <div id="grid"></div>
+    </div>
+
+    <!-- Load app.js after the DOM so #header/#grid exist -->
+    <script src="app.js" defer></script>
   </body>
 </html>
