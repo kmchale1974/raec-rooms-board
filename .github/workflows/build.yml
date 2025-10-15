@@ -41,7 +41,7 @@ jobs:
       - name: Transform to events.json (AC-only)
         env:
           TZ: America/Chicago
-        run: JSON_OUT="events.json" CSV_PATH="data/inbox/latest.csv" node scripts/transform.js
+        run: JSON_OUT="events.json" CSV_PATH="data/inbox/latest.csv" node scripts/transform.mjs
 
       - name: Commit updates
         run: |
