@@ -1,6 +1,87 @@
 {
   "dayStartMin": 360,
   "dayEndMin": 1380,
-  "rooms": {},
+  "rooms": {
+    "1A": {
+      "id": "1A",
+      "label": "1A"
+    },
+    "1B": {
+      "id": "1B",
+      "label": "1B"
+    },
+    "2A": {
+      "id": "2A",
+      "label": "2A"
+    },
+    "2B": {
+      "id": "2B",
+      "label": "2B"
+    },
+    "3A": {
+      "id": "3A",
+      "label": "3A"
+    },
+    "3B": {
+      "id": "3B",
+      "label": "3B"
+    },
+    "4A": {
+      "id": "4A",
+      "label": "4A"
+    },
+    "4B": {
+      "id": "4B",
+      "label": "4B"
+    },
+    "5A": {
+      "id": "5A",
+      "label": "5A"
+    },
+    "5B": {
+      "id": "5B",
+      "label": "5B"
+    },
+    "6A": {
+      "id": "6A",
+      "label": "6A"
+    },
+    "6B": {
+      "id": "6B",
+      "label": "6B"
+    },
+    "7A": {
+      "id": "7A",
+      "label": "7A"
+    },
+    "7B": {
+      "id": "7B",
+      "label": "7B"
+    },
+    "8A": {
+      "id": "8A",
+      "label": "8A"
+    },
+    "8B": {
+      "id": "8B",
+      "label": "8B"
+    },
+    "9A": {
+      "id": "9A",
+      "label": "9A"
+    },
+    "9B": {
+      "id": "9B",
+      "label": "9B"
+    },
+    "10A": {
+      "id": "10A",
+      "label": "10A"
+    },
+    "10B": {
+      "id": "10B",
+      "label": "10B"
+    }
+  },
   "slots": []
 }
