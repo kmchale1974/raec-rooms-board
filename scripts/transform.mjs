@@ -1,20 +1,22 @@
-// scripts/transform.mjs
 import fs from "fs";
 
-/** ---------------------------------- Config ---------------------------------- */
+/* ----------------------------- Config / constants ---------------------------- */
 const CSV_PATH = process.env.CSV_PATH || "data/inbox/latest.csv";
 const JSON_OUT = process.env.JSON_OUT || "events.json";
 
-// Building hours 06:00–23:00 (minutes since midnight)
+// Building hours 06:00–23:00 (min since midnight)
 const DAY_START_MIN = 6 * 60;
 const DAY_END_MIN = 23 * 60;
 
-// Room grid 1A..10B
+// If you want to require the RAEC location match, set to true
+const ENFORCE_LOCATION = process.env.ENFORCE_LOCATION === "true"; // default off
+
+// Court grid 1A..10B
 const COURT_NUMBERS = Array.from({ length: 10 }, (_, i) => i + 1);
 const COURT_SIDES = ["A", "B"];
 const ROOM_IDS = COURT_NUMBERS.flatMap((n) => COURT_SIDES.map((s) => `${n}${s}`));
 
-/** ---------------------------- Small helper utils --------------------------- */
+/* --------------------------------- helpers ---------------------------------- */
 const norm = (s) => (s || "").toLowerCase().replace(/[^a-z0-9]/g, "");
 
 function headerIndex(headers, names) {
@@ -24,7 +26,6 @@ function headerIndex(headers, names) {
 }
 
 function detectDelimiter(firstLine) {
-  // Try common ones; pick the one with the most splits
   const cands = ["\t", ",", ";", "|"];
   let best = { d: ",", count: -1 };
   for (const d of cands) {
@@ -34,7 +35,7 @@ function detectDelimiter(firstLine) {
   return best.d;
 }
 
-/** ------------------------------- CSV/TSV parser ------------------------------ */
+// very small CSV/TSV parser with quotes
 function parseSeparated(text, delimiter) {
   const rows = [];
   let row = [];
@@ -106,29 +107,26 @@ function readCSVSmart(path) {
   );
 
   // Show quick samples for debugging in Actions log
-  const colNames = rows[0].map((h) => norm(h));
-  const demoCols = ["location", "facility", "reservedtime", "reservee"];
-  const demo = {};
+  const demoCols = ["location", "facility", "reservedtime", "reservee", "reservationpurpose"];
   demoCols.forEach((c) => {
-    const idx = headerIndex(rows[0], [c, c.replace("time", " time")]);
+    const idx = headerIndex(rows[0], [c, c.replace("time", " time"), `${c}:`]);
     if (idx >= 0) {
-      for (let r = 1; r < rows.length && (!demo[c] || demo[c].length < 6); r++) {
+      const seen = new Set();
+      for (let r = 1; r < rows.length && seen.size < 8; r++) {
         const v = (rows[r][idx] || "").trim();
-        if (v) (demo[c] ||= new Set()).add(v);
+        if (v) seen.add(v);
       }
+      if (seen.size) console.log(`Samples • ${c}: ${Array.from(seen).join(" || ")}`);
     }
-  });
-  Object.entries(demo).forEach(([k, set]) => {
-    console.log(`Samples • ${k}: ${Array.from(set).slice(0, 8).join(" || ")}`);
   });
 
   return rows;
 }
 
-/** ---------------------------- Time parsing helpers --------------------------- */
+/* --------------------------------- time utils -------------------------------- */
 function parseTime12h(s) {
   if (!s) return null;
-  const cleaned = s.trim().replace(/\s+/g, "").toLowerCase(); // e.g. "4:00pm"
+  const cleaned = s.trim().replace(/\s+/g, "").toLowerCase(); // e.g. "4:00pm" or "9am"
   const m = cleaned.match(/^(\d{1,2})(?::(\d{2}))?([ap]m)$/i);
   if (!m) return null;
   let hh = parseInt(m[1], 10);
@@ -140,7 +138,6 @@ function parseTime12h(s) {
 }
 
 function parseReservedSpan(span) {
-  // "4:00pm -  7:00pm" or "9:30am - 12:30pm"
   if (!span) return null;
   const parts = span.split("-").map((t) => t.trim());
   if (parts.length !== 2) return null;
@@ -156,15 +153,18 @@ function clampToDay(startMin, endMin) {
   return e > s ? [s, e] : null;
 }
 
-/** --------------------------- Rooms + mapping logic --------------------------- */
+/* ------------------------------- room mapping -------------------------------- */
 function buildEmptyRooms() {
   const rooms = {};
   ROOM_IDS.forEach((id) => (rooms[id] = { id, label: id }));
   return rooms;
 }
 
-function extractRoomsFromFacility(facility) {
-  if (!facility) return [];
+function extractRoomsFromFacility(facilityRaw) {
+  if (!facilityRaw) return [];
+
+  // normalize hyphens/dashes and collapse spaces
+  const facility = facilityRaw.replace(/[–—]/g, "-").replace(/\s+/g, " ").trim();
 
   // 1) AC Gym - Half Court 9A
   let m = facility.match(/AC\s*Gym\s*-\s*Half\s*Court\s*(\d{1,2})([AB])/i);
@@ -173,8 +173,8 @@ function extractRoomsFromFacility(facility) {
     return ROOM_IDS.includes(id) ? [id] : [];
   }
 
-  // 2) AC Gym - Court 9-AB
-  m = facility.match(/AC\s*Gym\s*-\s*Court\s*(\d{1,2})\s*-\s*AB/i);
+  // 2) AC Gym - Court 9-AB (or "Court 9 AB")
+  m = facility.match(/AC\s*Gym\s*-\s*Court\s*(\d{1,2})\s*[- ]\s*AB/i);
   if (m) {
     const n = parseInt(m[1], 10);
     return [`${n}A`, `${n}B`].filter((id) => ROOM_IDS.includes(id));
@@ -206,7 +206,7 @@ function extractRoomsFromFacility(facility) {
     return ids.filter((id) => ROOM_IDS.includes(id));
   }
 
-  // 6) Full Gym 1AB & 2AB  (treat AB as both halves on each number)
+  // 6) Full Gym 1AB & 2AB
   m = facility.match(/Full\s*Gym\s*(\d{1,2})AB\s*&\s*(\d{1,2})AB/i);
   if (m) {
     const a = parseInt(m[1], 10);
@@ -215,18 +215,36 @@ function extractRoomsFromFacility(facility) {
     return ids.filter((id) => ROOM_IDS.includes(id));
   }
 
-  // 7) Championship Court → map to Court 1 (A & B) by default
+  // 7) Championship Court → anchor it to 1AB by default (adjust if you want)
   if (/Championship\s*Court/i.test(facility)) {
     return ["1A", "1B"];
   }
 
-  // Ignore turf and non-gym areas for this board
+  // 8) Generic fallbacks:
+  //    "Court 5-AB" → 5A/5B, "Half Court 6A" → 6A, "Court 4" → 4A/4B
+  m = facility.match(/Court\s*(\d{1,2})\s*[- ]\s*AB/i);
+  if (m) {
+    const n = parseInt(m[1], 10);
+    return [`${n}A`, `${n}B`].filter((id) => ROOM_IDS.includes(id));
+  }
+  m = facility.match(/Half\s*Court\s*(\d{1,2})([AB])/i);
+  if (m) {
+    const id = `${parseInt(m[1], 10)}${m[2].toUpperCase()}`;
+    return ROOM_IDS.includes(id) ? [id] : [];
+  }
+  m = facility.match(/Court\s*(\d{1,2})\b/i);
+  if (m) {
+    const n = parseInt(m[1], 10);
+    return [`${n}A`, `${n}B`].filter((id) => ROOM_IDS.includes(id));
+  }
+
+  // Ignore turf and Fieldhouse full/half/quarter turf lines (board only shows courts)
   if (/turf|fieldhouse\s*-\s*(full|half|quarter)/i.test(facility)) return [];
 
   return [];
 }
 
-/** ----------------------------------- Main ----------------------------------- */
+/* ------------------------------------ main ----------------------------------- */
 function main() {
   const rows = readCSVSmart(CSV_PATH);
 
@@ -258,41 +276,50 @@ function main() {
   }
 
   const slots = [];
+  const stats = { rows: 0, kept: 0, skipLoc: 0, skipMap: 0, skipTime: 0, skipClamp: 0 };
 
   for (let r = 1; r < rows.length; r++) {
+    stats.rows++;
     const row = rows[r];
 
     const location = idxLocation >= 0 ? (row[idxLocation] || "") : "";
-    // Keep RAEC, but don't crash if blank
-    if (location && !/athletic\s*&\s*event\s*center/i.test(location)) continue;
+    if (ENFORCE_LOCATION && location && !/athletic\s*&\s*event\s*center/i.test(location)) {
+      stats.skipLoc++;
+      continue;
+    }
 
     const facility = (row[idxFacility] || "").trim();
     const reservedSpan = (row[idxReserved] || "").trim();
     const reservee = idxReservee >= 0 ? (row[idxReservee] || "").trim() : "";
     const purpose = idxPurpose >= 0 ? (row[idxPurpose] || "").trim() : "";
 
-    // Facility → room ids
     const roomIds = extractRoomsFromFacility(facility);
-    if (roomIds.length === 0) continue;
+    if (roomIds.length === 0) {
+      stats.skipMap++;
+      continue;
+    }
 
-    // Time span → minutes
     const span = parseReservedSpan(reservedSpan);
-    if (!span) continue;
-
+    if (!span) {
+      stats.skipTime++;
+      continue;
+    }
     const [startRaw, endRaw] = span;
+
     const clamped = clampToDay(startRaw, endRaw);
-    if (!clamped) continue;
+    if (!clamped) {
+      stats.skipClamp++;
+      continue;
+    }
 
     const [startMin, endMin] = clamped;
     const title = reservee || "Reserved";
     const subtitle = purpose || "";
 
-    roomIds.forEach((roomId) =>
-      slots.push({ roomId, startMin, endMin, title, subtitle })
-    );
+    roomIds.forEach((roomId) => slots.push({ roomId, startMin, endMin, title, subtitle }));
+    stats.kept++;
   }
 
-  // Sort by time, then room
   slots.sort(
     (a, b) =>
       a.startMin - b.startMin ||
@@ -302,7 +329,12 @@ function main() {
 
   out.slots = slots;
   fs.writeFileSync(JSON_OUT, JSON.stringify(out, null, 2));
-  console.log(`Wrote ${JSON_OUT} • rooms=${Object.keys(out.rooms).length} • slots=${out.slots.length}`);
+  console.log(
+    `Wrote ${JSON_OUT} • rooms=${Object.keys(out.rooms).length} • slots=${out.slots.length}`
+  );
+  console.log(
+    `Row stats • total=${stats.rows} kept=${stats.kept} skipLoc=${stats.skipLoc} skipMap=${stats.skipMap} skipTime=${stats.skipTime} skipClamp=${stats.skipClamp}`
+  );
 }
 
 main();
