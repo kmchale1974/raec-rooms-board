@@ -9,7 +9,6 @@
   },
   "dependencies": {
     "imapflow": "^1.0.199",
-    "mailparser": "^3.8.0",
     "papaparse": "^5.4.1",
     "date-fns": "^4.1.0"
   }
