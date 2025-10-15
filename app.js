@@ -1,229 +1,220 @@
-// app.js  (ES module)
+// ===== Utils =====
+const ORDER = [
+  "1A","1B","2A","2B","3A","3B","4A","4B","5A","5B","6A","6B","7A","7B","8A","8B","9A","9B","10A","10B"
+];
+const ROWS = [["1A","1B"],["2A","2B"],["3A","3B"],["4A","4B"],["5A","5B"],
+              ["6A","6B"],["7A","7B"],["8A","8B"],["9A","9B"],["10A","10B"]];
 
-// ---------- helpers ----------
-const pad = (n) => (n < 10 ? `0${n}` : `${n}`);
-const minsSinceMidnight = (d = new Date()) => d.getHours() * 60 + d.getMinutes();
+const DAY_START = 360;  // 6:00
+const DAY_END   = 1380; // 23:00
 
-function hmLabelFromMinutes(min) {
-  const h24 = Math.floor(min / 60);
-  const m = min % 60;
-  const ampm = h24 >= 12 ? 'PM' : 'AM';
-  const h12 = ((h24 + 11) % 12) + 1;
-  return `${h12}:${pad(m)}${ampm}`;
-}
+const fmtTime = m => {
+  const h24 = Math.floor(m/60), m2 = m%60;
+  const h = (h24 % 12) || 12;
+  const ampm = h24 < 12 ? 'am' : 'pm';
+  return `${h}:${m2.toString().padStart(2,'0')}${ampm}`;
+};
 
-function safeNumber(v, fallback) {
-  const n = Number(v);
-  return Number.isFinite(n) ? n : fallback;
-}
-
-// ---------- fetch & boot ----------
+// ===== Data loader =====
 async function loadData() {
   const url = `./events.json?ts=${Date.now()}`;
   const resp = await fetch(url, { cache: 'no-store' });
   if (!resp.ok) throw new Error(`Failed to fetch ${url}: ${resp.status} ${resp.statusText}`);
   const data = await resp.json();
-
-  // sanity
-  const roomCount = data?.rooms ? Object.keys(data.rooms).length : 0;
-  const slotCount = Array.isArray(data?.slots) ? data.slots.length : 0;
-  console.log('Loaded events:', { rooms: roomCount, slots: slotCount });
+  console.log('Loaded events:', { rooms: Object.keys(data.rooms||{}).length, slots: (data.slots||[]).length });
   return data;
 }
 
-// ---------- layout constants from data (with fallbacks) ----------
-function getDayBounds(data) {
-  const start = safeNumber(data?.dayStartMin, 6 * 60);   // default 06:00
-  const end   = safeNumber(data?.dayEndMin, 23 * 60);    // default 23:00
-  return { start, end, span: Math.max(1, end - start) };
-}
-
-// Fixed room order: 1A..10B (ten rows, two columns)
-function getRoomOrder() {
-  const rows = [];
-  for (let i = 1; i <= 10; i++) {
-    rows.push([`${i}A`, `${i}B`]);
-  }
-  return rows;
-}
-
-// ---------- DOM renders ----------
+// ===== Header (date + clock) =====
 function renderHeader() {
-  const elDate = document.getElementById('headerDate');
-  const elClock = document.getElementById('headerClock');
-
-  function tick() {
+  const dateEl = document.getElementById('headerDate');
+  const clockEl = document.getElementById('headerClock');
+  const upd = () => {
     const now = new Date();
-    // Center date is already centered by CSS; just update text
-    const dateStr = now.toLocaleDateString(undefined, {
-      weekday: 'long', year: 'numeric', month: 'long', day: 'numeric'
-    });
-    const timeStr = `${pad(now.getHours())}:${pad(now.getMinutes())}:${pad(now.getSeconds())}`;
-    if (elDate) elDate.textContent = dateStr;
-    if (elClock) elClock.textContent = timeStr;
-    requestAnimationFrame(() => setTimeout(tick, 250)); // smooth-ish updates
-  }
-  tick();
+    dateEl.textContent = now.toLocaleDateString(undefined, { weekday:'long', month:'long', day:'numeric', year:'numeric' });
+    clockEl.textContent = now.toLocaleTimeString(undefined, { hour:'2-digit', minute:'2-digit' });
+  };
+  upd(); setInterval(upd, 1000);
 }
 
-function renderRoomLabels() {
-  const container = document.querySelector('.rooms');
-  if (!container) return;
-
-  // Clear old rows (keep header)
-  container.querySelectorAll('.room').forEach(n => n.remove());
-
-  const order = getRoomOrder();
-  order.forEach(([a, b]) => {
-    const row = document.createElement('div');
-    row.className = 'room';
-    const cellA = document.createElement('div'); cellA.textContent = a;
-    const cellB = document.createElement('div'); cellB.textContent = b;
-    row.appendChild(cellA);
-    row.appendChild(cellB);
-    container.appendChild(row);
+// ===== Timeline view =====
+function renderRoomsColumn() {
+  const box = document.querySelector('.rooms');
+  // clear old .room rows
+  box.querySelectorAll('.room').forEach(n => n.remove());
+  ROWS.forEach(([a,b]) => {
+    const row = document.createElement('div'); row.className = 'room';
+    const ca = document.createElement('div'); ca.textContent = a;
+    const cb = document.createElement('div'); cb.textContent = b;
+    row.append(ca, cb); box.appendChild(row);
   });
 }
 
-function renderHoursHeader(bounds, stepMinutes = 60) {
-  const rowEl = document.getElementById('hoursRow');
-  if (!rowEl) return;
+function renderGridBackdrop(dayStart=DAY_START, dayEnd=DAY_END) {
+  const hoursRow = document.getElementById('hoursRow');
+  const gridBackdrop = document.getElementById('gridBackdrop');
+  if (!hoursRow || !gridBackdrop) return;
 
-  // Build hour stops
-  const cols = [];
-  for (let t = bounds.start; t <= bounds.end; t += stepMinutes) cols.push(t);
+  const cols = (dayEnd - dayStart) / 60; // one column per hour
+  hoursRow.style.gridTemplateColumns = `repeat(${cols}, 1fr)`;
+  document.documentElement.style.setProperty('--cols', `repeat(${cols*4}, 1fr)`); // quarter-hour grid
 
-  // CSS grid columns for the header row: one per hour label cell
-  rowEl.style.display = 'grid';
-  rowEl.style.gridTemplateColumns = `repeat(${cols.length - 1}, 1fr)`;
-
-  // Fill labels centered at each hour boundary (except the final end tick)
-  rowEl.innerHTML = '';
-  for (let i = 0; i < cols.length - 1; i++) {
-    const c = document.createElement('div');
-    c.textContent = hmLabelFromMinutes(cols[i]);
-    rowEl.appendChild(c);
+  hoursRow.innerHTML = '';
+  for (let i = 0; i < cols; i++) {
+    const t = dayStart + i*60;
+    const d = document.createElement('div');
+    d.textContent = fmtTime(t);
+    hoursRow.appendChild(d);
   }
 
-  // Also expose a CSS var for body columns (~ 1 column per 15 minutes for smooth chips)
-  const grid = document.getElementById('gridBackdrop');
-  if (grid) {
-    const colsPerHour = 4; // 15-minute resolution
-    const totalCols = (cols.length - 1) * colsPerHour;
-    grid.style.setProperty('--cols', `repeat(${totalCols}, 1fr)`);
-  }
-}
-
-function renderGridBackdrop() {
-  const backdrop = document.getElementById('gridBackdrop');
-  if (!backdrop) return;
-
-  // Build empty cells to draw the lines with CSS borders
-  // 10 rows × N time columns (set via --cols)
-  backdrop.innerHTML = '';
-  // We can approximate with 10 rows * 80 cells (4 cols/hour * ~20 hours max).
-  // The exact column count comes from CSS var, so we only need enough elements to cover flow.
-  const totalCells = 10 * 80;
-  for (let i = 0; i < totalCells; i++) {
-    const cell = document.createElement('div');
-    cell.className = 'cell';
-    backdrop.appendChild(cell);
-  }
-}
-
-function renderNowLine(bounds) {
-  const el = document.getElementById('nowLine');
-  if (!el) return;
-
-  function positionNow() {
-    const nowMin = minsSinceMidnight();
-    if (nowMin < bounds.start || nowMin > bounds.end) {
-      el.hidden = true;
-      requestAnimationFrame(() => setTimeout(positionNow, 30000)); // check less often when out of range
-      return;
+  gridBackdrop.innerHTML = '';
+  // 4 slices per hour (15 min)
+  for (let r = 0; r < 10; r++) {
+    for (let c = 0; c < cols*4; c++) {
+      const cell = document.createElement('div'); cell.className = 'cell';
+      gridBackdrop.appendChild(cell);
     }
-    el.hidden = false;
-    const pct = ((nowMin - bounds.start) / bounds.span) * 100;
-    el.style.left = `${pct}%`;
-    requestAnimationFrame(() => setTimeout(positionNow, 1000));
   }
-  positionNow();
 }
 
-function renderSlots(data, bounds) {
+function renderSlots(data) {
   const lanes = document.getElementById('lanes');
+  const nowLine = document.getElementById('nowLine');
   if (!lanes) return;
 
-  // Ensure 10 rows for room lanes
-  lanes.style.gridTemplateRows = `repeat(10, 1fr)`;
   lanes.innerHTML = '';
+  // one lane row per ROWS, but we position absolute chips inside each lane
+  for (let i=0;i<10;i++) lanes.appendChild(document.createElement('div'));
 
-  const nowMin = minsSinceMidnight();
-  const order = getRoomOrder(); // [[1A,1B], [2A,2B], ...]
-  const rowIndexByRoom = new Map();
-  order.forEach(([a, b], rowIdx) => {
-    rowIndexByRoom.set(a, rowIdx);
-    rowIndexByRoom.set(b, rowIdx);
-  });
+  const now = new Date();
+  const nowMin = now.getHours()*60 + now.getMinutes();
 
-  const slots = Array.isArray(data?.slots) ? data.slots : [];
+  const usable = (data.slots||[])
+    .filter(s => ORDER.includes(s.room))
+    .filter(s => s.endMin > nowMin); // hide past
 
-  // Hide events fully in the past
-  const upcoming = slots.filter(s => safeNumber(s.endMin, 0) > nowMin);
+  // Place chips
+  const totalSpan = DAY_END - DAY_START; // minutes
+  usable.forEach(s => {
+    const rowIndex = ROWS.findIndex(pair => pair.includes(s.room));
+    const laneTop = rowIndex / 10 * 100;
 
-  for (const s of upcoming) {
-    const roomId = s.roomId;
-    const rowIdx = rowIndexByRoom.get(roomId);
-    if (rowIdx === undefined) continue;
+    const start = Math.max(s.startMin, DAY_START);
+    const end   = Math.min(s.endMin, DAY_END);
+    const leftPct = ((start - DAY_START) / totalSpan) * 100;
+    const widthPct = ((end - start) / totalSpan) * 100;
 
-    const start = Math.max(bounds.start, safeNumber(s.startMin, bounds.start));
-    const end   = Math.min(bounds.end,   safeNumber(s.endMin, bounds.end));
-    if (end <= start) continue;
-
-    const leftPct  = ((start - bounds.start) / bounds.span) * 100;
-    const widthPct = ((end - start) / bounds.span) * 100;
-
-    // Place chip
     const chip = document.createElement('div');
     chip.className = 'chip';
-    chip.style.top = `calc(${rowIdx} * (100% / 10))`;
-    chip.style.height = `calc(100% / 10)`;
+    chip.style.top = `calc(${rowIndex} * (100%/10))`;
+    chip.style.height = `calc(100%/10 - 2px)`;
     chip.style.left = `${leftPct}%`;
     chip.style.width = `${widthPct}%`;
+    chip.innerHTML = `<strong>${s.title || s.reservee || 'Reserved'}</strong><small>${fmtTime(s.startMin)}–${fmtTime(s.endMin)} • ${s.room}</small>`;
+    document.getElementById('grid').appendChild(chip);
+  });
 
-    const title = s.title || s.reservee || '';
-    const sub   = s.sub || s.reservationpurpose || '';
-    const time  = `${hmLabelFromMinutes(start)}–${hmLabelFromMinutes(end)}`;
-
-    chip.innerHTML = `<strong>${title}</strong><small>${time}${sub ? ' • ' + sub : ''}</small>`;
-    lanes.appendChild(chip);
+  // Now line (only if within the day)
+  if (nowMin >= DAY_START && nowMin <= DAY_END) {
+    const leftPct = ((nowMin - DAY_START) / (DAY_END - DAY_START)) * 100;
+    nowLine.style.left = `${leftPct}%`;
+    nowLine.hidden = false;
+  } else {
+    nowLine.hidden = true;
   }
 }
 
-// ---------- init ----------
-async function init() {
-  try {
-    const data = await loadData();
-    const bounds = getDayBounds(data);
+// ===== GRID BOARD view (whiteboard-style) =====
+function renderGridBoard(data) {
+  const wrap = document.getElementById('gridWrap');
+  if (!wrap) return;
+  wrap.innerHTML = '';
 
-    // header (date + clock)
-    renderHeader();
+  // Build 10 rows × 2 columns (A column then B column) to mirror the physical board feel
+  const eventsByRoom = {};
+  for (const r of ORDER) eventsByRoom[r] = [];
+  (data.slots||[]).forEach(s => eventsByRoom[s.room]?.push(s));
 
-    // left labels
-    renderRoomLabels();
-
-    // timeline header hours + backdrop grid
-    renderHoursHeader(bounds, 60);
-    renderGridBackdrop();
-
-    // "now" line
-    renderNowLine(bounds);
-
-    // events
-    renderSlots(data, bounds);
-  } catch (err) {
-    console.error('Init failed:', err);
+  // Sort each room’s events by start time and keep today’s only
+  for (const r of ORDER) {
+    eventsByRoom[r] = eventsByRoom[r]
+      .slice()
+      .sort((a,b)=>a.startMin-b.startMin);
   }
+
+  // Left column = A courts; Right column = B courts
+  const leftRooms  = ["1A","2A","3A","4A","5A","6A","7A","8A","9A","10A"];
+  const rightRooms = ["1B","2B","3B","4B","5B","6B","7B","8B","9B","10B"];
+
+  const makeCol = rooms => {
+    rooms.forEach(roomId => {
+      const cell = document.createElement('div'); cell.className = 'gb-cell';
+      const header = document.createElement('div'); header.className = 'gb-room';
+      header.textContent = roomId;
+      cell.appendChild(header);
+
+      const list = eventsByRoom[roomId];
+      if (!list || list.length === 0) {
+        const empty = document.createElement('div');
+        empty.className = 'gb-empty'; empty.textContent = '';
+        cell.appendChild(empty);
+      } else {
+        list.forEach(ev => {
+          const line = document.createElement('div'); line.className = 'gb-event';
+          const time = document.createElement('span'); time.className = 'gb-time';
+          time.textContent = `${fmtTime(ev.startMin)}–${fmtTime(ev.endMin)}`;
+          const label = document.createElement('span');
+          label.textContent = ev.title || ev.reservee || 'Reserved';
+          line.append(time, label);
+          cell.appendChild(line);
+        });
+      }
+      wrap.appendChild(cell);
+    });
+  };
+
+  makeCol(leftRooms);
+  makeCol(rightRooms);
+}
+
+// ===== View switching (with optional auto-rotate for signage) =====
+function setActive(view){ // 'timeline' | 'grid'
+  document.querySelectorAll('.tab').forEach(t=>t.classList.toggle('is-active', t.dataset.view===view));
+  document.getElementById('timelineView').style.display = (view==='timeline') ? 'grid' : 'none';
+  document.getElementById('gridView').classList.toggle('is-active', view==='grid');
+}
+
+async function init(){
+  renderHeader();
+
+  const data = await loadData();
+
+  // TIMELINE
+  renderRoomsColumn();
+  renderGridBackdrop(data.dayStartMin || DAY_START, data.dayEndMin || DAY_END);
+  renderSlots(data);
+
+  // GRID BOARD
+  renderGridBoard(data);
+
+  // Non-interactive players: auto-rotate every 20s (toggle to false to disable)
+  const AUTO_ROTATE = true;
+  let view = 'timeline';
+  setActive(view);
+
+  if (AUTO_ROTATE){
+    setInterval(()=> {
+      view = (view === 'timeline') ? 'grid' : 'timeline';
+      setActive(view);
+    }, 20000);
+  }
+
+  // If someone is testing in a browser with a mouse, allow clicking the tabs
+  document.getElementById('tabBar').addEventListener('click', (e)=>{
+    const t = e.target.closest('.tab');
+    if (!t) return;
+    setActive(t.dataset.view);
+  });
 }
 
 document.addEventListener('DOMContentLoaded', init);
