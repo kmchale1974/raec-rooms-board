@@ -4,6 +4,7 @@
   <meta charset="utf-8" />
   <title>RAEC Rooms Board</title>
   <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <!-- Silence favicon 404s -->
   <link rel="icon" href="data:,">
 
   <style>
@@ -15,149 +16,146 @@
       --accent:#2b87ff;
       --grid:#1b202a;
       --chip:#2a3140;
+      --chip-border:#2d3646;
       --chip-text:#e7eaf1;
-      --ok:#37d399;
-      --warn:#ffd166;
+      --good:#7ed957;
+      --warn:#ffcc66;
+      --pad:24px;
     }
     html,body{
-      margin:0; height:100%;
-      background:var(--bg); color:var(--ink);
+      margin:0; height:100%; background:var(--bg); color:var(--ink);
       font-family: Inter, "SF Pro Text", Segoe UI, Roboto, Arial, sans-serif;
     }
-    /* Fixed stage for 1920x1080 players (Yodeck, etc.) */
+    /* Fixed 1920x1080 stage for signage players */
     .stage{
-      width:1920px; height:1080px; margin:0 auto; box-sizing:border-box;
-      padding:28px 32px; /* extra padding so 2 and 10 don't touch edges */
-      display:grid; grid-template-rows: 96px 1fr; gap:20px;
+      width:1920px; height:1080px; margin:0 auto; overflow:hidden;
+      display:grid; grid-template-rows: 104px 1fr; gap:16px; padding:var(--pad);
+      box-sizing:border-box;
     }
 
-    /* Header bar */
+    /* Header */
     .header{
       display:grid; grid-template-columns: 1fr 1fr 1fr; align-items:center;
-      background:var(--panel); border-radius:16px; padding:14px 18px;
+      background:var(--panel); border-radius:16px; padding:0 20px; box-sizing:border-box;
     }
-    .brand{
-      display:flex; align-items:center; gap:12px;
-    }
-    .brand img{ height:64px; width:auto; object-fit:contain; }
-    .dateclock{
-      justify-self:center; text-align:center;
-    }
-    #headerDate{ font-size:28px; font-weight:700; }
-    #headerClock{ font-size:22px; color:var(--muted); margin-top:2px; }
+    .brand{ display:flex; align-items:center; gap:12px; justify-self:start; }
+    .brand img{ height:64px; width:auto; display:block; }
+    .center-time{ text-align:center; line-height:1.1; }
+    #headerDate{ font-size:28px; color:var(--ink); font-weight:700; }
+    #headerClock{ font-size:20px; color:var(--muted); font-weight:600; margin-top:4px; }
+
     .wifi{
-      justify-self:end; display:flex; flex-direction:column; align-items:flex-end;
-      gap:4px; line-height:1.2;
+      justify-self:end; text-align:right; color:var(--muted); font-size:14px;
+      background:#0e131c; padding:10px 14px; border-radius:12px; border:1px solid var(--grid);
     }
-    .wifi .net{ font-weight:700; }
-    .wifi .pass{ color:var(--ink); font-weight:700; }
-    .wifi small{ color:var(--muted); }
+    .wifi b{ color:var(--ink); }
 
-    /* Board layout: 3 columns (South | Fieldhouse | North) */
+    /* Board */
     .board{
-      display:grid; grid-template-columns: 1fr 1.4fr 1fr; gap:20px; min-height:0;
+      background:var(--panel); border-radius:16px; padding:18px; box-sizing:border-box;
+      display:grid; grid-template-rows: auto 1fr; gap:14px;
     }
-    .group{
-      background:var(--panel); border-radius:16px; padding:14px;
-      display:grid; grid-template-rows:auto 1fr; gap:10px; overflow:hidden;
+    .section-labels{
+      display:grid; grid-template-columns: repeat(3, 1fr); gap:12px; padding:0 6px;
+      color:var(--muted); font-size:14px; letter-spacing:.04em; text-transform:uppercase;
     }
-    .group h2{
-      margin:0; font-size:18px; font-weight:700; color:var(--muted); letter-spacing:.04em;
-      text-transform:uppercase;
-    }
-    /* Cells grid: responsive inside each group */
-    .cells{
-      display:grid; gap:12px;
-      /* South/North will become 2 rows, Fieldhouse 3 rows; set in JS */
+    .section-labels div{ opacity:.9; }
+
+    /* Grid: 3 sections – South (1–2), Fieldhouse (3–8), North (9–10) */
+    .grid{
+      display:grid; gap:14px;
+      grid-template-columns: 1fr 1fr 1fr;
+      grid-auto-rows: 1fr;
     }
 
-    /* Cell (merged number or split A/B) */
+    .column{
+      display:grid; gap:14px;
+      /* extra padding so left/right edges never hug */
+      padding-inline:6px;
+      box-sizing:border-box;
+    }
+
+    /* Each court cell */
     .cell{
-      border:1px solid var(--grid); border-radius:12px; padding:10px 12px;
-      background:#0f141c; min-height:84px; display:flex; flex-direction:column; gap:8px;
+      background:linear-gradient(to bottom, rgba(255,255,255,0.02), transparent);
+      border:1px solid var(--grid);
+      border-radius:14px;
+      padding:14px;
+      box-sizing:border-box;
+      min-height:150px; /* tall enough to read; adjusts with content */
+      display:flex; flex-direction:column; gap:10px;
     }
-    .cell-header{
+    .title{
       display:flex; align-items:baseline; justify-content:space-between;
-      border-bottom:1px solid var(--grid); padding-bottom:6px;
+      border-bottom:1px solid var(--grid); padding-bottom:8px;
     }
-    .court{
-      font-size:28px; font-weight:800; letter-spacing:.02em;
-    }
+    .court{ font-weight:800; font-size:28px; letter-spacing:.02em; }
     .status{ font-size:13px; color:var(--muted); }
-    .status:empty{ display:none; } /* vanish if no events */
+    /* When there’s no events, hide the status entirely */
+    .title .status:empty{ display:none; }
 
-    /* Pill line */
-    .pill{
-      display:inline-flex; align-items:baseline; gap:8px;
-      background:var(--chip); border:1px solid var(--grid); color:var(--chip-text);
-      border-radius:10px; padding:8px 10px; font-size:14px; line-height:1.2;
-      margin:4px 4px 0 0;
-    }
-    .pill strong{ font-weight:700; }
-    .pill small{ color:var(--muted); }
-
-    /* Split container (A | B) only when needed */
-    .split{
-      display:grid; grid-template-columns: 1fr 1fr; gap:10px;
-    }
-    .lane{
-      border:1px dashed var(--grid); border-radius:10px; padding:8px;
-    }
-    .lane .lane-title{
+    .laneLabel{
       font-size:12px; color:var(--muted); text-transform:uppercase; letter-spacing:.06em;
-      margin-bottom:4px;
+      margin:6px 0 2px;
     }
 
-    /* Make totally empty cells even subtler (optional) */
-    .cell:has(.status:empty):not(:has(.pill)){
-      background:#0c1016; border-color:transparent;
+    /* Event pills */
+    .pill{
+      border:1px solid var(--chip-border);
+      background:var(--chip);
+      color:var(--chip-text);
+      border-radius:12px; padding:8px 10px; margin:6px 0;
+      display:flex; align-items:baseline; gap:10px; flex-wrap:wrap;
+      box-sizing:border-box;
     }
+    .pill .who{ font-weight:700; font-size:16px; }
+    .pill .what{ font-size:14px; color:var(--muted); }
+    .pill .time{ margin-left:auto; font-size:13px; color:var(--muted); }
 
-    /* Helpful footer note (optional) */
-    .legend{
-      position:absolute; right:36px; bottom:24px; color:var(--muted); font-size:12px;
-      opacity:.8;
-    }
+    /* Subtle hint on available rooms (if you ever want to use it) */
+    .cell.is-empty{ background:transparent; border-color:#111723; }
+
+    /* Keep numbers from touching edges on the far left/right columns */
+    .column:first-child .cell{ padding-left:18px; }
+    .column:last-child  .cell{ padding-right:18px; }
+
+    /* Make sure long names wrap nicely */
+    .pill{ word-break:break-word; }
   </style>
 </head>
 <body>
   <div class="stage">
-    <!-- Header -->
     <div class="header">
       <div class="brand">
-        <!-- Replace src with your hosted logo path -->
-        <img src="./logo.png" alt="Romeoville Athletic & Event Center">
+        <!-- Place your logo file as /logo.png -->
+        <img src="./logo.png" alt="Romeoville Athletic & Event Center" />
       </div>
 
-      <div class="dateclock">
+      <div class="center-time">
         <div id="headerDate">—</div>
         <div id="headerClock">—</div>
       </div>
 
       <div class="wifi">
-        <div><span class="net">Wi-Fi:</span> <small>Public</small></div>
-        <div><span class="net">Password:</span> <span class="pass">Publ!c00</span></div>
+        <div><b>Wi-Fi:</b> RAEC Public</div>
+        <div><b>Pass:</b> Publ!c00</div>
       </div>
     </div>
 
-    <!-- Board -->
     <div class="board">
-      <div class="group" id="south">
-        <h2>South Gym</h2>
-        <div class="cells" id="southCells"></div>
+      <div class="section-labels">
+        <div>South Gym</div>
+        <div>Fieldhouse</div>
+        <div>North Gym</div>
       </div>
-      <div class="group" id="fieldhouse">
-        <h2>Fieldhouse</h2>
-        <div class="cells" id="fieldCells"></div>
-      </div>
-      <div class="group" id="north">
-        <h2>North Gym</h2>
-        <div class="cells" id="northCells"></div>
+
+      <div class="grid">
+        <div class="column" id="col-south"><!-- courts 1–2 --></div>
+        <div class="column" id="col-field"><!-- courts 3–8 --></div>
+        <div class="column" id="col-north"><!-- courts 9–10 --></div>
       </div>
     </div>
   </div>
-
-  <div class="legend">Past events are hidden • Live clock</div>
 
   <script type="module" src="./app.js"></script>
 </body>
