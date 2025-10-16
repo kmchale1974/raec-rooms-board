@@ -1,7 +1,7 @@
 // app.js — Board-only renderer (no timeline), 1920×1080, dark theme
 
 const WIFI_SSID = 'RAEC_Public';     // set to your real SSID
-const WIFI_PASS = 'see front desk';  // set to your real password text
+const WIFI_PASS = 'Publ!c00';  // set to your real password text
 
 // Room groupings that match the physical board you described:
 //  - Left:  South Gym (2×2) : 1A, 1B, 2A, 2B
