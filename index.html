@@ -5,85 +5,147 @@
   <title>RAEC Rooms Board</title>
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <link rel="icon" href="data:,">
+
   <style>
     :root{
-      --bg:#0f1115; --panel:#12151c; --ink:#e7eaf1; --muted:#9aa3b2; --grid:#1b202a;
-      --accent:#2b87ff; --chip:#263044; --chip-text:#e7eaf1;
+      --bg:#0f1115;
+      --panel:#12151c;
+      --ink:#e7eaf1;
+      --muted:#9aa3b2;
+      --accent:#2b87ff;
+      --grid:#1b202a;
+      --chip:#202636;
+      --chip-text:#e7eaf1;
+      --ok:#2ecc71;
+      --warn:#ffb020;
     }
-    html,body{ margin:0; height:100%; background:var(--bg); color:var(--ink);
-      font-family: Inter, "SF Pro Text", Segoe UI, Roboto, Arial, sans-serif; }
+    html,body{
+      margin:0; height:100%;
+      background:var(--bg); color:var(--ink);
+      font-family: Inter, "SF Pro Text", Segoe UI, Roboto, Arial, sans-serif;
+    }
+    /* Fixed 1920x1080 stage for signage players (Yodeck) */
     .stage{
       width:1920px; height:1080px; margin:0 auto; overflow:hidden;
-      padding:24px; box-sizing:border-box; display:grid; grid-template-rows: 96px 1fr; gap:16px;
+      display:grid; grid-template-rows: 110px 1fr; gap:18px; padding:24px;
+      box-sizing:border-box;
     }
-    /* Header */
+
+    /* Header (logo left, clock center, Wi-Fi right) */
     .header{
-      background:var(--panel); border-radius:16px; position:relative; display:flex; align-items:center; justify-content:center;
+      display:grid; grid-template-columns: 1fr 1fr 1fr;
+      align-items:center; background:var(--panel); border-radius:16px; padding:0 20px;
     }
-    .logo{ position:absolute; left:24px; top:50%; transform:translateY(-50%); height:56px; }
-    .dateclock{ display:flex; gap:16px; align-items:baseline; font-weight:700; }
-    #headerDate{ font-size:36px; }
-    #headerClock{ font-size:28px; color:var(--muted); }
-    .wifi{ position:absolute; right:24px; top:50%; transform:translateY(-50%); text-align:right; color:var(--muted); font-size:14px; line-height:1.2; }
-    .wifi strong{ color:var(--ink); }
+    .brand{
+      display:flex; align-items:center; gap:12px;
+    }
+    .brand img{
+      height:64px; width:auto; object-fit:contain;
+    }
+    .center{
+      justify-self:center; text-align:center;
+    }
+    #headerDate{ font-size:32px; font-weight:700; }
+    #headerClock{ font-size:24px; color:var(--muted); margin-top:2px; }
 
-    /* GRID */
-    .grid-wrap{
-      background:var(--panel); border-radius:16px; padding:18px; box-sizing:border-box; height:100%;
-      display:grid; grid-template-columns: 1fr 2fr 1fr; gap:18px; /* South | Fieldhouse | North */
+    .wifi{
+      justify-self:end; text-align:right; color:var(--ink);
+      background:var(--panel); padding:10px 14px; border-radius:12px; border:1px solid var(--grid);
+      display:flex; flex-direction:column; gap:2px; min-width:260px;
     }
-    .col{ display:grid; gap:18px; grid-auto-rows: 1fr; }
-    /* South & North have always 2 tiles */
-    .col.south, .col.north{ grid-template-rows: 1fr 1fr; }
+    .wifi .row{ display:flex; justify-content:space-between; gap:12px; }
+    .wifi .k{ color:var(--muted); }
+    .wifi .v{ font-weight:700; }
 
-    /* Fieldhouse adapts: we’ll auto-place tiles; minmax keeps them even */
-    .col.fieldhouse{
-      grid-template-columns: repeat(3, 1fr);
-      grid-auto-rows: 1fr;
-      grid-auto-flow: row dense;
+    /* GRID-ONLY board */
+    .board{
+      background:var(--panel); border-radius:16px; padding:18px;
+      display:grid; grid-template-columns: 1fr 1.6fr 1fr; gap:18px;
+      height:100%; box-sizing:border-box;
     }
 
-    .tile{
-      border:1px solid var(--grid); border-radius:16px; padding:14px; box-sizing:border-box; background:#0f141f;
-      display:flex; flex-direction:column; gap:8px; min-width:0; overflow:hidden;
+    .col{
+      display:grid; gap:18px;
     }
-    .tile h3{ margin:0; font-size:28px; letter-spacing:.02em; }
-    .tile .list{ display:flex; flex-direction:column; gap:6px; overflow:hidden; }
-    .item{
-      background:var(--chip); border:1px solid var(--grid); border-radius:10px; padding:8px 10px;
-      display:flex; justify-content:space-between; gap:12px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;
-      font-size:16px;
-    }
-    .item .who{ font-weight:700; overflow:hidden; text-overflow:ellipsis; }
-    .item .until{ color:var(--muted); flex:0 0 auto; }
-    .empty{ color:var(--muted); font-style:italic; }
 
-    /* Ensure left/right tiles don’t hug edges on 1920x1080 */
-    .stage{ padding:28px; }
+    /* South/North have 4 cells (potentially A/B) and FH has 6 */
+    .col.south{ grid-template-rows: repeat(4, 1fr); }
+    .col.fieldhouse{ grid-template-rows: repeat(6, 1fr); }
+    .col.north{ grid-template-rows: repeat(4, 1fr); }
+
+    .cell{
+      border:1px solid var(--grid); border-radius:14px; padding:12px;
+      display:flex; flex-direction:column; gap:8px; min-width:0; min-height:0;
+      background:linear-gradient(180deg, rgba(255,255,255,0.02), rgba(0,0,0,0.02));
+    }
+    .cell .label{
+      display:flex; align-items:center; justify-content:space-between;
+      font-weight:800; font-size:22px; letter-spacing:.02em;
+    }
+    .cell .label .where{
+      /* ensure room numbers 2 and 10 don’t clip on edges */
+      padding-inline:4px;
+    }
+    .cell .label .count{
+      font-size:12px; color:var(--muted); font-weight:600;
+    }
+    .cell .list{
+      flex:1; overflow:auto; display:flex; flex-direction:column; gap:8px;
+    }
+    .chip{
+      background:var(--chip); border:1px solid var(--grid);
+      border-radius:10px; padding:8px 10px; line-height:1.25;
+      display:flex; flex-direction:column; gap:4px; font-size:15px;
+    }
+    .chip .title{ font-weight:700; color:var(--chip-text); }
+    .chip .sub{ color:var(--muted); font-size:13px; }
+
+    .more{
+      margin-top:auto; color:var(--muted); font-size:13px; text-align:right;
+    }
+
+    /* Column headers */
+    .colHead{
+      position:sticky; top:-6px; z-index:1; margin-bottom:-8px;
+      font-size:14px; text-transform:uppercase; letter-spacing:.08em; color:var(--muted);
+    }
   </style>
 </head>
 <body>
   <div class="stage">
     <div class="header">
-      <!-- Replace with your logo file name -->
-      <img class="logo" src="./raec-logo.png" alt="Romeoville Athletic & Event Center" />
-      <div class="dateclock">
+      <div class="brand">
+        <!-- Your logo file lives as logo.png -->
+        <img src="./logo.png" alt="Romeoville Athletic & Event Center" onerror="this.style.display='none'">
+      </div>
+
+      <div class="center">
         <div id="headerDate">—</div>
         <div id="headerClock">—</div>
       </div>
+
       <div class="wifi">
-        Wi-Fi: <strong>Public WiFi</strong><br>
-        Password: <strong>Publ!c00</strong>
+        <div class="row"><span class="k">Wi-Fi:</span><span id="wifiName" class="v">RAEC_Guest</span></div>
+        <div class="row"><span class="k">Password:</span><span id="wifiPass" class="v">Publ!c00</span></div>
       </div>
     </div>
 
-    <div class="grid-wrap">
-      <div class="col south" id="colSouth"></div>
-      <div class="col fieldhouse" id="colFieldhouse"></div>
-      <div class="col north" id="colNorth"></div>
+    <div class="board">
+      <div class="col south">
+        <div class="colHead">South Gym</div>
+        <!-- cells injected -->
+      </div>
+      <div class="col fieldhouse">
+        <div class="colHead">Fieldhouse</div>
+        <!-- cells injected -->
+      </div>
+      <div class="col north">
+        <div class="colHead">North Gym</div>
+        <!-- cells injected -->
+      </div>
     </div>
   </div>
 
-  <script type="module" src="./app.js"></script>
+  <script src="./app.js"></script>
 </body>
 </html>
