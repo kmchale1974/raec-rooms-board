@@ -1,303 +1,311 @@
+// scripts/transform.mjs
+// Node ESM
 import fs from "fs";
+import path from "path";
+import { fileURLToPath } from "url";
 
-/* ----------------------------- Config ----------------------------- */
-const CSV_PATH = process.env.CSV_PATH || "data/inbox/latest.csv";
-const JSON_OUT = process.env.JSON_OUT || "events.json";
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
 
-// Building hours (06:00–23:00) in minutes since midnight
-const DAY_START_MIN = 6 * 60;
-const DAY_END_MIN = 23 * 60;
+// Inputs/outputs
+const CSV_PATH  = process.env.CSV_PATH  || "data/inbox/latest.csv";
+const JSON_OUT  = process.env.JSON_OUT  || "events.json";
 
-// Do NOT block on location by default
-const ENFORCE_LOCATION = process.env.ENFORCE_LOCATION === "true";
+// Board day window (minutes since midnight)
+const DAY_START_MIN = 6 * 60;   // 06:00
+const DAY_END_MIN   = 23 * 60;  // 23:00
 
-// Court grid 1A..10B in display order
-const COURT_NUMBERS = Array.from({ length: 10 }, (_, i) => i + 1);
-const COURT_SIDES = ["A", "B"];
-const ROOM_IDS = COURT_NUMBERS.flatMap((n) => COURT_SIDES.map((s) => `${n}${s}`));
+// Numbers that can split (A/B) when CSV explicitly uses half courts
+const SPLITTABLE = [1, 2, 9, 10];
 
-/* ----------------------------- Helpers ---------------------------- */
-const norm = (s) => (s || "").toLowerCase().replace(/[^a-z0-9]/g, "");
-
-function headerIndex(headers, names) {
-  const targets = (Array.isArray(names) ? names : [names]).map(norm);
-  for (let i = 0; i < headers.length; i++) {
-    if (targets.includes(norm(headers[i]))) return i;
-  }
-  return -1;
+// --- tiny CSV parser (sufficient for your export shape) ---
+function parseCSV(raw) {
+  const lines = raw.split(/\r?\n/).filter(Boolean);
+  if (!lines.length) return { headers: [], rows: [] };
+  const headers = lines[0].split(",").map(h => h.trim());
+  const rows = lines.slice(1).map(line => {
+    const cols = line.split(",").map(c => c.trim());
+    const obj = {};
+    headers.forEach((h, i) => { obj[h] = cols[i] ?? ""; });
+    return obj;
+  });
+  return { headers, rows };
 }
 
-function detectDelimiter(firstLine) {
-  // Prefer tab if present in header row
-  if (/\t/.test(firstLine)) return "\t";
-  // Else choose the most frequent of common delimiters
-  const cands = [",", ";", "|"];
-  let best = { d: ",", count: -1 };
-  for (const d of cands) {
-    const count = firstLine.split(d).length;
-    if (count > best.count) best = { d, count };
-  }
-  return best.d;
+// --- time helpers ---
+function clampToDay(mins) {
+  return Math.max(DAY_START_MIN, Math.min(DAY_END_MIN, mins));
 }
-
-// Minimal CSV/TSV with quotes support
-function parseSeparated(text, delimiter) {
-  const rows = [];
-  let row = [];
-  let field = "";
-  let i = 0;
-  let inQuotes = false;
-  while (i < text.length) {
-    const c = text[i];
-    if (inQuotes) {
-      if (c === '"') {
-        if (text[i + 1] === '"') {
-          field += '"';
-          i += 2;
-        } else {
-          inQuotes = false; i++;
-        }
-      } else { field += c; i++; }
-    } else {
-      if (c === '"') { inQuotes = true; i++; }
-      else if (c === delimiter) { row.push(field.trim()); field=""; i++; }
-      else if (c === "\r") { i++; }
-      else if (c === "\n") { row.push(field.trim()); rows.push(row); row=[]; field=""; i++; }
-      else { field += c; i++; }
-    }
-  }
-  if (field.length || row.length) { row.push(field.trim()); rows.push(row); }
-  return rows;
+function toMin(hh, mm, ampm) {
+  let h = parseInt(hh, 10) % 12;
+  const m = parseInt(mm, 10) || 0;
+  if (ampm === "pm") h += 12;
+  return h * 60 + m;
 }
-
-function readCSVSmart(path) {
-  if (!fs.existsSync(path)) return null;
-  const text = fs.readFileSync(path, "utf8");
-  if (!text.trim()) return null;
-
-  const firstNL = text.indexOf("\n");
-  const firstLine = firstNL >= 0 ? text.slice(0, firstNL) : text;
-  const delimiter = detectDelimiter(firstLine);
-  const rows = parseSeparated(text, delimiter);
-  if (!rows || rows.length < 1) return null;
-
-  console.log(
-    `Detected headers: ${rows[0].map((h) => h || "<empty>").join(", ")} | delimiter=${JSON.stringify(delimiter)}`
-  );
-
-  // show some samples for debugging
-  const showSample = (col) => {
-    const idx = headerIndex(rows[0], [col, col.replace("time", " time"), `${col}:`]);
-    if (idx >= 0) {
-      const seen = new Set();
-      for (let r = 1; r < rows.length && seen.size < 8; r++) {
-        const v = (rows[r][idx] || "").trim();
-        if (v) seen.add(v);
-      }
-      if (seen.size) console.log(`Samples • ${col}: ${Array.from(seen).join(" || ")}`);
-    }
-  };
-  ["location", "facility", "reservedtime", "reservee", "reservationpurpose"].forEach(showSample);
-
-  return rows;
-}
-
-/* ------------------------------ Time utils ------------------------------ */
-function parseTime12hFlexible(s) {
-  if (!s) return null;
-  const cleaned = s.replace(/\s+/g, "").toLowerCase(); // handles NBSP/extra spaces
-  // allow 9am, 4:30pm, 12:00am
-  const m = cleaned.match(/^(\d{1,2})(?::(\d{2}))?([ap]m)$/);
+function parseTimeRange(s) {
+  // e.g. "4:30pm -  6:00pm" or "9:00am - 10:00pm"
+  const m = s.toLowerCase().match(/(\d{1,2}):?(\d{2})?\s*(am|pm)\s*-\s*(\d{1,2}):?(\d{2})?\s*(am|pm)/);
   if (!m) return null;
-  let hh = parseInt(m[1], 10);
-  const mm = parseInt(m[2] || "0", 10);
-  if (m[3] === "pm" && hh !== 12) hh += 12;
-  if (m[3] === "am" && hh === 12) hh = 0;
-  return hh * 60 + mm;
+  const [, sh, sm = "00", sap, eh, em = "00", eap] = m;
+  let start = toMin(sh, sm, sap);
+  let end   = toMin(eh, em, eap);
+  if (end <= start) end += 12 * 60; // normalize noon/midnight weirdness
+  start = clampToDay(start);
+  end   = clampToDay(end);
+  if (end <= start) return null;
+  return { startMin: start, endMin: end };
 }
 
-function parseReservedSpan(span) {
-  if (!span) return null;
-  // robust capture: "4:30pm -  9:30pm", "9am-10pm"
-  const m = span.match(/(\d{1,2}(?::\d{2})?\s*[ap]m)\s*-\s*(\d{1,2}(?::\d{2})?\s*[ap]m)/i);
-  if (!m) return null;
-  const start = parseTime12hFlexible(m[1]);
-  const end = parseTime12hFlexible(m[2]);
-  if (start == null || end == null) return null;
-  return [start, end];
+// --- text clean: remove repeated comma segments (e.g., "X, X") ---
+function cleanRepeatedCommaSegments(str) {
+  if (!str) return "";
+  const parts = str.split(",").map(s => s.trim()).filter(Boolean);
+  const seen = new Set();
+  const out = [];
+  for (const p of parts) {
+    const key = p.toLowerCase();
+    if (seen.has(key)) continue;
+    seen.add(key);
+    out.push(p);
+  }
+  return out.join(", ");
 }
 
-function clampToDay(startMin, endMin) {
-  const s = Math.max(startMin, DAY_START_MIN);
-  const e = Math.min(endMin, DAY_END_MIN);
-  return e > s ? [s, e] : null;
+// Detect if any half-court A/B usage exists for a given number in this CSV
+function detectSplits(rows, keyFacility) {
+  const split = { 1:false, 2:false, 9:false, 10:false };
+
+  for (const r of rows) {
+    const fac = (r[keyFacility] || "").trim();
+
+    // "AC Gym - Half Court 10A" etc. = explicit split
+    let m = fac.match(/^AC\s+Gym\s*-\s*Half\s+Court\s+(\d{1,2})([AB])$/i);
+    if (m) {
+      const num = parseInt(m[1], 10);
+      if (SPLITTABLE.includes(num)) split[num] = true;
+      continue;
+    }
+
+    // If you ever want "Court X-AB" to force a split for layout, flip this on.
+    // The current requirement says split ONLY if explicit A/B is used,
+    // so "Court X-AB" keeps the single-number cell.
+    // m = fac.match(/^AC\s+Gym\s*-\s*Court\s+(\d{1,2})-AB$/i);
+    // if (m) { const num = parseInt(m[1], 10); if (SPLITTABLE.includes(num)) split[num] = true; }
+  }
+  return split;
 }
 
-/* ------------------------------ Room mapping ------------------------------ */
-function buildEmptyRooms() {
-  const rooms = {};
-  ROOM_IDS.forEach((id) => (rooms[id] = { id, label: id }));
+// Build the room list based on whether 1/2/9/10 are split today
+function buildBoardRooms(splitFlags) {
+  const rooms = [];
+  // 1
+  if (splitFlags[1]) rooms.push("1A","1B"); else rooms.push("1");
+  // 2
+  if (splitFlags[2]) rooms.push("2A","2B"); else rooms.push("2");
+  // 3..8 (Fieldhouse always single)
+  rooms.push("3","4","5","6","7","8");
+  // 9
+  if (splitFlags[9]) rooms.push("9A","9B"); else rooms.push("9");
+  // 10
+  if (splitFlags[10]) rooms.push("10A","10B"); else rooms.push("10");
   return rooms;
 }
 
-function extractRoomsFromFacility(facilityRaw) {
-  if (!facilityRaw) return [];
+// Facility → room IDs mapping per your rules, conditioned by split flags
+function facilityToRoomIds(fac, splitFlags) {
+  if (!fac) return [];
+  const f = fac.trim();
 
-  const facility = facilityRaw
-    .replace(/[–—]/g, "-")        // normalize dashes
-    .replace(/\s+/g, " ")         // collapse whitespace
-    .trim();
-
-  // AC Gym - Half Court 10A
-  let m = facility.match(/AC\s*Gym\s*-\s*Half\s*Court\s*(\d{1,2})([AB])\b/i);
+  // 1) GYM half courts (explicit split)
+  let m = f.match(/^AC\s+Gym\s*-\s*Half\s+Court\s+(\d{1,2})([AB])$/i);
   if (m) {
-    const id = `${parseInt(m[1], 10)}${m[2].toUpperCase()}`;
-    return ROOM_IDS.includes(id) ? [id] : [];
+    const num = parseInt(m[1], 10);
+    const ab  = m[2].toUpperCase();
+    if (SPLITTABLE.includes(num)) return [`${num}${ab}`]; // appears only on that A/B lane
   }
 
-  // AC Gym - Court 9-AB  (or "Court 9 AB")
-  m = facility.match(/AC\s*Gym\s*-\s*Court\s*(\d{1,2})\s*[- ]\s*AB\b/i);
+  // 2) GYM single court spanning A/B (e.g., "AC Gym - Court 10-AB")
+  // If split is ON for that number (because half courts exist elsewhere today),
+  // we paint both A and B squares; otherwise we paint the single-number square.
+  m = f.match(/^AC\s+Gym\s*-\s*Court\s+(\d{1,2})-AB$/i);
   if (m) {
-    const n = parseInt(m[1], 10);
-    return [`${n}A`, `${n}B`].filter((id) => ROOM_IDS.includes(id));
+    const num = parseInt(m[1], 10);
+    if (!SPLITTABLE.includes(num)) return []; // defensive
+    if (splitFlags[num]) return [`${num}A`, `${num}B`];
+    return [String(num)];
   }
 
-  // AC Fieldhouse Court 3-8   (no dash after Fieldhouse)
-  m = facility.match(/AC\s*Fieldhouse\s*Court\s*(\d{1,2})\s*-\s*(\d{1,2})\b/i);
-  if (m) {
-    const a = parseInt(m[1], 10), b = parseInt(m[2], 10);
-    const ids = [];
-    for (let n = Math.min(a, b); n <= Math.max(a, b); n++) ids.push(`${n}A`, `${n}B`);
-    return ids.filter((id) => ROOM_IDS.includes(id));
+  // 3) GYM full gym combos
+  if (/^AC\s+Gym\s*-\s*Full\s+Gym\s+1AB\s*&\s*2AB$/i.test(f)) {
+    if (splitFlags[1] || splitFlags[2]) return ["1A","1B","2A","2B"];
+    return ["1","2"];
+  }
+  if (/^AC\s+Gym\s*-\s*Full\s+Gym\s+9\s*&\s*10$/i.test(f)) {
+    if (splitFlags[9] || splitFlags[10]) return ["9A","9B","10A","10B"];
+    return ["9","10"];
   }
 
-  // AC Fieldhouse - Court 7  → 7A & 7B
-  m = facility.match(/AC\s*Fieldhouse\s*-\s*Court\s*(\d{1,2})\b/i);
-  if (m) {
-    const n = parseInt(m[1], 10);
-    return [`${n}A`, `${n}B`].filter((id) => ROOM_IDS.includes(id));
+  // 4) Fieldhouse full/aggregate (always 3..8 single cells)
+  if (/^AC\s*Fieldhouse\s*-\s*Full\s*Turf$/i.test(f)) {
+    return ["3","4","5","6","7","8"];
+  }
+  if (/^AC\s*Fieldhouse\s*Court\s*3-8$/i.test(f)) {
+    return ["3","4","5","6","7","8"];
   }
 
-  // Full Gym 9 & 10
-  m = facility.match(/Full\s*Gym\s*(\d{1,2})\s*&\s*(\d{1,2})\b/i);
-  if (m) {
-    const a = parseInt(m[1], 10), b = parseInt(m[2], 10);
-    return [`${a}A`, `${a}B`, `${b}A`, `${b}B`].filter((id) => ROOM_IDS.includes(id));
+  // 5) Fieldhouse half turf north/south
+  if (/^AC\s*Fieldhouse\s*-\s*Half\s*Turf\s*North$/i.test(f)) {
+    return ["6","7","8"];
+  }
+  if (/^AC\s*Fieldhouse\s*-\s*Half\s*Turf\s*South$/i.test(f)) {
+    return ["3","4","5"];
   }
 
-  // Full Gym 1AB & 2AB
-  m = facility.match(/Full\s*Gym\s*(\d{1,2})AB\s*&\s*(\d{1,2})AB\b/i);
-  if (m) {
-    const a = parseInt(m[1], 10), b = parseInt(m[2], 10);
-    return [`${a}A`, `${a}B`, `${b}A`, `${b}B`].filter((id) => ROOM_IDS.includes(id));
+  // 6) Fieldhouse quarter (temporary assumption)
+  if (/^AC\s*Fieldhouse\s*-\s*Quarter\s*Turf\s*(NA|NB)$/i.test(f)) {
+    return ["6","7","8"]; // map to North half by default
+  }
+  if (/^AC\s*Fieldhouse\s*-\s*Quarter\s*Turf\s*(SA|SB)$/i.test(f)) {
+    return ["3","4","5"]; // map to South half by default
   }
 
-  // Championship Court → default to 1A/1B (adjust if needed)
-  if (/Championship\s*Court/i.test(facility)) return ["1A", "1B"];
-
-  // Generic fallbacks:
-  //   "Court 5-AB" → 5A,5B
-  m = facility.match(/Court\s*(\d{1,2})\s*[- ]\s*AB\b/i);
-  if (m) {
-    const n = parseInt(m[1], 10);
-    return [`${n}A`, `${n}B`].filter((id) => ROOM_IDS.includes(id));
-  }
-  //   "Half Court 6A" → 6A
-  m = facility.match(/Half\s*Court\s*(\d{1,2})([AB])\b/i);
-  if (m) {
-    const id = `${parseInt(m[1], 10)}${m[2].toUpperCase()}`;
-    return ROOM_IDS.includes(id) ? [id] : [];
-  }
-  //   "Court 4" → 4A,4B
-  m = facility.match(/Court\s*(\d{1,2})\b/i);
+  // 7) Fieldhouse - Court N  (3..8)
+  m = f.match(/^AC\s*Fieldhouse\s*-\s*Court\s*(\d)$/i);
   if (m) {
     const n = parseInt(m[1], 10);
-    return [`${n}A`, `${n}B`].filter((id) => ROOM_IDS.includes(id));
+    if (n >= 3 && n <= 8) return [String(n)];
   }
 
-  // Ignore turf + Fieldhouse turf blocks (board shows court grid only)
-  if (/turf|fieldhouse\s*-\s*(full|half|quarter)\s*turf/i.test(facility)) return [];
+  // 8) Championship Court — TODO: wire once you tell me which square(s)
+  if (/Championship\s*Court/i.test(f)) {
+    return []; // placeholder to avoid misplacement
+  }
 
+  // 9) If "AC Gym - Court X-AB" appears with different spacing/casing
+  m = f.match(/^AC\s*Gym\s*-\s*Court\s*(\d{1,2})-AB$/i);
+  if (m) {
+    const num = parseInt(m[1], 10);
+    if (!SPLITTABLE.includes(num)) return [];
+    return splitFlags[num] ? [`${num}A`, `${num}B`] : [String(num)];
+  }
+
+  // 10) Defensive: nothing matched
   return [];
 }
 
-/* ---------------------------------- Main ---------------------------------- */
+// Rooms object (id+label) produced in visual order
+function makeRoomsObj(orderedIds) {
+  const rooms = {};
+  for (const id of orderedIds) rooms[id] = { id, label: id };
+  return rooms;
+}
+
+// Header normalization
+function normalizeHeaderMap(headers) {
+  // csv headers like: "Location:", "Facility", "Reserved Time", "Reservee", "Reservation Purpose", "Headcount"
+  const map = {};
+  headers.forEach((h) => {
+    const k = h.toLowerCase().replace(/\s+/g, "").replace(/:$/, "");
+    if (k === "location") map.location = h;
+    else if (k === "facility") map.facility = h;
+    else if (k === "reservedtime") map.reservedtime = h;
+    else if (k === "reservee") map.reservee = h;
+    else if (k === "reservationpurpose") map.reservationpurpose = h;
+    else if (k === "headcount") map.headcount = h;
+  });
+  return map;
+}
+
+function writeJson(obj) {
+  fs.writeFileSync(JSON_OUT, JSON.stringify(obj, null, 2), "utf8");
+}
+
+// --- MAIN ---
 function main() {
-  const rows = readCSVSmart(CSV_PATH);
-
-  const out = {
-    dayStartMin: DAY_START_MIN,
-    dayEndMin: DAY_END_MIN,
-    rooms: buildEmptyRooms(),
-    slots: [],
-  };
-
-  if (!rows || rows.length < 2) {
-    fs.writeFileSync(JSON_OUT, JSON.stringify(out, null, 2));
+  if (!fs.existsSync(CSV_PATH)) {
     console.log("No rows; wrote empty scaffold.");
+    const ids = buildBoardRooms({1:false,2:false,9:false,10:false});
+    writeJson({ dayStartMin: DAY_START_MIN, dayEndMin: DAY_END_MIN, rooms: makeRoomsObj(ids), slots: [] });
     return;
   }
 
-  const headers = rows[0];
-
-  const idxLocation = headerIndex(headers, ["location", "location:"]);
-  const idxFacility = headerIndex(headers, ["facility"]);
-  const idxReserved = headerIndex(headers, ["reservedtime", "reserved time", "reservedtime:"]);
-  const idxReservee = headerIndex(headers, ["reservee"]);
-  const idxPurpose  = headerIndex(headers, ["reservationpurpose", "reservation purpose"]);
-
-  if (idxFacility < 0 || idxReserved < 0) {
-    console.log("Required headers not found. Headers were:", headers);
-    fs.writeFileSync(JSON_OUT, JSON.stringify(out, null, 2));
-    return;
+  const raw = fs.readFileSync(CSV_PATH, "utf8");
+  const { headers, rows } = parseCSV(raw);
+  const keyMap = normalizeHeaderMap(headers);
+  const need = ["location","facility","reservedtime","reservee","reservationpurpose","headcount"];
+  for (const k of need) {
+    if (!keyMap[k]) {
+      console.log("No rows; wrote empty scaffold.");
+      const ids = buildBoardRooms({1:false,2:false,9:false,10:false});
+      writeJson({ dayStartMin: DAY_START_MIN, dayEndMin: DAY_END_MIN, rooms: makeRoomsObj(ids), slots: [] });
+      return;
+    }
   }
+
+  // Only Athletic & Event Center
+  const filtered = rows.filter(r => {
+    const loc = (r[keyMap.location] || "").trim();
+    return !loc || /Athletic\s*&\s*Event\s*Center/i.test(loc);
+  });
+
+  // Detect per-day splits based on explicit half-court usage
+  const splitFlags = detectSplits(filtered, keyMap.facility);
+  const BOARD_IDS = buildBoardRooms(splitFlags);
 
   const slots = [];
-  const stats = { rows: 0, kept: 0, skipLoc: 0, skipMap: 0, skipTime: 0, skipClamp: 0 };
+  let skipMap = 0, skipTime = 0;
 
-  for (let r = 1; r < rows.length; r++) {
-    stats.rows++;
-    const row = rows[r];
+  for (const r of filtered) {
+    const fac   = (r[keyMap.facility] || "").trim();
+    const time  = (r[keyMap.reservedtime] || "").trim();
+    const who   = cleanRepeatedCommaSegments((r[keyMap.reservee] || "").trim());
+    const what  = cleanRepeatedCommaSegments((r[keyMap.reservationpurpose] || "").trim());
+    const hc    = Number(r[keyMap.headcount] || 0);
 
-    const location = idxLocation >= 0 ? (row[idxLocation] || "") : "";
-    if (ENFORCE_LOCATION && location && !/athletic\s*&\s*event\s*center/i.test(location)) {
-      stats.skipLoc++; continue;
+    const range = parseTimeRange(time);
+    if (!range) { skipTime++; continue; }
+    const { startMin, endMin } = range;
+    if (endMin <= startMin) { skipTime++; continue; }
+
+    const roomIds = facilityToRoomIds(fac, splitFlags);
+    if (!roomIds.length) { skipMap++; continue; }
+
+    for (const roomId of roomIds) {
+      if (!BOARD_IDS.includes(roomId)) continue; // ignore if not on today’s layout
+      slots.push({
+        roomId,
+        startMin, endMin,
+        title: who,
+        subtitle: what,
+        headcount: hc
+      });
     }
-
-    const facility = (row[idxFacility] || "").trim();
-    const reservedSpan = (row[idxReserved] || "").trim();
-    const reservee = idxReservee >= 0 ? (row[idxReservee] || "").trim() : "";
-    const purpose  = idxPurpose  >= 0 ? (row[idxPurpose]  || "").trim() : "";
-
-    const roomIds = extractRoomsFromFacility(facility);
-    if (roomIds.length === 0) { stats.skipMap++; continue; }
-
-    const span = parseReservedSpan(reservedSpan);
-    if (!span) { stats.skipTime++; continue; }
-
-    const [startRaw, endRaw] = span;
-    const clamped = clampToDay(startRaw, endRaw);
-    if (!clamped) { stats.skipClamp++; continue; }
-
-    const [startMin, endMin] = clamped;
-    const title = reservee || "Reserved";
-    const subtitle = purpose || "";
-
-    roomIds.forEach((roomId) => slots.push({ roomId, startMin, endMin, title, subtitle }));
-    stats.kept++;
   }
 
-  slots.sort((a, b) =>
-    a.startMin - b.startMin ||
-    a.endMin - b.endMin ||
-    a.roomId.localeCompare(b.roomId)
-  );
+  // per-room de-duplication: (roomId, start, end, title, subtitle)
+  const seen = new Set();
+  const unique = [];
+  for (const s of slots) {
+    const key = [
+      s.roomId,
+      s.startMin, s.endMin,
+      (s.title || "").toLowerCase(),
+      (s.subtitle || "").toLowerCase()
+    ].join("|");
+    if (seen.has(key)) continue;
+    seen.add(key);
+    unique.push(s);
+  }
 
-  out.slots = slots;
-  fs.writeFileSync(JSON_OUT, JSON.stringify(out, null, 2));
+  writeJson({
+    dayStartMin: DAY_START_MIN,
+    dayEndMin: DAY_END_MIN,
+    rooms: makeRoomsObj(BOARD_IDS),
+    slots: unique
+  });
 
-  console.log(`Wrote ${JSON_OUT} • rooms=${Object.keys(out.rooms).length} • slots=${out.slots.length}`);
-  console.log(`Row stats • total=${stats.rows} kept=${stats.kept} skipLoc=${stats.skipLoc} skipMap=${stats.skipMap} skipTime=${stats.skipTime} skipClamp=${stats.skipClamp}`);
+  console.log(`Wrote ${JSON_OUT} • rooms=${BOARD_IDS.length} • slots=${unique.length}`);
+  console.log(`Row stats • total=${rows.length} kept=${unique.length} skipMap=${skipMap} skipTime=${skipTime}`);
 }
 
 main();
