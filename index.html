@@ -4,6 +4,7 @@
   <meta charset="utf-8" />
   <title>RAEC Rooms Board</title>
   <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <!-- Silence favicon 404s -->
   <link rel="icon" href="data:,">
 
   <style>
@@ -14,138 +15,151 @@
       --muted:#9aa3b2;
       --accent:#2b87ff;
       --grid:#1b202a;
-      --chip:#202636;
+      --now:#ff6b6b;
+      --chip:#2a3140;
       --chip-text:#e7eaf1;
-      --ok:#2ecc71;
-      --warn:#ffb020;
+      --scale: 1;
     }
+
     html,body{
-      margin:0; height:100%;
-      background:var(--bg); color:var(--ink);
+      margin:0; height:100%; background:var(--bg); color:var(--ink);
       font-family: Inter, "SF Pro Text", Segoe UI, Roboto, Arial, sans-serif;
     }
-    /* Fixed 1920x1080 stage for signage players (Yodeck) */
+
+    /* NEW: Fullscreen fit wrapper that centers and scales the board */
+    #fitwrap{
+      width:100vw; height:100vh;
+      display:grid; place-items:center;
+      background:var(--bg);
+      overflow:hidden;
+    }
+
+    /* Your board remains a fixed 1920×1080 canvas, but we scale it */
     .stage{
-      width:1920px; height:1080px; margin:0 auto; overflow:hidden;
-      display:grid; grid-template-rows: 110px 1fr; gap:18px; padding:24px;
+      width:1920px; height:1080px;
+      transform: scale(var(--scale));
+      transform-origin: top left;
+
+      /* Your existing stage layout (header + content) */
+      display:grid;
+      grid-template-rows: 96px 1fr; /* header + body */
+      gap:16px;
+      padding:20px;               /* a touch tighter than 24px for more room */
       box-sizing:border-box;
     }
 
-    /* Header (logo left, clock center, Wi-Fi right) */
+    /* Header bar */
     .header{
-      display:grid; grid-template-columns: 1fr 1fr 1fr;
-      align-items:center; background:var(--panel); border-radius:16px; padding:0 20px;
+      display:flex; align-items:center; justify-content:space-between;
+      background:var(--panel); border-radius:16px; padding:12px 16px;
+      box-sizing:border-box;
     }
-    .brand{
+    .header-left{
       display:flex; align-items:center; gap:12px;
     }
-    .brand img{
-      height:64px; width:auto; object-fit:contain;
+    .logo{
+      width:160px; height:auto; object-fit:contain; display:block;
     }
-    .center{
-      justify-self:center; text-align:center;
+    .header-center{
+      flex:1; display:flex; justify-content:center; align-items:baseline; gap:16px;
+      font-weight:700;
     }
-    #headerDate{ font-size:32px; font-weight:700; }
-    #headerClock{ font-size:24px; color:var(--muted); margin-top:2px; }
+    #headerDate{ font-size:36px; }
+    #headerClock{ font-size:28px; color:var(--muted); }
+    .header-right{
+      text-align:right; font-size:14px; color:var(--muted); line-height:1.3;
+    }
+    .header-right strong{ color:var(--ink); }
 
-    .wifi{
-      justify-self:end; text-align:right; color:var(--ink);
-      background:var(--panel); padding:10px 14px; border-radius:12px; border:1px solid var(--grid);
-      display:flex; flex-direction:column; gap:2px; min-width:260px;
-    }
-    .wifi .row{ display:flex; justify-content:space-between; gap:12px; }
-    .wifi .k{ color:var(--muted); }
-    .wifi .v{ font-weight:700; }
-
-    /* GRID-ONLY board */
+    /* Main content area (your grid-only board) */
     .board{
-      background:var(--panel); border-radius:16px; padding:18px;
-      display:grid; grid-template-columns: 1fr 1.6fr 1fr; gap:18px;
-      height:100%; box-sizing:border-box;
+      background:var(--panel); border-radius:16px; padding:12px; box-sizing:border-box;
+      height:100%;
+      display:grid; grid-template-rows: auto 1fr;
+      gap:12px;
     }
 
-    .col{
-      display:grid; gap:18px;
+    /* Simple title row above the grid if you want it */
+    .board-title{
+      display:flex; justify-content:space-between; align-items:center; color:var(--muted);
+      font-size:14px;
     }
 
-    /* South/North have 4 cells (potentially A/B) and FH has 6 */
-    .col.south{ grid-template-rows: repeat(4, 1fr); }
-    .col.fieldhouse{ grid-template-rows: repeat(6, 1fr); }
-    .col.north{ grid-template-rows: repeat(4, 1fr); }
-
-    .cell{
-      border:1px solid var(--grid); border-radius:14px; padding:12px;
-      display:flex; flex-direction:column; gap:8px; min-width:0; min-height:0;
-      background:linear-gradient(180deg, rgba(255,255,255,0.02), rgba(0,0,0,0.02));
-    }
-    .cell .label{
-      display:flex; align-items:center; justify-content:space-between;
-      font-weight:800; font-size:22px; letter-spacing:.02em;
-    }
-    .cell .label .where{
-      /* ensure room numbers 2 and 10 don’t clip on edges */
-      padding-inline:4px;
-    }
-    .cell .label .count{
-      font-size:12px; color:var(--muted); font-weight:600;
-    }
-    .cell .list{
-      flex:1; overflow:auto; display:flex; flex-direction:column; gap:8px;
-    }
-    .chip{
-      background:var(--chip); border:1px solid var(--grid);
-      border-radius:10px; padding:8px 10px; line-height:1.25;
-      display:flex; flex-direction:column; gap:4px; font-size:15px;
-    }
-    .chip .title{ font-weight:700; color:var(--chip-text); }
-    .chip .sub{ color:var(--muted); font-size:13px; }
-
-    .more{
-      margin-top:auto; color:var(--muted); font-size:13px; text-align:right;
-    }
-
-    /* Column headers */
-    .colHead{
-      position:sticky; top:-6px; z-index:1; margin-bottom:-8px;
-      font-size:14px; text-transform:uppercase; letter-spacing:.08em; color:var(--muted);
+    /* The grid container your app.js will populate */
+    #grid{
+      width:100%; height:100%;
+      border:1px solid var(--grid); border-radius:12px;
+      position:relative; overflow:hidden;
+      /* Your app.js can fill this with your lane cells/events */
     }
   </style>
 </head>
 <body>
-  <div class="stage">
-    <div class="header">
-      <div class="brand">
-        <!-- Your logo file lives as logo.png -->
-        <img src="./logo.png" alt="Romeoville Athletic & Event Center" onerror="this.style.display='none'">
+  <div id="fitwrap">
+    <div class="stage">
+      <!-- Header -->
+      <div class="header">
+        <div class="header-left">
+          <!-- Put your logo file as ./logo.png -->
+          <img class="logo" src="./logo.png" alt="Romeoville Athletic & Event Center">
+        </div>
+
+        <div class="header-center">
+          <div id="headerDate">—</div>
+          <div id="headerClock">—</div>
+        </div>
+
+        <div class="header-right">
+          <div><strong>Wi-Fi:</strong> Public Wi-Fi</div>
+          <div><strong>Password:</strong> Publ!c00</div>
+        </div>
       </div>
 
-      <div class="center">
-        <div id="headerDate">—</div>
-        <div id="headerClock">—</div>
-      </div>
+      <!-- Board (grid only; your JS renders rooms/events inside #grid) -->
+      <div class="board">
+        <div class="board-title">
+          <div>Today’s Schedule</div>
+          <div style="opacity:.8">Past events auto-hide after they end</div>
+        </div>
 
-      <div class="wifi">
-        <div class="row"><span class="k">Wi-Fi:</span><span id="wifiName" class="v">RAEC_Guest</span></div>
-        <div class="row"><span class="k">Password:</span><span id="wifiPass" class="v">Publ!c00</span></div>
-      </div>
-    </div>
-
-    <div class="board">
-      <div class="col south">
-        <div class="colHead">South Gym</div>
-        <!-- cells injected -->
-      </div>
-      <div class="col fieldhouse">
-        <div class="colHead">Fieldhouse</div>
-        <!-- cells injected -->
-      </div>
-      <div class="col north">
-        <div class="colHead">North Gym</div>
-        <!-- cells injected -->
+        <div id="grid"><!-- app.js fills this --></div>
       </div>
     </div>
   </div>
 
-  <script src="./app.js"></script>
+  <!-- Your existing app.js stays the same -->
+  <script type="module" src="./app.js"></script>
+
+  <!-- Auto-scale the 1920×1080 stage to fit the viewport (no clipping) -->
+  <script>
+    function applyScale() {
+      const W = 1920, H = 1080;
+      const sx = window.innerWidth / W;
+      const sy = window.innerHeight / H;
+      const s = Math.min(sx, sy);
+      document.documentElement.style.setProperty('--scale', s);
+    }
+    window.addEventListener('resize', applyScale);
+    document.addEventListener('DOMContentLoaded', applyScale);
+
+    // Optional: very small, robust clock/date if your app.js doesn’t already handle it
+    function tickHeaderClock() {
+      const now = new Date();
+      const dateEl = document.getElementById('headerDate');
+      const clockEl = document.getElementById('headerClock');
+      if (dateEl) {
+        dateEl.textContent = now.toLocaleDateString(undefined, {
+          weekday:'long', month:'long', day:'numeric', year:'numeric'
+        });
+      }
+      if (clockEl) {
+        clockEl.textContent = now.toLocaleTimeString(undefined, {
+          hour:'2-digit', minute:'2-digit'
+        });
+      }
+    }
+    tickHeaderClock();
+    setInterval(tickHeaderClock, 1000 * 15); // update every 15s
+  </script>
 </body>
 </html>
