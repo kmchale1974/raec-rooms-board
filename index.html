@@ -9,9 +9,9 @@
   <style>
     :root{
       /* Safe padding inside the 1920×1080 canvas */
-      --safe: 40px;
+      --safe: 32px;
 
-      /* Scale that preserves aspect ratio to fit any screen */
+      /* Scale to fit any screen while preserving aspect ratio */
       --scale: min( calc(100vw / 1920), calc(100vh / 1080) );
 
       --bg:#0f1115; --panel:#12151c; --ink:#e7eaf1; --muted:#9aa3b2;
@@ -31,18 +31,15 @@
       display:flex; align-items:center; justify-content:center;
     }
 
-    /* Fixed 1920×1080 canvas. We scale from the top-left but the wrapper
-       centers the (unscaled) box, so the *visual* result is perfectly centered. */
+    /* Fixed 1920×1080 stage */
     .stage{
       width:1920px; height:1080px;
       box-sizing:border-box;
       padding: var(--safe);
       background: var(--bg);
       transform: scale(var(--scale));
-      transform-origin: top left;          /* <- important */
-      display:grid; grid-template-rows: 96px 1fr; gap:24px;
-      /* helper outline to see the safe area; remove if you want */
-      box-shadow: inset 0 0 0 1px rgba(255,255,255,.06);
+      transform-origin: top left;
+      display:grid; grid-template-rows: 92px 1fr; gap:18px;
     }
 
     /* Header */
@@ -57,9 +54,9 @@
       color:var(--muted); font-weight:600; letter-spacing:.04em;
     }
     .brand img{ height:44px; width:auto; display:block; }
-    .dateclock{ display:flex; gap:16px; align-items:baseline; font-weight:700; }
-    #headerDate{ font-size:36px; }
-    #headerClock{ font-size:28px; color:var(--muted); }
+    .dateclock{ display:flex; gap:14px; align-items:baseline; font-weight:700; }
+    #headerDate{ font-size:34px; }
+    #headerClock{ font-size:26px; color:var(--muted); }
 
     .wifi{
       position:absolute; right:20px; top:50%; transform:translateY(-50%);
@@ -71,7 +68,7 @@
     .board{
       background:var(--panel);
       border-radius:16px;
-      padding:18px;
+      padding:14px;
       display:block;
       height:100%; box-sizing:border-box;
     }
@@ -80,39 +77,53 @@
     #grid{
       display:grid;
       grid-template-columns: repeat(3, minmax(0, 1fr));
-      gap:20px; padding:6px; box-sizing:border-box; min-height:0;
+      gap:14px; padding:4px; box-sizing:border-box; min-height:0;
       height:100%;
     }
-    .section{ min-width:0; }
 
+    .section{ min-width:0; display:grid; grid-template-rows: 38px 1fr; gap:10px; }
     .section .title{
-      color:var(--muted); font-size:14px; font-weight:600;
-      display:flex; align-items:center; padding:0 6px; height:40px;
-      border-bottom:1px solid var(--grid); margin-bottom:14px;
+      color:var(--muted); font-size:13px; font-weight:700;
+      display:flex; align-items:center; padding:0 6px; height:38px;
+      border-bottom:1px solid var(--grid);
     }
+
+    /* Section bodies are fixed-row grids so nothing is clipped */
+    .section-body{
+      display:grid; gap:10px; min-height:0; /* rows set per section class */
+    }
+    .section--south .section-body{ grid-template-rows: repeat(2, 1fr); }
+    .section--fieldhouse .section-body{ grid-template-rows: repeat(6, 1fr); }
+    .section--north .section-body{ grid-template-rows: repeat(2, 1fr); }
 
     .room-cell{
       border:1px solid var(--grid);
       border-radius:12px;
-      padding:12px;
+      padding:10px;
       background:rgba(255,255,255,0.01);
-      min-height:86px;
-      display:flex; flex-direction:column; gap:8px;
+      min-height:72px; /* slightly tighter to fit 6 rows comfortably */
+      display:flex; flex-direction:column; gap:6px; box-sizing:border-box;
+      overflow:hidden; /* keep chips inside the box */
     }
 
-    .room-head{ display:flex; align-items:baseline; justify-content:space-between; }
-    .room-num{ font-size:22px; font-weight:800; letter-spacing:.02em; }
-    .room-window{ font-size:12px; color:var(--muted); }
+    .room-head{ display:flex; align-items:baseline; justify-content:space-between; gap:8px; }
+    .room-num{ font-size:20px; font-weight:800; letter-spacing:.02em; }
+    .room-window{ font-size:12px; color:var(--muted); white-space:nowrap; }
+
+    .chips{
+      display:flex; flex-direction:column; gap:6px; min-height:0; overflow:auto; /* just in case */
+    }
 
     .chip{
-      border-radius:10px; padding:8px 10px; border:1px solid var(--grid);
+      border-radius:10px; padding:6px 8px; border:1px solid var(--grid);
       background:var(--chip); color:var(--chip-text);
-      font-size:14px; line-height:1.25;
+      font-size:13px; line-height:1.25;
+      white-space:normal; overflow-wrap:anywhere; /* wrap instead of cutting */
     }
-    .chip strong{ font-weight:700; }
-    .chip small{ color:var(--muted); margin-left:8px; }
+    .chip strong{ font-weight:800; }
+    .chip small{ color:var(--muted); margin-left:6px; font-size:12px; }
 
-    .truncate{ overflow:hidden; white-space:nowrap; text-overflow:ellipsis; }
+    .faint{ opacity:.9; }
   </style>
 </head>
 <body>
@@ -121,7 +132,7 @@
       <!-- Header -->
       <div class="header">
         <div class="brand">
-          <!-- Ensure this exists at /logo.png in the repo root -->
+          <!-- Make sure ./logo.png exists in the repo root -->
           <img src="./logo.png" alt="Romeoville A&E Center">
           <span>Romeoville Athletic & Event Center</span>
         </div>
