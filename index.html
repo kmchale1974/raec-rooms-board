@@ -8,50 +8,42 @@
 
   <style>
     :root{
-      /* Safe padding around the 1920×1080 canvas */
+      /* Safe padding inside the 1920×1080 canvas */
       --safe: 40px;
 
-      /* Live preview scale (keeps canvas centered on any screen) */
+      /* Live preview scale that preserves aspect ratio */
       --scale: min( calc(100vw / 1920), calc(100vh / 1080) );
 
       --bg:#0f1115; --panel:#12151c; --ink:#e7eaf1; --muted:#9aa3b2;
-      --accent:#2b87ff; --grid:#1b202a;
-      --chip:#2a3140; --chip-text:#e7eaf1;
+      --grid:#1b202a; --chip:#2a3140; --chip-text:#e7eaf1;
     }
 
     html,body{
       margin:0; height:100%;
       background:var(--bg); color:var(--ink);
       font-family: Inter, "SF Pro Text", Segoe UI, Roboto, Arial, sans-serif;
-    }
-
-    /* ---- Preview scaler ----
-       Centers the fixed-size canvas and scales it for any viewport */
-    .preview-wrap{
-      display:flex; align-items:center; justify-content:center;
-      min-height:100vh;
-    }
-    .preview-frame{
-      width: calc(1920px * var(--scale));
-      height: calc(1080px * var(--scale));
-      position:relative;
-    }
-    .preview-frame .stage{
-      position:absolute; inset:0;
-      width:1920px; height:1080px;
-      transform: scale(var(--scale));
-      transform-origin: top left;
-    }
-
-    /* ---- 1920×1080 canvas ---- */
-    .stage{
       overflow:hidden;
+    }
+
+    /* ---- Preview wrapper fills the viewport ---- */
+    .preview-wrap{
+      position:relative;
+      width:100vw; height:100vh;
+    }
+
+    /* ---- 1920×1080 canvas centered & scaled ---- */
+    .stage{
+      position:absolute;
+      width:1920px; height:1080px;
+      left:50%; top:50%;
+      transform: translate(-50%, -50%) scale(var(--scale));
+      transform-origin: center center;
       display:grid; grid-template-rows: 96px 1fr; gap:24px;
       padding: var(--safe);
       box-sizing: border-box;
-      /* helper outline to verify the safe padding; remove if you want */
-      box-shadow: inset 0 0 0 1px rgba(255,255,255,.06);
       background: var(--bg);
+      /* helper outline to verify safe padding; remove if you want */
+      box-shadow: inset 0 0 0 1px rgba(255,255,255,.06);
     }
 
     /* Header */
@@ -59,8 +51,7 @@
       background:var(--panel);
       border-radius:16px;
       display:flex; align-items:center; justify-content:center;
-      position:relative;
-      padding: 0 16px;
+      position:relative; padding:0 16px;
     }
     .brand{
       position:absolute; left:24px; display:flex; align-items:center; gap:12px;
@@ -70,37 +61,33 @@
     .dateclock{ display:flex; gap:16px; align-items:baseline; font-weight:700; }
     #headerDate{ font-size:36px; }
     #headerClock{ font-size:28px; color:var(--muted); }
+
     .wifi{
       position:absolute; right:20px; top:50%; transform:translateY(-50%);
       display:flex; gap:14px; align-items:center; color:var(--muted); font-size:14px;
     }
     .wifi b{ color:var(--ink); font-weight:700; }
 
-    /* Board (grid-only view) */
+    /* Board (grid-only) */
     .board{
       background:var(--panel);
       border-radius:16px;
-      padding: 18px;
+      padding:18px;
       display:block;
     }
 
-    /* Three-column layout: South / Fieldhouse / North */
+    /* Three columns: South / Fieldhouse / North */
     #grid{
       display:grid;
-      grid-template-columns: repeat(3, minmax(0,1fr)); /* evenly spaced */
-      gap: 20px;
-      padding: 6px;
-      box-sizing:border-box;
-      min-height:0;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap:20px; padding:6px; box-sizing:border-box; min-height:0;
     }
-
-    .section{ min-width:0; } /* prevent grid children from forcing overflow */
+    .section{ min-width:0; }
 
     .section .title{
       color:var(--muted); font-size:14px; font-weight:600;
       display:flex; align-items:center; padding:0 6px; height:40px;
-      border-bottom:1px solid var(--grid);
-      margin-bottom:14px;
+      border-bottom:1px solid var(--grid); margin-bottom:14px;
     }
 
     .room-cell{
@@ -112,9 +99,7 @@
       display:flex; flex-direction:column; gap:8px;
     }
 
-    .room-head{
-      display:flex; align-items:baseline; justify-content:space-between;
-    }
+    .room-head{ display:flex; align-items:baseline; justify-content:space-between; }
     .room-num{ font-size:22px; font-weight:800; letter-spacing:.02em; }
     .room-window{ font-size:12px; color:var(--muted); }
 
@@ -130,31 +115,28 @@
   </style>
 </head>
 <body>
-  <!-- The preview wrapper makes the 1920×1080 canvas centered and scaled.
-       Yodeck will ignore the scaling (it runs at native 1920×1080), which is fine. -->
   <div class="preview-wrap">
-    <div class="preview-frame">
-      <div class="stage">
-        <!-- Header -->
-        <div class="header">
-          <div class="brand">
-            <img src="./logo.png" alt="Romeoville A&E Center">
-            <span>Romeoville Athletic & Event Center</span>
-          </div>
-          <div class="dateclock">
-            <div id="headerDate">—</div>
-            <div id="headerClock">—</div>
-          </div>
-          <div class="wifi">
-            <span>Wi-Fi: <b>RAEC_Public</b></span>
-            <span>Password: <b>Publ!c00</b></span>
-          </div>
+    <div class="stage">
+      <!-- Header -->
+      <div class="header">
+        <div class="brand">
+          <!-- Ensure this file exists at /logo.png in the repo root -->
+          <img src="./logo.png" alt="Romeoville A&E Center">
+          <span>Romeoville Athletic & Event Center</span>
         </div>
+        <div class="dateclock">
+          <div id="headerDate">—</div>
+          <div id="headerClock">—</div>
+        </div>
+        <div class="wifi">
+          <span>Wi-Fi: <b>RAEC_Public</b></span>
+          <span>Password: <b>Publ!c00</b></span>
+        </div>
+      </div>
 
-        <!-- Grid-only board -->
-        <div class="board">
-          <div id="grid"><!-- sections injected by app.js --></div>
-        </div>
+      <!-- Grid-only board -->
+      <div class="board">
+        <div id="grid"><!-- sections injected by app.js --></div>
       </div>
     </div>
   </div>
