@@ -1,152 +1,176 @@
-// app.js — grid view only, past events hidden, duplicate text cleaned
+// app.js  —  Grid-only board with A/B merge, dedupe, past-event pruning, and clock
 
-const ZONES = {
-  south: [1, 2],
-  field: [3, 4, 5, 6, 7, 8],
-  north: [9, 10],
-};
+const WIFI_NAME = "RAEC Public";
+const WIFI_PASS = "Publ!c00"; // per your note
 
-const els = {
-  date: document.getElementById('headerDate'),
-  clock: document.getElementById('headerClock'),
-  south: document.getElementById('gridSouth'),
-  field: document.getElementById('gridField'),
-  north: document.getElementById('gridNorth'),
-};
-
-function pad(n){ return String(n).padStart(2,'0'); }
-function minsToRange(a,b){
-  const fmt = m => {
-    let h = Math.floor(m/60), min = m%60;
-    const ampm = h >= 12 ? 'pm':'am';
-    h = ((h + 11) % 12) + 1;
-    return `${h}:${pad(min)}${ampm}`;
-  };
-  return `${fmt(a)}–${fmt(b)}`;
-}
-function escapeHtml(s){
-  return String(s)
-    .replace(/&/g,'&amp;').replace(/</g,'&lt;')
-    .replace(/>/g,'&gt;').replace(/"/g,'&quot;')
-    .replace(/'/g,'&#39;');
+// Helper: minutes since midnight local
+function nowMin() {
+  const d = new Date();
+  return d.getHours() * 60 + d.getMinutes();
 }
 
-/** e.g., "Extreme Volleyball, Extreme Volleyball" -> "Extreme Volleyball" */
-function squashCommaRepeats(s) {
-  if (!s) return s;
-  const parts = String(s).split(',').map(p => p.trim()).filter(Boolean);
+// Helper: format today's date & a live clock
+function updateClock() {
+  const d = new Date();
+  const dateStr = d.toLocaleDateString(undefined, {
+    weekday: "long", month: "long", day: "numeric", year: "numeric"
+  });
+  const timeStr = d.toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
+  const dateEl = document.getElementById("headerDate");
+  const clockEl = document.getElementById("headerClock");
+  if (dateEl) dateEl.textContent = dateStr;
+  if (clockEl) clockEl.textContent = timeStr;
+}
+
+// Clean duplicate trailing segments like "Extreme Volleyball, Extreme Volleyball"
+function cleanRepeatedCommaSegments(text = "") {
+  const parts = text.split(",").map(p => p.trim()).filter(Boolean);
+  const seen = new Set();
   const out = [];
   for (const p of parts) {
-    const prev = out[out.length - 1];
-    if (!prev || p.localeCompare(prev, undefined, { sensitivity: 'accent' }) !== 0) {
+    const k = p.toLowerCase();
+    if (!seen.has(k)) {
+      seen.add(k);
       out.push(p);
     }
   }
-  return out.join(', ');
+  return out.join(", ");
 }
 
-/** remove exact duplicate slot rows (some CSVs repeat entries) */
-function dedupeSlots(slots){
-  const seen = new Set();
-  const out = [];
-  for (const s of slots){
-    const key = `${s.roomId}|${s.startMin}|${s.endMin}|${s.title}|${s.subtitle||''}`;
-    if (!seen.has(key)){ seen.add(key); out.push(s); }
+async function loadData() {
+  const url = `./events.json?ts=${Date.now()}`;
+  const resp = await fetch(url, { cache: "no-store" });
+  if (!resp.ok) throw new Error(`Failed to fetch events.json: ${resp.status}`);
+  const data = await resp.json();
+  console.log("Loaded events.json", data ? Object : null);
+  return data;
+}
+
+// Map "10A" -> { court: 10, side: "A" }
+function parseRoomId(roomId) {
+  const m = String(roomId).match(/^(\d+)([AB])$/i);
+  if (!m) return null;
+  return { court: parseInt(m[1], 10), side: m[2].toUpperCase() };
+}
+
+// Build court columns: South (1–2), Fieldhouse (3–8), North (9–10)
+const SOUTH = [1, 2];
+const FIELD = [3, 4, 5, 6, 7, 8];
+const NORTH = [9, 10];
+
+// Key used to detect A/B duplicates of the same booking
+function slotKey(s) {
+  return `${s.startMin}-${s.endMin}-${(s.title||"").trim().toLowerCase()}-${(s.subtitle||"").trim().toLowerCase()}`;
+}
+
+function renderBoard(data) {
+  const now = nowMin();
+
+  // Filter out past events
+  const activeSlots = (data.slots || []).filter(s => s.endMin > now);
+
+  // Normalize titles (remove repeated trailing segments)
+  for (const s of activeSlots) {
+    s.title = cleanRepeatedCommaSegments(s.title || "");
+    s.subtitle = cleanRepeatedCommaSegments(s.subtitle || "");
   }
-  return out;
-}
 
-/** 1A -> 1, 10B -> 10 */
-function roomNumber(roomId){
-  const m = String(roomId).match(/^(\d+)[AB]$/i);
-  return m ? parseInt(m[1],10) : null;
-}
-/** 1A -> 'A' | 10B -> 'B' */
-function roomSide(roomId){
-  const m = String(roomId).match(/([AB])$/i);
-  return m ? m[1].toUpperCase() : null;
-}
-
-/** Merge A & B into a single numbered cell when they are truly identical bookings */
-function mergeAB(slotsByNumber){
-  // For each number, if A & B have identical [start,end,title,subtitle], collapse to single entry
-  const merged = {};
-  for (const [num, bySide] of Object.entries(slotsByNumber)){
-    const A = bySide.A || [];
-    const B = bySide.B || [];
-    const usedB = new Array(B.length).fill(false);
-    const both = [];
-    const onlyA = [];
-    const onlyB = [];
-
-    // Try to pair identical A/B
-    A.forEach(a => {
-      const matchIdx = B.findIndex((b, i) =>
-        !usedB[i] &&
-        a.startMin === b.startMin &&
-        a.endMin === b.endMin &&
-        a.title === b.title &&
-        (a.subtitle||'') === (b.subtitle||'')
-      );
-      if (matchIdx >= 0){
-        usedB[matchIdx] = true;
-        both.push(a); // keep single copy
-      }else{
-        onlyA.push(a);
-      }
+  // Group by court, then split A/B vs BOTH
+  // structure: { [courtNum]: { A:[], B:[], both:[] } }
+  const grouped = {};
+  for (const s of activeSlots) {
+    const info = parseRoomId(s.roomId);
+    if (!info) continue;
+    const { court, side } = info;
+    grouped[court] ||= { A: [], B: [], both: [] };
+    // stash base data (clone minimal fields)
+    grouped[court][side].push({
+      startMin: s.startMin,
+      endMin: s.endMin,
+      title: s.title || "",
+      subtitle: s.subtitle || ""
     });
-    // Remaining B not paired
-    B.forEach((b,i)=>{ if(!usedB[i]) onlyB.push(b); });
-
-    merged[num] = { both, A: onlyA, B: onlyB };
   }
-  return merged;
+
+  // Promote duplicates that appear in both A and B into 'both'
+  for (const court of Object.keys(grouped)) {
+    const C = grouped[court];
+    const seenA = new Map();
+    C.A.forEach(item => {
+      seenA.set(slotKey(item), item);
+    });
+
+    const bothKeys = new Set();
+    const leftoversB = [];
+    for (const item of C.B) {
+      const k = slotKey(item);
+      if (seenA.has(k)) {
+        bothKeys.add(k);
+      } else {
+        leftoversB.push(item);
+      }
+    }
+
+    // Build 'both' from those keys; remove from A
+    const leftoversA = [];
+    for (const item of C.A) {
+      const k = slotKey(item);
+      if (bothKeys.has(k)) {
+        C.both.push(item); // one copy is enough
+      } else {
+        leftoversA.push(item);
+      }
+    }
+
+    C.A = leftoversA;
+    C.B = leftoversB;
+  }
+
+  // Render into three columns
+  const colSouth = document.getElementById("col-south");
+  const colField = document.getElementById("col-field");
+  const colNorth = document.getElementById("col-north");
+  if (!colSouth || !colField || !colNorth) return;
+
+  colSouth.innerHTML = SOUTH.map(n => courtHtml(n, grouped[n] || { A:[], B:[], both:[] })).join("");
+  colField.innerHTML = FIELD.map(n => courtHtml(n, grouped[n] || { A:[], B:[], both:[] })).join("");
+  colNorth.innerHTML = NORTH.map(n => courtHtml(n, grouped[n] || { A:[], B:[], both:[] })).join("");
 }
 
-function pillHtml(s){
-  const line1 = squashCommaRepeats(s.title || '');
-  const line2 = s.subtitle ? `<small>${escapeHtml(s.subtitle)}</small>` : '';
-  const time  = minsToRange(s.startMin, s.endMin);
-  return `
-    <div class="pill">
-      <div>
-        <strong>${escapeHtml(line1)}</strong>
-        ${line2}
+function courtHtml(num, G) {
+  const total = (G.both?.length || 0) + (G.A?.length || 0) + (G.B?.length || 0);
+  const has = total > 0;
+  const status = has ? `${total} event${total>1?'s':''}` : "";
+
+  let body = "";
+
+  // Full-court bookings
+  if (G.both && G.both.length) {
+    body += G.both.map(pillHtml).join("");
+  }
+
+  // Split court lanes only when needed
+  if ((G.A && G.A.length) || (G.B && G.B.length)) {
+    if (G.A && G.A.length) {
+      body += `<div class="laneLabel">Side A</div>`;
+      body += G.A.map(pillHtml).join("");
+    }
+    if (G.B && G.B.length) {
+      body += `<div class="laneLabel">Side B</div>`;
+      body += G.B.map(pillHtml).join("");
+    }
+  }
+
+  // Truly blank if no events
+  if (!has) {
+    return `
+      <div class="cell is-empty">
+        <div class="title">
+          <div class="court">${num}</div>
+          <div class="status"></div>
+        </div>
       </div>
-      <div class="time">${time}</div>
-    </div>
-  `;
-}
-
-function emptyHtml(){
-  return `<div class="empty">No current/future reservations</div>`;
-}
-
-function cellHtml(num, grouped){
-  const { both, A, B } = grouped;
-
-  // Header status
-  const total = both.length + A.length + B.length;
-  const status = total ? `${total} event${total>1?'s':''}` : 'Idle';
-
-  // Body content
-  let body = '';
-  if (both.length){
-    body += both.map(pillHtml).join('');
-  }
-  if (A.length || B.length){
-    // Show side labels only when split is needed
-    if (A.length){
-      body += `<div class="pill">${A.map(pillHtml).join('')}</div>`;
-      body = body.replace('<div class="pill">','<div class="pill"><strong style="margin-right:8px">Side A</strong>');
-    }
-    if (B.length){
-      body += `<div class="pill">${B.map(pillHtml).join('')}</div>`;
-      body = body.replace('<div class="pill">','<div class="pill"><strong style="margin-right:8px">Side B</strong>');
-    }
-  }
-  if (!both.length && !A.length && !B.length){
-    body = '';
+    `;
   }
 
   return `
@@ -160,59 +184,42 @@ function cellHtml(num, grouped){
   `;
 }
 
-/** Render one zone into its container */
-function renderZone(container, numbers, merged){
-  container.innerHTML = numbers.map(n => cellHtml(n, merged[n] || {both:[],A:[],B:[]})).join('');
+function toTime(mins) {
+  const h = Math.floor(mins / 60);
+  const m = mins % 60;
+  const d = new Date();
+  d.setHours(h, m, 0, 0);
+  return d.toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
 }
 
-/** Load and render everything */
-async function init(){
-  // 1) Date + live clock
-  const tick = () => {
-    const now = new Date();
-    const d = now.toLocaleDateString(undefined, { weekday:'long', month:'long', day:'numeric' });
-    const t = now.toLocaleTimeString(undefined, { hour:'2-digit', minute:'2-digit' });
-    els.date.textContent = d;
-    els.clock.textContent = t;
-  };
-  tick();
-  setInterval(tick, 30_000);
-
-  // 2) Load events.json (no cache)
-  const url = `./events.json?ts=${Date.now()}`;
-  const resp = await fetch(url, { cache:'no-store' });
-  if (!resp.ok){
-    console.error('Failed to fetch events.json', resp.status, resp.statusText);
-    return;
-  }
-  const data = await resp.json();
-  console.log('Loaded events.json', data ? {} : { error:'no data' });
-
-  const nowMin = new Date().getHours()*60 + new Date().getMinutes();
-
-  // 3) Filter to current/future only
-  const allSlots = Array.isArray(data.slots) ? data.slots : [];
-  const deduped  = dedupeSlots(allSlots);
-  const future   = deduped.filter(s => s.endMin > nowMin);
-  console.log(`Slots filtered by time: ${deduped.length} -> ${future.length} (now=${nowMin})`);
-
-  // 4) Group slots by court number & side
-  const byNumber = {}; // { [num]: { A:[...], B:[...] } }
-  for (const s of future){
-    const num = roomNumber(s.roomId);
-    const side = roomSide(s.roomId);
-    if (!num || !side) continue;
-    if (!byNumber[num]) byNumber[num] = { A:[], B:[] };
-    byNumber[num][side].push(s);
-  }
-
-  // 5) Merge A/B when identical, otherwise show split
-  const merged = mergeAB(byNumber);
-
-  // 6) Render zones (South 1–2, Field 3–8, North 9–10)
-  renderZone(els.south, ZONES.south, merged);
-  renderZone(els.field, ZONES.field, merged);
-  renderZone(els.north, ZONES.north, merged);
+function pillHtml(ev) {
+  const time = `${toTime(ev.startMin)}–${toTime(ev.endMin)}`;
+  const who = (ev.title || "").trim();
+  const what = (ev.subtitle || "").trim();
+  const whatSpan = what ? `<span class="what">${what}</span>` : "";
+  return `
+    <div class="pill">
+      <span class="who">${who}</span>
+      ${whatSpan}
+      <span class="time">${time}</span>
+    </div>
+  `;
 }
 
-document.addEventListener('DOMContentLoaded', init);
+// Boot
+async function init() {
+  try {
+    updateClock();
+    setInterval(updateClock, 1000 * 30); // tick every 30s
+
+    const data = await loadData();
+    // Render once and also refresh the board every minute
+    const draw = () => renderBoard(data);
+    draw();
+    setInterval(draw, 60 * 1000);
+  } catch (err) {
+    console.error(err);
+  }
+}
+
+document.addEventListener("DOMContentLoaded", init);
