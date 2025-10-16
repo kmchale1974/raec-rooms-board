@@ -4,8 +4,8 @@
   <meta charset="utf-8" />
   <title>RAEC Rooms Board</title>
   <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <link rel="icon" href="data:,">
 
-  <!-- Dark theme & fixed 1920x1080 stage for signage players -->
   <style>
     :root{
       --bg:#0f1115;
@@ -14,102 +14,136 @@
       --muted:#9aa3b2;
       --accent:#2b87ff;
       --grid:#1b202a;
-      --chip:#2a3140;
-      --chip-text:#e7eaf1;
+      --ok:#39d353;
+      --warn:#ffb020;
+      --pad:24px;
     }
     html,body{
       margin:0; height:100%; background:var(--bg); color:var(--ink);
       font-family: Inter, "SF Pro Text", Segoe UI, Roboto, Arial, sans-serif;
     }
+
+    /* Fixed 1920×1080 stage for digital signage */
     .stage{
       width:1920px; height:1080px; margin:0 auto; overflow:hidden;
-      display:grid; grid-template-rows: 104px 1fr; gap:16px; padding:32px; box-sizing:border-box;
+      display:grid; grid-template-rows: 110px 1fr; gap:16px; padding:var(--pad);
+      box-sizing:border-box;
     }
 
-    /* HEADER BAR (logo left, wifi right) */
+    /* Header: logo (L), center date/clock, Wi-Fi card (R) */
     .header{
-      background:var(--panel); border-radius:16px; display:flex; align-items:center;
-      justify-content:space-between; padding:16px 20px; box-sizing:border-box;
+      background:var(--panel);
+      border-radius:16px;
+      display:grid;
+      grid-template-columns: 1fr auto 1fr;
+      align-items:center;
+      padding:16px 20px;
+      box-sizing:border-box;
+      gap:12px;
     }
     .logo{
-      display:flex; align-items:center; gap:14px;
+      justify-self:start; display:flex; align-items:center; gap:14px;
+      min-width:0;
     }
-    .logo img{
-      height:68px; width:auto; object-fit:contain; display:block;
-      filter: drop-shadow(0 2px 6px rgba(0,0,0,.35));
-    }
+    .logo img{ height:58px; object-fit:contain; }
     .logo .fallback{
       font-weight:700; letter-spacing:.02em; color:var(--ink);
+      white-space:nowrap; overflow:hidden; text-overflow:ellipsis;
     }
-    .wifi{
-      display:flex; align-items:center; gap:16px; color:var(--ink);
-      background:#141824; border:1px solid var(--grid); border-radius:12px; padding:10px 14px;
-    }
-    .wifi div{ line-height:1.2 }
-    .wifi label{ color:var(--muted); font-size:12px; display:block; }
-    .wifi .value{ font-weight:700; font-size:16px; }
 
-    /* BOARD GRID (left: South Gym 2×2, middle: Fieldhouse 3×2, right: North Gym 2×2) */
+    .center-info{
+      justify-self:center; text-align:center; line-height:1.1;
+      min-width:0;
+    }
+    #headerDate{ font-size:26px; font-weight:800; letter-spacing:.02em; }
+    #headerClock{ font-size:18px; color:var(--muted); font-weight:700; }
+
+    .wifi{
+      justify-self:end;
+      display:grid; grid-auto-flow:column; gap:18px;
+      background:rgba(255,255,255,0.03);
+      border:1px solid var(--grid); border-radius:12px;
+      padding:10px 14px;
+    }
+    .wifi label{
+      font-size:12px; color:var(--muted); text-transform:uppercase; letter-spacing:.08em;
+      display:block; margin-bottom:4px;
+    }
+    .wifi .value{ font-weight:700; }
+
+    /* BOARD: three sections laid out as your whiteboard: South | Fieldhouse | North */
     .board{
       display:grid; grid-template-columns: 1fr 1.5fr 1fr; gap:16px; min-height:0;
     }
     .section{
       background:var(--panel); border-radius:16px; padding:14px; display:grid; gap:12px;
-      grid-template-rows: auto 1fr;
+      border:1px solid var(--grid);
+      box-sizing:border-box;
     }
     .section h2{
-      margin:0; font-size:18px; color:var(--muted); font-weight:700; letter-spacing:.06em; text-transform:uppercase;
-    }
-    .cells{
-      display:grid; gap:12px;
-      /* layout set per section via classes */
-    }
-    .cells.south, .cells.north{ grid-template-columns: repeat(2, 1fr); grid-auto-rows: 1fr; }
-    .cells.fieldhouse{ grid-template-columns: repeat(3, 1fr); grid-auto-rows: 1fr; }
-
-    /* ROOM CARD */
-    .room{
-      border:1px solid var(--grid); border-radius:12px; padding:10px 12px; display:flex; flex-direction:column;
-      background:linear-gradient(180deg, rgba(255,255,255,0.02), rgba(255,255,255,0)) ;
-      min-height:140px;
-    }
-    .room .title{
-      font-weight:800; letter-spacing:.02em; margin-bottom:8px; display:flex; align-items:center; justify-content:space-between;
-    }
-    .room .title .badge{
-      font-size:11px; font-weight:700; color:#d1d6e3; padding:3px 8px; border-radius:999px; background:#1b2333; border:1px solid var(--grid);
-    }
-    .empty{
-      margin-top:2px; color:var(--muted); font-size:13px; font-weight:600;
+      margin:0; font-size:18px; font-weight:800; letter-spacing:.02em; color:var(--ink);
     }
 
-    /* EVENT LINE */
-    .event{
-      background:var(--chip); border:1px solid var(--grid); color:var(--chip-text);
-      border-radius:8px; padding:6px 8px; margin-top:6px; display:flex; gap:10px; align-items:baseline;
+    /* grid table: 2 columns per row (A | B) like the board */
+    .grid-rooms{
+      display:grid; grid-template-rows: repeat(5, 1fr); gap:10px; /* 5 rows (1..5 or 6..10) */
+      min-height:0;
     }
-    .event .time{ font-weight:800; font-size:13px; letter-spacing:.02em; }
-    .event .who{ font-weight:700; font-size:14px; }
-    .event .note{ color:var(--muted); font-size:12px; margin-left:auto; }
+    .row{
+      display:grid; grid-template-columns: 1fr 1fr; gap:10px; min-height:0;
+    }
 
-    /* small footer legend (optional) */
-    .legend{
-      position:absolute; right:36px; bottom:28px; color:var(--muted); font-size:12px;
+    /* each cell shows room label + list of upcoming (or current) reservations */
+    .cell{
+      border:1px solid var(--grid); border-radius:12px; padding:10px; min-height:0;
+      display:grid; grid-template-rows: auto 1fr; gap:8px;
+      background:rgba(255,255,255,0.02);
     }
+    .room-head{
+      display:flex; align-items:center; justify-content:space-between; gap:8px;
+    }
+    .room-id{
+      font-weight:800; font-size:18px; letter-spacing:.02em;
+      background:#1a2130; border:1px solid var(--grid); padding:2px 10px; border-radius:8px;
+    }
+    .status{
+      font-size:12px; font-weight:700; letter-spacing:.06em; text-transform:uppercase;
+      padding:2px 8px; border-radius:999px; border:1px solid var(--grid);
+      color:#cfe3ff; background:#16223a;
+    }
+    .status--busy{ color:#0b2; background:rgba(57,211,83,.12); border-color:#1d3; }
+    .status--free{ color:#fff; background:rgba(255,255,255,.04); }
+
+    .list{
+      display:flex; flex-direction:column; gap:6px; overflow:hidden;
+    }
+    .line{
+      display:flex; gap:10px; align-items:baseline; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;
+      font-size:14px;
+    }
+    .time{
+      color:var(--muted); min-width:112px; font-variant-numeric:tabular-nums;
+    }
+    .who{ font-weight:700; overflow:hidden; text-overflow:ellipsis; }
+    .note{ color:var(--muted); overflow:hidden; text-overflow:ellipsis; }
   </style>
 </head>
 <body>
   <div class="stage">
-
-    <!-- HEADER -->
     <div class="header">
-      <!-- Left: RAEC logo (place your logo file at ./logo.png). If missing, show fallback text -->
       <div class="logo">
-        <img id="raecLogo" src="./logo.png" alt="Romeoville Athletic & Event Center" onerror="this.style.display='none';document.getElementById('logoFallback').style.display='block';">
-        <div id="logoFallback" class="fallback" style="display:none">Romeoville Athletic & Event Center</div>
+        <img id="raecLogo" src="./logo.png" alt="Romeoville Athletic & Event Center"
+             onerror="this.style.display='none';document.getElementById('logoFallback').style.display='block';">
+        <div id="logoFallback" class="fallback" style="display:none">
+          Romeoville Athletic & Event Center
+        </div>
       </div>
 
-      <!-- Right: Wi-Fi info -->
+      <div class="center-info">
+        <div id="headerDate">—</div>
+        <div id="headerClock">—</div>
+      </div>
+
       <div class="wifi">
         <div>
           <label>Wi-Fi</label>
@@ -117,30 +151,30 @@
         </div>
         <div>
           <label>Password</label>
-          <div id="wifiPass" class="value">see front desk</div>
+          <div id="wifiPass" class="value">Publ!c00</div>
         </div>
       </div>
     </div>
 
-    <!-- BOARD: three sections -->
     <div class="board">
+      <!-- SOUTH GYM: 1A–2B (4 boxes total; displayed as 2 rows × 2 cols) -->
       <section class="section">
         <h2>South Gym</h2>
-        <div class="cells south" id="southCells"></div>
+        <div class="grid-rooms" id="southCells"><!-- filled by JS --></div>
       </section>
 
+      <!-- FIELDHOUSE: 3A–8B (12 boxes total; displayed as 6 rows × 2 cols) -->
       <section class="section">
         <h2>Fieldhouse</h2>
-        <div class="cells fieldhouse" id="fieldCells"></div>
+        <div class="grid-rooms" id="fieldCells"><!-- filled by JS --></div>
       </section>
 
+      <!-- NORTH GYM: 9A–10B (4 boxes total; displayed as 2 rows × 2 cols) -->
       <section class="section">
         <h2>North Gym</h2>
-        <div class="cells north" id="northCells"></div>
+        <div class="grid-rooms" id="northCells"><!-- filled by JS --></div>
       </section>
     </div>
-
-    <div class="legend">Current & upcoming only • Past reservations are hidden</div>
   </div>
 
   <script type="module" src="./app.js"></script>
