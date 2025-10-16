@@ -4,156 +4,83 @@
   <meta charset="utf-8" />
   <title>RAEC Rooms Board</title>
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <!-- Silence favicon 404s -->
   <link rel="icon" href="data:,">
-
   <style>
     :root{
-      --bg:#0f1115;
-      --panel:#12151c;
-      --ink:#e7eaf1;
-      --muted:#9aa3b2;
-      --accent:#2b87ff;
-      --grid:#1b202a;
-      --chip:#2a3140;
-      --chip-border:#2d3646;
-      --chip-text:#e7eaf1;
-      --good:#7ed957;
-      --warn:#ffcc66;
-      --pad:24px;
+      --bg:#0f1115; --panel:#12151c; --ink:#e7eaf1; --muted:#9aa3b2; --grid:#1b202a;
+      --accent:#2b87ff; --chip:#263044; --chip-text:#e7eaf1;
     }
-    html,body{
-      margin:0; height:100%; background:var(--bg); color:var(--ink);
-      font-family: Inter, "SF Pro Text", Segoe UI, Roboto, Arial, sans-serif;
-    }
-    /* Fixed 1920x1080 stage for signage players */
+    html,body{ margin:0; height:100%; background:var(--bg); color:var(--ink);
+      font-family: Inter, "SF Pro Text", Segoe UI, Roboto, Arial, sans-serif; }
     .stage{
       width:1920px; height:1080px; margin:0 auto; overflow:hidden;
-      display:grid; grid-template-rows: 104px 1fr; gap:16px; padding:var(--pad);
-      box-sizing:border-box;
+      padding:24px; box-sizing:border-box; display:grid; grid-template-rows: 96px 1fr; gap:16px;
     }
-
     /* Header */
     .header{
-      display:grid; grid-template-columns: 1fr 1fr 1fr; align-items:center;
-      background:var(--panel); border-radius:16px; padding:0 20px; box-sizing:border-box;
+      background:var(--panel); border-radius:16px; position:relative; display:flex; align-items:center; justify-content:center;
     }
-    .brand{ display:flex; align-items:center; gap:12px; justify-self:start; }
-    .brand img{ height:64px; width:auto; display:block; }
-    .center-time{ text-align:center; line-height:1.1; }
-    #headerDate{ font-size:28px; color:var(--ink); font-weight:700; }
-    #headerClock{ font-size:20px; color:var(--muted); font-weight:600; margin-top:4px; }
+    .logo{ position:absolute; left:24px; top:50%; transform:translateY(-50%); height:56px; }
+    .dateclock{ display:flex; gap:16px; align-items:baseline; font-weight:700; }
+    #headerDate{ font-size:36px; }
+    #headerClock{ font-size:28px; color:var(--muted); }
+    .wifi{ position:absolute; right:24px; top:50%; transform:translateY(-50%); text-align:right; color:var(--muted); font-size:14px; line-height:1.2; }
+    .wifi strong{ color:var(--ink); }
 
-    .wifi{
-      justify-self:end; text-align:right; color:var(--muted); font-size:14px;
-      background:#0e131c; padding:10px 14px; border-radius:12px; border:1px solid var(--grid);
+    /* GRID */
+    .grid-wrap{
+      background:var(--panel); border-radius:16px; padding:18px; box-sizing:border-box; height:100%;
+      display:grid; grid-template-columns: 1fr 2fr 1fr; gap:18px; /* South | Fieldhouse | North */
     }
-    .wifi b{ color:var(--ink); }
+    .col{ display:grid; gap:18px; grid-auto-rows: 1fr; }
+    /* South & North have always 2 tiles */
+    .col.south, .col.north{ grid-template-rows: 1fr 1fr; }
 
-    /* Board */
-    .board{
-      background:var(--panel); border-radius:16px; padding:18px; box-sizing:border-box;
-      display:grid; grid-template-rows: auto 1fr; gap:14px;
-    }
-    .section-labels{
-      display:grid; grid-template-columns: repeat(3, 1fr); gap:12px; padding:0 6px;
-      color:var(--muted); font-size:14px; letter-spacing:.04em; text-transform:uppercase;
-    }
-    .section-labels div{ opacity:.9; }
-
-    /* Grid: 3 sections – South (1–2), Fieldhouse (3–8), North (9–10) */
-    .grid{
-      display:grid; gap:14px;
-      grid-template-columns: 1fr 1fr 1fr;
+    /* Fieldhouse adapts: we’ll auto-place tiles; minmax keeps them even */
+    .col.fieldhouse{
+      grid-template-columns: repeat(3, 1fr);
       grid-auto-rows: 1fr;
+      grid-auto-flow: row dense;
     }
 
-    .column{
-      display:grid; gap:14px;
-      /* extra padding so left/right edges never hug */
-      padding-inline:6px;
-      box-sizing:border-box;
+    .tile{
+      border:1px solid var(--grid); border-radius:16px; padding:14px; box-sizing:border-box; background:#0f141f;
+      display:flex; flex-direction:column; gap:8px; min-width:0; overflow:hidden;
     }
-
-    /* Each court cell */
-    .cell{
-      background:linear-gradient(to bottom, rgba(255,255,255,0.02), transparent);
-      border:1px solid var(--grid);
-      border-radius:14px;
-      padding:14px;
-      box-sizing:border-box;
-      min-height:150px; /* tall enough to read; adjusts with content */
-      display:flex; flex-direction:column; gap:10px;
+    .tile h3{ margin:0; font-size:28px; letter-spacing:.02em; }
+    .tile .list{ display:flex; flex-direction:column; gap:6px; overflow:hidden; }
+    .item{
+      background:var(--chip); border:1px solid var(--grid); border-radius:10px; padding:8px 10px;
+      display:flex; justify-content:space-between; gap:12px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;
+      font-size:16px;
     }
-    .title{
-      display:flex; align-items:baseline; justify-content:space-between;
-      border-bottom:1px solid var(--grid); padding-bottom:8px;
-    }
-    .court{ font-weight:800; font-size:28px; letter-spacing:.02em; }
-    .status{ font-size:13px; color:var(--muted); }
-    /* When there’s no events, hide the status entirely */
-    .title .status:empty{ display:none; }
+    .item .who{ font-weight:700; overflow:hidden; text-overflow:ellipsis; }
+    .item .until{ color:var(--muted); flex:0 0 auto; }
+    .empty{ color:var(--muted); font-style:italic; }
 
-    .laneLabel{
-      font-size:12px; color:var(--muted); text-transform:uppercase; letter-spacing:.06em;
-      margin:6px 0 2px;
-    }
-
-    /* Event pills */
-    .pill{
-      border:1px solid var(--chip-border);
-      background:var(--chip);
-      color:var(--chip-text);
-      border-radius:12px; padding:8px 10px; margin:6px 0;
-      display:flex; align-items:baseline; gap:10px; flex-wrap:wrap;
-      box-sizing:border-box;
-    }
-    .pill .who{ font-weight:700; font-size:16px; }
-    .pill .what{ font-size:14px; color:var(--muted); }
-    .pill .time{ margin-left:auto; font-size:13px; color:var(--muted); }
-
-    /* Subtle hint on available rooms (if you ever want to use it) */
-    .cell.is-empty{ background:transparent; border-color:#111723; }
-
-    /* Keep numbers from touching edges on the far left/right columns */
-    .column:first-child .cell{ padding-left:18px; }
-    .column:last-child  .cell{ padding-right:18px; }
-
-    /* Make sure long names wrap nicely */
-    .pill{ word-break:break-word; }
+    /* Ensure left/right tiles don’t hug edges on 1920x1080 */
+    .stage{ padding:28px; }
   </style>
 </head>
 <body>
   <div class="stage">
     <div class="header">
-      <div class="brand">
-        <!-- Place your logo file as /logo.png -->
-        <img src="./logo.png" alt="Romeoville Athletic & Event Center" />
-      </div>
-
-      <div class="center-time">
+      <!-- Replace with your logo file name -->
+      <img class="logo" src="./raec-logo.png" alt="Romeoville Athletic & Event Center" />
+      <div class="dateclock">
         <div id="headerDate">—</div>
         <div id="headerClock">—</div>
       </div>
-
       <div class="wifi">
-        <div><b>Wi-Fi:</b> RAEC Public</div>
-        <div><b>Pass:</b> Publ!c00</div>
+        Wi-Fi: <strong>Public WiFi</strong><br>
+        Password: <strong>Publ!c00</strong>
       </div>
     </div>
 
-    <div class="board">
-      <div class="section-labels">
-        <div>South Gym</div>
-        <div>Fieldhouse</div>
-        <div>North Gym</div>
-      </div>
-
-      <div class="grid">
-        <div class="column" id="col-south"><!-- courts 1–2 --></div>
-        <div class="column" id="col-field"><!-- courts 3–8 --></div>
-        <div class="column" id="col-north"><!-- courts 9–10 --></div>
-      </div>
+    <div class="grid-wrap">
+      <div class="col south" id="colSouth"></div>
+      <div class="col fieldhouse" id="colFieldhouse"></div>
+      <div class="col north" id="colNorth"></div>
     </div>
   </div>
 
