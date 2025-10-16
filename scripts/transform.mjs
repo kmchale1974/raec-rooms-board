@@ -86,9 +86,7 @@ function detectSplits(rows, keyFacility) {
       continue;
     }
 
-    // If you ever want "Court X-AB" to force a split for layout, flip this on.
-    // The current requirement says split ONLY if explicit A/B is used,
-    // so "Court X-AB" keeps the single-number cell.
+    // If you want "Court X-AB" to force split, uncomment below:
     // m = fac.match(/^AC\s+Gym\s*-\s*Court\s+(\d{1,2})-AB$/i);
     // if (m) { const num = parseInt(m[1], 10); if (SPLITTABLE.includes(num)) split[num] = true; }
   }
@@ -125,12 +123,10 @@ function facilityToRoomIds(fac, splitFlags) {
   }
 
   // 2) GYM single court spanning A/B (e.g., "AC Gym - Court 10-AB")
-  // If split is ON for that number (because half courts exist elsewhere today),
-  // we paint both A and B squares; otherwise we paint the single-number square.
   m = f.match(/^AC\s+Gym\s*-\s*Court\s+(\d{1,2})-AB$/i);
   if (m) {
     const num = parseInt(m[1], 10);
-    if (!SPLITTABLE.includes(num)) return []; // defensive
+    if (!SPLITTABLE.includes(num)) return [];
     if (splitFlags[num]) return [`${num}A`, `${num}B`];
     return [String(num)];
   }
@@ -176,12 +172,13 @@ function facilityToRoomIds(fac, splitFlags) {
     if (n >= 3 && n <= 8) return [String(n)];
   }
 
-  // 8) Championship Court — TODO: wire once you tell me which square(s)
-  if (/Championship\s*Court/i.test(f)) {
-    return []; // placeholder to avoid misplacement
+  // 8) Championship Court = same as Courts 1 & 2
+  if (/^AC\s*Gym\s*-\s*Championship\s*Court$/i.test(f) || /Championship\s*Court$/i.test(f)) {
+    if (splitFlags[1] || splitFlags[2]) return ["1A","1B","2A","2B"];
+    return ["1","2"];
   }
 
-  // 9) If "AC Gym - Court X-AB" appears with different spacing/casing
+  // 9) Defensive duplicate of Court X-AB with flexible spacing
   m = f.match(/^AC\s*Gym\s*-\s*Court\s*(\d{1,2})-AB$/i);
   if (m) {
     const num = parseInt(m[1], 10);
