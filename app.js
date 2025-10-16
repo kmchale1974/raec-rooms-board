@@ -1,215 +1,195 @@
-// ====== CONFIG ======
-const SSID = 'RAEC_Public';
-const WIFI_PASS = 'Publ!c00'; // as requested
-const EVENTS_URL = './events.json';
-const REFRESH_MS = 5 * 60 * 1000;  // re-fetch events.json every 5 minutes
-const TICK_MS    = 60 * 1000;      // re-render every minute so past events fall off
-const MAX_LINES_PER_CELL = 4;      // safety cap per room cell
+// app.js (module)
 
-// Building hours (min since midnight). transform.mjs also clamps, but we guard too.
-const DAY_START_MIN = 360;  // 6:00 AM
-const DAY_END_MIN   = 1380; // 11:00 PM
+// --- CONFIG -------------------------------------------------------
+const WIFI_SSID = 'Romeoville_Public';
+const WIFI_PASS = 'Publ!c00'; // you said you updated this
+const REFRESH_MS = 60_000;    // refresh clock + hide-past every minute
 
-// Physical layout groups like your whiteboard
-const SOUTH = ['1A','1B','2A','2B'];
-const FIELDH = ['3A','3B','4A','4B','5A','5B','6A','6B','7A','7B','8A','8B'];
-const NORTH = ['9A','9B','10A','10B'];
+// If true: past events are hidden, but if it's before opening (now < dayStartMin),
+// we show all events so the board isn't blank in the morning.
+const HIDE_PAST = true;
 
-// ====== CLOCK / WIFI ======
-function formatDate(d){
-  return d.toLocaleDateString(undefined, {
-    weekday: 'long', month: 'long', day: 'numeric', year: 'numeric'
-  });
-}
-function formatTime(d){
-  return d.toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' });
-}
-function startClock(){
-  const dateEl = document.getElementById('headerDate');
-  const clockEl = document.getElementById('headerClock');
-  const tick = () => {
-    const now = new Date();
-    if (dateEl)  dateEl.textContent  = formatDate(now);
-    if (clockEl) clockEl.textContent = formatTime(now);
-  };
-  tick();
-  setInterval(tick, 10_000);
-}
-function updateWifi(){
-  const ssidEl = document.getElementById('wifiSsid');
-  const passEl = document.getElementById('wifiPass');
-  if (ssidEl) ssidEl.textContent = SSID;
-  if (passEl) passEl.textContent = WIFI_PASS;
-}
+// --- UTILS --------------------------------------------------------
+const fmtTime = (min) => {
+  // min since 00:00 -> "h:mm AM/PM"
+  let h = Math.floor(min / 60);
+  const m = min % 60;
+  const ampm = h >= 12 ? 'PM' : 'AM';
+  h = h % 12 || 12;
+  return `${h}:${String(m).padStart(2,'0')} ${ampm}`;
+};
 
-// ====== DATA FETCH ======
-let eventsData = null;
+const nowMinutesLocal = () => {
+  const d = new Date();
+  return d.getHours() * 60 + d.getMinutes();
+};
 
-async function fetchEvents() {
-  const url = `${EVENTS_URL}?ts=${Date.now()}`;
-  const resp = await fetch(url, { cache: 'no-store' });
-  if (!resp.ok) throw new Error(`Failed to fetch ${url}: ${resp.status} ${resp.statusText}`);
+const groupMap = {
+  south: ['1A','1B','2A','2B'],
+  field: ['3A','3B','4A','4B','5A','5B','6A','6B','7A','7B','8A','8B'],
+  north: ['9A','9B','10A','10B']
+};
+
+// --- DATA ---------------------------------------------------------
+async function loadData() {
+  const resp = await fetch(`./events.json?ts=${Date.now()}`, { cache: 'no-store' });
+  if (!resp.ok) throw new Error(`Failed to fetch events.json: ${resp.status} ${resp.statusText}`);
   const data = await resp.json();
-  // basic sanity
-  if (!data || !data.rooms || !Array.isArray(data.slots)) {
-    throw new Error('events.json missing required fields (rooms, slots)');
-  }
-  eventsData = data;
-  console.log('Loaded events.json', {
-    rooms: Object.keys(data.rooms).length,
-    slots: data.slots.length
-  });
+
+  const roomsCount = data?.rooms ? Object.keys(data.rooms).length : 0;
+  const slotsCount = Array.isArray(data?.slots) ? data.slots.length : 0;
+  console.log('Loaded events.json', { roomsCount, slotsCount });
+
   return data;
 }
 
-// ====== HELPERS ======
-function to12h(min) {
-  // clamp to day window for safety (visual only)
-  const m = Math.max(DAY_START_MIN, Math.min(DAY_END_MIN, min));
-  let h = Math.floor(m / 60);
-  const minutes = (m % 60).toString().padStart(2, '0');
-  const ampm = h >= 12 ? 'pm' : 'am';
-  h = (h % 12) || 12;
-  return `${h}:${minutes}${ampm}`;
+// --- HEADER / WIFI / CLOCK ---------------------------------------
+function renderHeaderBits() {
+  // Date centered, live clock
+  const dateEl  = document.getElementById('headerDate');
+  const clockEl = document.getElementById('headerClock');
+  const now = new Date();
+
+  // Example: Wednesday, Oct 15, 2025
+  dateEl.textContent = now.toLocaleDateString(undefined, {
+    weekday: 'long', month: 'short', day: 'numeric', year: 'numeric'
+  });
+
+  clockEl.textContent = now.toLocaleTimeString(undefined, {
+    hour: 'numeric', minute: '2-digit'
+  });
+
+  // WiFi badge
+  const ssidEl = document.getElementById('wifiSsid');
+  const passEl = document.getElementById('wifiPass');
+  if (ssidEl) ssidEl.textContent = WIFI_SSID;
+  if (passEl) passEl.textContent = WIFI_PASS;
 }
 
-function groupFutureByRoom(data) {
-  const nowMin = new Date().getHours() * 60 + new Date().getMinutes();
+// --- GRID LAYOUT --------------------------------------------------
+// Expects containers with these IDs to exist in index.html:
+// #southGrid, #fieldGrid, #northGrid — each is a grid of boxes
+function ensureRoomBoxes(data) {
+  const make = (id, list) => {
+    const wrap = document.getElementById(id);
+    if (!wrap) return;
+
+    // Build cells if missing (id="cell-<ROOM>")
+    if (!wrap.dataset.filled) {
+      wrap.innerHTML = '';
+      list.forEach(roomId => {
+        const cell = document.createElement('div');
+        cell.className = 'roomcell';
+        cell.id = `cell-${roomId}`;
+
+        const header = document.createElement('div');
+        header.className = 'roomcell-h';
+        header.textContent = roomId;
+
+        const body = document.createElement('div');
+        body.className = 'roomcell-b'; // events go here
+
+        cell.appendChild(header);
+        cell.appendChild(body);
+        wrap.appendChild(cell);
+      });
+      wrap.dataset.filled = '1';
+    }
+  };
+
+  make('southGrid', groupMap.south);
+  make('fieldGrid', groupMap.field);
+  make('northGrid', groupMap.north);
+}
+
+function visibleSlotsForToday(data) {
+  const slots = Array.isArray(data.slots) ? data.slots : [];
+  if (!HIDE_PAST) return slots;
+
+  const now = nowMinutesLocal();
+  const start = data.dayStartMin ?? 360;  // default 6:00
+  const end   = data.dayEndMin   ?? 1380; // default 23:00
+
+  // If it's before opening, show everything (board shouldn't be blank at 7am)
+  if (now < start) {
+    console.log('Before opening — showing all slots');
+    return slots;
+  }
+  // During the day: only show events that haven't ended yet
+  if (now <= end) {
+    const filtered = slots.filter(s => s.endMin > now);
+    console.log(`Filtered slots (now=${now}):`, { before: slots.length, after: filtered.length });
+    return filtered;
+  }
+  // After closing
+  console.log('After closing — no slots visible');
+  return [];
+}
+
+function renderGrid(data) {
+  ensureRoomBoxes(data);
+
+  // clear all bodies
+  const clearRoom = (roomId) => {
+    const body = document.querySelector(`#cell-${roomId} .roomcell-b`);
+    if (body) body.innerHTML = '';
+  };
+  [...groupMap.south, ...groupMap.field, ...groupMap.north].forEach(clearRoom);
+
+  // pick visible
+  const vis = visibleSlotsForToday(data);
+
+  // bucket by room
   const byRoom = {};
-  // init all rooms so cells render even with no events
-  for (const id of Object.keys(data.rooms)) byRoom[id] = [];
+  vis.forEach(s => {
+    if (!byRoom[s.roomId]) byRoom[s.roomId] = [];
+    byRoom[s.roomId].push(s);
+  });
 
-  for (const s of data.slots) {
-    // show only events that have not ended yet
-    if (s.endMin <= nowMin) continue;
+  // For each room, render stacked event rows (title • time)
+  Object.entries(byRoom).forEach(([roomId, items]) => {
+    const body = document.querySelector(`#cell-${roomId} .roomcell-b`);
+    if (!body) return;
 
-    // clamp to building hours (visual)
-    const start = Math.max(s.startMin, DAY_START_MIN);
-    const end = Math.min(s.endMin, DAY_END_MIN);
-    if (end <= start) continue;
+    // sort by start
+    items.sort((a,b) => a.startMin - b.startMin);
 
-    const slot = {
-      room: s.room,
-      startMin: start,
-      endMin: end,
-      start: to12h(start),
-      end: to12h(end),
-      who: s.who || s.reservee || '',
-      title: s.title || s.reservationPurpose || '',
-    };
-    if (!byRoom[slot.room]) byRoom[slot.room] = [];
-    byRoom[slot.room].push(slot);
-  }
+    items.forEach(ev => {
+      const row = document.createElement('div');
+      row.className = 'evt';
 
-  // sort each room’s list by start time
-  for (const r of Object.keys(byRoom)) {
-    byRoom[r].sort((a,b) => a.startMin - b.startMin);
-  }
-  return byRoom;
+      const line1 = document.createElement('div');
+      line1.className = 'evt-line1';
+      line1.textContent = ev.title || '';
+
+      const line2 = document.createElement('div');
+      line2.className = 'evt-line2';
+      const timeStr = `${fmtTime(ev.startMin)}–${fmtTime(ev.endMin)}`;
+      line2.textContent = ev.subtitle ? `${ev.subtitle} • ${timeStr}` : timeStr;
+
+      row.appendChild(line1);
+      row.appendChild(line2);
+      body.appendChild(row);
+    });
+  });
 }
 
-function sectionRows(list) {
-  // convert flat [A,B,C,D] => rows [[A,B],[C,D]] for 2 columns across
-  const rows = [];
-  for (let i=0; i<list.length; i+=2) {
-    rows.push(list.slice(i,i+2));
-  }
-  return rows;
-}
+// --- INIT / TICK --------------------------------------------------
+let _data = null;
 
-// ====== RENDER ======
-function lineHTML(slot) {
-  const time = `${slot.start} – ${slot.end}`;
-  const who = slot.who || slot.title || 'Reserved';
-  const note = slot.title && slot.who ? slot.title : '';
-  return `
-    <div class="line">
-      <div class="time">${time}</div>
-      <div class="who">${escapeHtml(who)}</div>
-      ${note ? `<div class="note">• ${escapeHtml(note)}</div>` : ''}
-    </div>
-  `;
-}
-
-function cellHTML(roomId, slots) {
-  const nowMin = new Date().getHours()*60 + new Date().getMinutes();
-  const isBusy = slots.some(s => s.startMin <= nowMin && s.endMin > nowMin);
-  const statusClass = isBusy ? 'status--busy' : 'status--free';
-  const statusText  = isBusy ? 'In Use' : 'Open';
-
-  const lines = slots.slice(0, MAX_LINES_PER_CELL).map(lineHTML).join('');
-  return `
-    <div class="cell">
-      <div class="room-head">
-        <div class="room-id">${roomId}</div>
-        <div class="status ${statusClass}">${statusText}</div>
-      </div>
-      <div class="list">
-        ${lines || ''}
-      </div>
-    </div>
-  `;
-}
-
-function fillSection(containerId, roomIds, byRoom) {
-  const el = document.getElementById(containerId);
-  if (!el) return;
-
-  // Decide number of rows: South(2), Fieldhouse(6), North(2)
-  const rowsNeeded = containerId === 'fieldCells' ? 6 : 2;
-  el.style.gridTemplateRows = `repeat(${rowsNeeded}, 1fr)`;
-
-  const html = sectionRows(roomIds).map(row => {
-    const [left, right] = row;
-    const leftHTML  = cellHTML(left,  byRoom[left]  || []);
-    const rightHTML = cellHTML(right, byRoom[right] || []);
-    return `<div class="row">${leftHTML}${rightHTML}</div>`;
-  }).join('');
-
-  el.innerHTML = html;
-}
-
-// tiny safer text
-function escapeHtml(s){
-  return String(s || '')
-    .replaceAll('&','&amp;')
-    .replaceAll('<','&lt;')
-    .replaceAll('>','&gt;')
-    .replaceAll('"','&quot;')
-    .replaceAll("'",'&#39;');
-}
-
-// ====== BOOT ======
-async function renderOnce() {
-  if (!eventsData) return;
-  const byRoom = groupFutureByRoom(eventsData);
-  fillSection('southCells', SOUTH, byRoom);
-  fillSection('fieldCells', FIELDH, byRoom);
-  fillSection('northCells', NORTH, byRoom);
-}
-
-async function init(){
+async function init() {
   try {
-    updateWifi();
-    startClock();
+    _data = await loadData();
+    renderHeaderBits();
+    renderGrid(_data);
 
-    await fetchEvents();   // initial load
-    await renderOnce();    // initial render
-
-    // Re-render every minute so past events drop off automatically
-    setInterval(renderOnce, TICK_MS);
-
-    // Re-fetch file occasionally to pick up new reports
-    setInterval(async () => {
-      try {
-        await fetchEvents();
-        await renderOnce();
-      } catch (e) {
-        console.error('Background refresh failed:', e);
-      }
+    // tick once per minute for clock + hide-past
+    setInterval(() => {
+      renderHeaderBits();
+      if (_data) renderGrid(_data);
     }, REFRESH_MS);
-  } catch (err) {
-    console.error('Board init failed:', err);
+  } catch (e) {
+    console.error(e);
   }
 }
 
