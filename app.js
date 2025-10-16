@@ -1,4 +1,4 @@
-// app.js  —  Grid-only board with A/B merge, dedupe, past-event pruning, and clock
+// app.js  —  Grid-only board with A/B merge, strong dedupe, past-event pruning, and clock
 
 const WIFI_NAME = "RAEC Public";
 const WIFI_PASS = "Publ!c00"; // per your note
@@ -42,7 +42,7 @@ async function loadData() {
   const resp = await fetch(url, { cache: "no-store" });
   if (!resp.ok) throw new Error(`Failed to fetch events.json: ${resp.status}`);
   const data = await resp.json();
-  console.log("Loaded events.json", data ? Object : null);
+  console.log("Loaded events.json", Object.keys(data || {}).length ? Object : null);
   return data;
 }
 
@@ -58,9 +58,23 @@ const SOUTH = [1, 2];
 const FIELD = [3, 4, 5, 6, 7, 8];
 const NORTH = [9, 10];
 
-// Key used to detect A/B duplicates of the same booking
+// Key used to detect identical bookings
 function slotKey(s) {
   return `${s.startMin}-${s.endMin}-${(s.title||"").trim().toLowerCase()}-${(s.subtitle||"").trim().toLowerCase()}`;
+}
+
+// Deduplicate a list of slots by slotKey
+function dedupeSlots(list = []) {
+  const seen = new Set();
+  const out = [];
+  for (const s of list) {
+    const k = slotKey(s);
+    if (!seen.has(k)) {
+      seen.add(k);
+      out.push(s);
+    }
+  }
+  return out;
 }
 
 function renderBoard(data) {
@@ -75,7 +89,7 @@ function renderBoard(data) {
     s.subtitle = cleanRepeatedCommaSegments(s.subtitle || "");
   }
 
-  // Group by court, then split A/B vs BOTH
+  // Group by court, separate A/B; we’ll promote true duplicates to BOTH
   // structure: { [courtNum]: { A:[], B:[], both:[] } }
   const grouped = {};
   for (const s of activeSlots) {
@@ -83,7 +97,6 @@ function renderBoard(data) {
     if (!info) continue;
     const { court, side } = info;
     grouped[court] ||= { A: [], B: [], both: [] };
-    // stash base data (clone minimal fields)
     grouped[court][side].push({
       startMin: s.startMin,
       endMin: s.endMin,
@@ -92,38 +105,30 @@ function renderBoard(data) {
     });
   }
 
-  // Promote duplicates that appear in both A and B into 'both'
+  // For each court: strong dedupe and promotion logic
   for (const court of Object.keys(grouped)) {
     const C = grouped[court];
-    const seenA = new Map();
-    C.A.forEach(item => {
-      seenA.set(slotKey(item), item);
-    });
 
-    const bothKeys = new Set();
-    const leftoversB = [];
-    for (const item of C.B) {
-      const k = slotKey(item);
-      if (seenA.has(k)) {
-        bothKeys.add(k);
-      } else {
-        leftoversB.push(item);
-      }
-    }
+    // First, dedupe raw A/B lists (handles feed duplicates)
+    C.A = dedupeSlots(C.A);
+    C.B = dedupeSlots(C.B);
 
-    // Build 'both' from those keys; remove from A
-    const leftoversA = [];
-    for (const item of C.A) {
-      const k = slotKey(item);
-      if (bothKeys.has(k)) {
-        C.both.push(item); // one copy is enough
-      } else {
-        leftoversA.push(item);
-      }
-    }
+    // Build sets of keys for quick intersection
+    const keysA = new Set(C.A.map(slotKey));
+    const keysB = new Set(C.B.map(slotKey));
 
-    C.A = leftoversA;
-    C.B = leftoversB;
+    // Intersection keys = appear on both A and B -> promote to BOTH (only once)
+    const bothKeys = new Set([...keysA].filter(k => keysB.has(k)));
+
+    // Build BOTH from A (one copy), then remove those from A & B
+    C.both = C.A.filter(item => bothKeys.has(slotKey(item)));
+    C.A = C.A.filter(item => !bothKeys.has(slotKey(item)));
+    C.B = C.B.filter(item => !bothKeys.has(slotKey(item)));
+
+    // Final safety: dedupe again (covers rare edge cases)
+    C.both = dedupeSlots(C.both);
+    C.A = dedupeSlots(C.A);
+    C.B = dedupeSlots(C.B);
   }
 
   // Render into three columns
@@ -213,10 +218,10 @@ async function init() {
     setInterval(updateClock, 1000 * 30); // tick every 30s
 
     const data = await loadData();
-    // Render once and also refresh the board every minute
     const draw = () => renderBoard(data);
-    draw();
-    setInterval(draw, 60 * 1000);
+
+    draw();                    // initial paint
+    setInterval(draw, 60 * 1000); // refresh every minute (removes finished events)
   } catch (err) {
     console.error(err);
   }
