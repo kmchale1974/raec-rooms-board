@@ -146,7 +146,7 @@ function cellHtml(num, grouped){
     }
   }
   if (!both.length && !A.length && !B.length){
-    body = emptyHtml();
+    body = '';
   }
 
   return `
