@@ -1,144 +1,88 @@
-<style>
-  :root{
-    --bg:#0f1115;
-    --panel:#12151c;
-    --ink:#e7eaf1;
-    --muted:#9aa3b2;
-    --accent:#2b87ff;
-    --grid:#1b202a;
-    --now:#ff6b6b;
-    --chip:#2a3140;
-    --chip-text:#e7eaf1;
-  }
-  html,body{
-    margin:0; height:100%; background:var(--bg); color:var(--ink);
-    font-family: Inter, "SF Pro Text", Segoe UI, Roboto, Arial, sans-serif;
-  }
+:root{
+  /* add a safe-area variable so it’s easy to tune later */
+  --safe: 40px;        /* try 32–48px if you want more/less */
+  --bg:#0f1115; --panel:#12151c; --ink:#e7eaf1; --muted:#9aa3b2;
+  --accent:#2b87ff; --grid:#1b202a; --now:#ff6b6b;
+  --chip:#2a3140; --chip-text:#e7eaf1;
+}
 
-  /* Fixed 1920x1080 stage for signage players like Yodeck */
-  .stage{
-    width:1920px; height:1080px; margin:0 auto; overflow:hidden;
-    display:grid; grid-template-rows: 96px 52px 1fr; gap:16px;
-    padding:32px;                 /* outer gutter so edges never touch bezel */
-    box-sizing:border-box;
-  }
+/* Fixed 1920×1080 stage */
+.stage{
+  width:1920px;
+  height:1080px;
+  margin:0 auto;
+  overflow:hidden;
+  display:grid;
+  grid-template-rows: 96px 52px 1fr;
+  gap:20px;                   /* a touch more vertical gap */
+  padding: var(--safe);       /* ⬅️ add inner padding all around */
+  box-sizing: border-box;
+  background: var(--bg);
+}
 
-  /* Header */
-  .header{
-    display:flex; align-items:center; justify-content:center;
-    background:var(--panel); border-radius:16px; position:relative;
-  }
-  .brand{
-    position:absolute; left:24px; font-weight:600; color:var(--muted); letter-spacing:.04em;
-  }
-  .dateclock{
-    display:flex; gap:16px; align-items:baseline; font-weight:700;
-  }
-  #headerDate{ font-size:36px; }
-  #headerClock{ font-size:28px; color:var(--muted); }
+/* Tabs */
+.tabs{ gap:12px; padding:0 2px; }
 
-  /* Tabs (non-interactive look, first tab highlighted) */
-  .tabs{
-    display:flex; gap:8px; align-items:center;
-  }
-  .tab{
-    padding:10px 16px; border-radius:999px; background:var(--panel);
-    color:var(--muted); text-transform:uppercase; letter-spacing:.06em; font-size:14px;
-  }
-  .tab.is-active{ background:var(--accent); color:white; }
+/* Board container (left labels + right grid) */
+.board{
+  display:grid;
+  grid-template-columns: 180px 1fr;
+  gap:20px;                   /* more space between the two panels */
+  min-height:0;
+}
 
-  /* Board container */
-  .board{
-    display:grid; grid-template-columns: 180px 1fr; gap:20px; min-height:0;
-  }
+/* Left column: rooms */
+.rooms{
+  background:var(--panel);
+  border-radius:16px;
+  padding:14px;               /* a touch more inner padding */
+  overflow:hidden;
+  display:grid;
+  grid-template-rows: 40px repeat(10, 1fr);
+  gap:10px;
+}
 
-  /* Row labels (rooms) */
-  .rooms{
-    background:var(--panel); border-radius:16px;
-    padding:16px 16px 16px 18px;  /* tiny extra on the left for breathing room */
-    overflow:hidden;
-    display:grid; grid-template-rows: 40px repeat(10, 1fr);
-    gap:10px;
-  }
-  .rooms .label-header{
-    color:var(--muted); font-size:14px; display:flex; align-items:center; padding:0 8px;
-    border-bottom:1px solid var(--grid);
-  }
-  .room{
-    display:grid; grid-template-columns: 1fr 1fr; gap:8px;
-  }
-  .room > div{
-    background:var(--panel); border:1px solid var(--grid); border-radius:12px;
-    display:flex; align-items:center; justify-content:center;
-    font-weight:600; color:var(--ink);
-  }
+/* Right column: timeline/grid wrapper (even if timeline is hidden) */
+.timeline-wrap{
+  background:var(--panel);
+  border-radius:16px;
+  position:relative;
+  overflow:hidden;
+  display:grid;
+  grid-template-rows: 40px 1fr;
+  padding: 6px 6px 10px;      /* small inner breathing room */
+}
 
-  /* Timeline area */
-  .timeline-wrap{
-    background:var(--panel); border-radius:16px; position:relative; overflow:hidden;
-    display:grid; grid-template-rows: 40px 1fr;
-    padding:0 12px 12px 12px;     /* inset so rightmost lanes don’t hit the edge */
-    box-sizing:border-box;
-  }
+/* Grid-only layout from app.js uses this container */
+#grid{
+  padding: 6px;               /* prevents chips from touching edges */
+}
 
-  /* Hour ticks header */
-  .hours{
-    display:grid; align-items:center;
-    border-bottom:1px solid var(--grid);
-  }
-  .hours .row{
-    display:grid; height:40px; align-items:center;
-    /* columns set dynamically by JS to match hour slots */
-    color:var(--muted); font-size:14px;
-  }
-  .hours .row div{ justify-self:center; }
+/* The 3-column grid inside #grid */
+#grid > div{
+  gap: 18px !important;       /* spread the three blocks a bit */
+}
 
-  /* Grid body */
-  .grid{
-    position:relative;
-    margin:6px 4px 4px 4px;  /* small inner gutter for chips/nowline */
-  }
+/* Each room cell */
+#grid .room-cell{
+  border:1px solid var(--grid);
+  border-radius:12px;
+  padding:12px;               /* a little more space for content */
+  background:rgba(255,255,255,0.01);
+}
 
-  /* Backdrop gridlines */
-  #gridBackdrop{
-    position:absolute; inset:0; display:grid;
-    grid-template-rows: repeat(10, 1fr);
-    grid-template-columns: var(--cols);
-    gap:0;
-    border-left:1px solid var(--grid);
-    border-right:1px solid var(--grid);
-    border-bottom:1px solid var(--grid);
-    border-radius:10px;
-  }
-  #gridBackdrop .cell{
-    border-right:1px solid var(--grid);
-    border-bottom:1px solid var(--grid);
-  }
+/* Event chips */
+#grid .chip{
+  border-radius:10px;
+  padding:8px 10px;
+  border:1px solid var(--grid);
+}
 
-  /* Room lanes container */
-  .lanes{
-    position:absolute; inset:0; display:grid; grid-template-rows: repeat(10, 1fr);
-    pointer-events:none;
-  }
-
-  /* Event chips */
-  .chip{
-    position:absolute; top:0; bottom:0; border-radius:10px;
-    background:var(--chip); color:var(--chip-text); border:1px solid var(--grid);
-    display:flex; align-items:center; padding:0 10px; font-size:14px; line-height:1.2;
-    overflow:hidden; text-wrap:balance;
-  }
-  .chip strong{ font-weight:700; }
-  .chip small{ color:var(--muted); margin-left:8px; }
-
-  /* Now line */
-  .now{
-    position:absolute; top:0; bottom:0; width:2px; background:var(--now);
-    box-shadow:0 0 8px rgba(255,107,107,.8);
-  }
-
-  /* Subtle in-corner legend */
-  .legend{
-    position:absolute; right:16px; bottom:12px; color:var(--muted); font-size:12px;
-  }
-</style>
+/* Header bar */
+.header{
+  background:var(--panel);
+  border-radius:16px;
+  padding: 0 12px;            /* stops content from kissing edges */
+}
+.brand{ left: calc(24px + 4px); }
+.dateclock{ gap:18px; }
