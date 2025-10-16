@@ -11,7 +11,7 @@
       /* Safe padding inside the 1920×1080 canvas */
       --safe: 40px;
 
-      /* Live preview scale that preserves aspect ratio */
+      /* Scale that preserves aspect ratio to fit any screen */
       --scale: min( calc(100vw / 1920), calc(100vh / 1080) );
 
       --bg:#0f1115; --panel:#12151c; --ink:#e7eaf1; --muted:#9aa3b2;
@@ -25,24 +25,23 @@
       overflow:hidden;
     }
 
-    /* ---- Preview wrapper fills the viewport ---- */
+    /* Viewport wrapper centers the canvas */
     .preview-wrap{
-      position:relative;
       width:100vw; height:100vh;
+      display:flex; align-items:center; justify-content:center;
     }
 
-    /* ---- 1920×1080 canvas centered & scaled ---- */
+    /* Fixed 1920×1080 canvas. We scale from the top-left but the wrapper
+       centers the (unscaled) box, so the *visual* result is perfectly centered. */
     .stage{
-      position:absolute;
       width:1920px; height:1080px;
-      left:50%; top:50%;
-      transform: translate(-50%, -50%) scale(var(--scale));
-      transform-origin: center center;
-      display:grid; grid-template-rows: 96px 1fr; gap:24px;
+      box-sizing:border-box;
       padding: var(--safe);
-      box-sizing: border-box;
       background: var(--bg);
-      /* helper outline to verify safe padding; remove if you want */
+      transform: scale(var(--scale));
+      transform-origin: top left;          /* <- important */
+      display:grid; grid-template-rows: 96px 1fr; gap:24px;
+      /* helper outline to see the safe area; remove if you want */
       box-shadow: inset 0 0 0 1px rgba(255,255,255,.06);
     }
 
@@ -74,6 +73,7 @@
       border-radius:16px;
       padding:18px;
       display:block;
+      height:100%; box-sizing:border-box;
     }
 
     /* Three columns: South / Fieldhouse / North */
@@ -81,6 +81,7 @@
       display:grid;
       grid-template-columns: repeat(3, minmax(0, 1fr));
       gap:20px; padding:6px; box-sizing:border-box; min-height:0;
+      height:100%;
     }
     .section{ min-width:0; }
 
@@ -120,7 +121,7 @@
       <!-- Header -->
       <div class="header">
         <div class="brand">
-          <!-- Ensure this file exists at /logo.png in the repo root -->
+          <!-- Ensure this exists at /logo.png in the repo root -->
           <img src="./logo.png" alt="Romeoville A&E Center">
           <span>Romeoville Athletic & Event Center</span>
         </div>
