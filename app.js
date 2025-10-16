@@ -1,144 +1,190 @@
-// app.js (module)
+// app.js — Grid-only board with dedupe, past-event pruning, and auto-refresh
 
-// --- CONFIG -------------------------------------------------------
-const WIFI_SSID = 'Romeoville_Public';
-const WIFI_PASS = 'Publ!c00';     // per your update
-const REFRESH_MS = 60_000;        // update clock + fall-off once/min
-const HIDE_PAST = true;           // hide events that have ended
+// ---------- Utilities ----------
+const $ = sel => document.querySelector(sel);
+const $$ = sel => Array.from(document.querySelectorAll(sel));
 
-// --- HELPERS ------------------------------------------------------
-const fmtTime = (min) => {
-  let h = Math.floor(min / 60);
-  const m = min % 60, ampm = h >= 12 ? 'PM' : 'AM';
+function fmtClock(d=new Date()){
+  // 12h clock with minutes
+  let h = d.getHours();
+  const m = d.getMinutes().toString().padStart(2,'0');
+  const ampm = h >= 12 ? 'PM' : 'AM';
   h = h % 12 || 12;
-  return `${h}:${String(m).padStart(2,'0')} ${ampm}`;
-};
-const nowMinutesLocal = () => {
-  const d = new Date();
-  return d.getHours() * 60 + d.getMinutes();
-};
+  return `${h}:${m} ${ampm}`;
+}
+function fmtDate(d=new Date()){
+  return d.toLocaleDateString(undefined, {
+    weekday:'long', month:'long', day:'numeric', year:'numeric'
+  });
+}
+function minsToRange(startMin, endMin){
+  const toClock = (min) => {
+    const h24 = Math.floor(min / 60);
+    const m    = (min % 60).toString().padStart(2,'0');
+    const ampm = h24 >= 12 ? 'PM' : 'AM';
+    const h12  = (h24 % 12) || 12;
+    return `${h12}:${m} ${ampm}`;
+  };
+  return `${toClock(startMin)} – ${toClock(endMin)}`;
+}
+function norm(s){ return (s||'').trim().replace(/\s+/g,' ').toLowerCase(); }
 
-const groups = {
-  south: ['1A','1B','2A','2B'],
-  field: ['3A','3B','4A','4B','5A','5B','6A','6B','7A','7B','8A','8B'],
-  north: ['9A','9B','10A','10B']
-};
+// ---------- De-dupe & Merge ----------
+function dedupeExact(slots){
+  const seen = new Set();
+  const out = [];
+  for (const s of slots){
+    const key = [s.roomId, s.startMin, s.endMin, norm(s.title), norm(s.subtitle)].join('|');
+    if (seen.has(key)) continue;
+    seen.add(key);
+    out.push(s);
+  }
+  return out;
+}
+function mergeAdjacent(slots){
+  const byRoom = new Map();
+  for (const s of slots){
+    if (!byRoom.has(s.roomId)) byRoom.set(s.roomId, []);
+    byRoom.get(s.roomId).push({...s});
+  }
+  const merged = [];
+  for (const [roomId, arr] of byRoom.entries()){
+    arr.sort((a,b)=> a.startMin - b.startMin || a.endMin - b.endMin);
+    let cur = null;
+    for (const ev of arr){
+      if (
+        cur &&
+        cur.endMin === ev.startMin &&
+        norm(cur.title) === norm(ev.title) &&
+        norm(cur.subtitle) === norm(ev.subtitle)
+      ){
+        cur.endMin = ev.endMin; // extend
+      } else {
+        if (cur) merged.push(cur);
+        cur = ev;
+      }
+    }
+    if (cur) merged.push(cur);
+  }
+  return merged;
+}
+function cleanSlots(slots, nowMin){
+  const upcoming = (slots || []).filter(s => s.endMin > nowMin);
+  const uniq     = dedupeExact(upcoming);
+  const merged   = mergeAdjacent(uniq);
+  // sort inside each room by start time
+  merged.sort((a,b)=> (a.roomId.localeCompare(b.roomId)) || (a.startMin - b.startMin));
+  return merged;
+}
 
-// --- DATA ---------------------------------------------------------
-async function loadData() {
-  const resp = await fetch(`./events.json?ts=${Date.now()}`, { cache: 'no-store' });
-  if (!resp.ok) throw new Error(`Failed to fetch events.json: ${resp.status} ${resp.statusText}`);
+// ---------- Data loader ----------
+async function loadData(){
+  const url = `./events.json?ts=${Date.now()}`;
+  const resp = await fetch(url, { cache:'no-store' });
+  if (!resp.ok) throw new Error(`Failed to fetch ${url}: ${resp.status} ${resp.statusText}`);
   const data = await resp.json();
-  console.log('Loaded events.json', data ? { rooms: Object.keys(data.rooms||{}).length, slots: (data.slots||[]).length } : 'no data');
+  console.log('Loaded events.json', data ? (typeof data) : 'null');
   return data;
 }
 
-// --- HEADER -------------------------------------------------------
-function renderHeader() {
-  const dEl = document.getElementById('headerDate');
-  const cEl = document.getElementById('headerClock');
+// ---------- Room ordering / clustering ----------
+const SOUTH = ['1A','1B','2A','2B'];
+const NORTH = ['9A','9B','10A','10B'];
+// Fieldhouse is everything else in 3A..8B, in A/B order:
+const FIELDHOUSE = ['3A','3B','4A','4B','5A','5B','6A','6B','7A','7B','8A','8B'];
+
+// ---------- Render ----------
+function renderHeader(){
+  $('#headerDate').textContent  = fmtDate();
+  $('#headerClock').textContent = fmtClock();
+}
+
+function renderClusterRooms(containerEl, roomIds, slotsByRoom){
+  containerEl.innerHTML = ''; // clear
+  for (const id of roomIds){
+    const pillHtml = (slotsByRoom.get(id) || []).map(s => {
+      const line1 = s.title || '';
+      const line2 = s.subtitle ? `<small>${s.subtitle}</small>` : '';
+      const time  = minsToRange(s.startMin, s.endMin);
+      return `
+        <div class="pill">
+          <div>
+            <strong>${escapeHtml(line1)}</strong>
+            ${line2}
+          </div>
+          <div class="time">${time}</div>
+        </div>
+      `;
+    }).join('');
+
+    const body = pillHtml || `<div class="empty">No current/upcoming events</div>`;
+
+    containerEl.insertAdjacentHTML('beforeend', `
+      <div class="room">
+        <div class="title">
+          <div>${id}</div>
+          <div class="badge">${(slotsByRoom.get(id) || []).length} event${(slotsByRoom.get(id)||[]).length===1?'':'s'}</div>
+        </div>
+        <div class="body">
+          ${body}
+        </div>
+      </div>
+    `);
+  }
+}
+
+function escapeHtml(s){
+  return String(s).replace(/[&<>"']/g, c => (
+    { '&':'&amp;', '<':'&lt;', '>':'&gt;', '"':'&quot;', "'":'&#39;' }[c]
+  ));
+}
+
+function renderBoard(data){
   const now = new Date();
-  dEl.textContent = now.toLocaleDateString(undefined, { weekday:'long', month:'short', day:'numeric', year:'numeric' });
-  cEl.textContent = now.toLocaleTimeString(undefined, { hour:'numeric', minute:'2-digit' });
+  const nowMin = now.getHours()*60 + now.getMinutes();
 
-  const ssidEl = document.getElementById('wifiSsid');
-  const passEl = document.getElementById('wifiPass');
-  if (ssidEl) ssidEl.textContent = WIFI_SSID;
-  if (passEl) passEl.textContent = WIFI_PASS;
+  // Clean + filter
+  const cleaned = cleanSlots(data.slots || [], nowMin);
+  console.log(`Slots filtered by time+dedupe: ${ (data.slots||[]).length } -> ${ cleaned.length } (now=${nowMin})`);
+
+  // Index by room
+  const byRoom = new Map();
+  // Initialize all rooms even if empty (so UI shows boxes)
+  const allRooms = [...SOUTH, ...FIELDHOUSE, ...NORTH];
+  for (const r of allRooms) byRoom.set(r, []);
+  for (const s of cleaned){
+    if (!byRoom.has(s.roomId)) continue; // ignore rooms not on the grid
+    byRoom.get(s.roomId).push(s);
+  }
+
+  // Render clusters
+  renderClusterRooms($('#southGrid'), SOUTH, byRoom);
+  renderClusterRooms($('#fhGrid'),    FIELDHOUSE, byRoom);
+  renderClusterRooms($('#northGrid'), NORTH, byRoom);
 }
 
-// --- GRID ---------------------------------------------------------
-function ensureGridCells() {
-  const build = (containerId, roomIds) => {
-    const mount = document.getElementById(containerId);
-    if (!mount || mount.dataset.ready) return;
-    mount.innerHTML = '';
-    roomIds.forEach(r => {
-      const cell = document.createElement('div');
-      cell.className = 'roomcell'; cell.id = `cell-${r}`;
-
-      const h = document.createElement('div');
-      h.className = 'roomcell-h'; h.textContent = r;
-
-      const b = document.createElement('div');
-      b.className = 'roomcell-b'; // event rows go here
-
-      cell.appendChild(h); cell.appendChild(b);
-      mount.appendChild(cell);
-    });
-    mount.dataset.ready = '1';
-  };
-  build('southGrid', groups.south);
-  build('fieldGrid', groups.field);
-  build('northGrid', groups.north);
-}
-
-function visibleSlots(data) {
-  const all = Array.isArray(data.slots) ? data.slots : [];
-  if (!HIDE_PAST) return all;
-
-  const start = data.dayStartMin ?? 360;
-  const end   = data.dayEndMin   ?? 1380;
-  const now   = nowMinutesLocal();
-
-  if (now < start) return all;           // before opening, show full day
-  if (now > end)   return [];            // after closing, show nothing
-
-  const filtered = all.filter(s => s.endMin > now);
-  console.log(`Slots filtered by time: ${all.length} -> ${filtered.length} (now=${now})`);
-  return filtered;
-}
-
-function renderGrid(data) {
-  ensureGridCells();
-
-  const allRoomIds = [...groups.south, ...groups.field, ...groups.north];
-  allRoomIds.forEach(id => {
-    const body = document.querySelector(`#cell-${id} .roomcell-b`);
-    if (body) body.innerHTML = '';
-  });
-
-  const vis = visibleSlots(data);
-
-  // group by room
-  const byRoom = {};
-  vis.forEach(s => {
-    if (!byRoom[s.roomId]) byRoom[s.roomId] = [];
-    byRoom[s.roomId].push(s);
-  });
-
-  Object.entries(byRoom).forEach(([roomId, list]) => {
-    const body = document.querySelector(`#cell-${roomId} .roomcell-b`);
-    if (!body) return;
-
-    list.sort((a,b) => a.startMin - b.startMin);
-    list.forEach(ev => {
-      const row = document.createElement('div'); row.className = 'evt';
-      const l1  = document.createElement('div'); l1.className = 'evt-line1';
-      const l2  = document.createElement('div'); l2.className = 'evt-line2';
-
-      l1.textContent = ev.title || '';
-      const times = `${fmtTime(ev.startMin)}–${fmtTime(ev.endMin)}`;
-      l2.textContent = ev.subtitle ? `${ev.subtitle} • ${times}` : times;
-
-      row.appendChild(l1); row.appendChild(l2);
-      body.appendChild(row);
-    });
-  });
-}
-
-// --- INIT ---------------------------------------------------------
-let CACHE = null;
-
-async function init() {
-  try {
-    CACHE = await loadData();
+// ---------- Init / Loop ----------
+async function tick(){
+  try{
     renderHeader();
-    renderGrid(CACHE);
-    setInterval(() => { renderHeader(); renderGrid(CACHE); }, REFRESH_MS);
-  } catch (err) {
+    const data = await loadData();
+    renderBoard(data);
+  }catch(err){
     console.error(err);
   }
 }
 
-document.addEventListener('DOMContentLoaded', init);
+function startClock(){
+  // refresh clock text every 10s
+  setInterval(()=> renderHeader(), 10_000);
+}
+function startAutoRefresh(){
+  // reload events every 60s so past events fall off
+  setInterval(()=> tick(), 60_000);
+}
+
+document.addEventListener('DOMContentLoaded', () => {
+  tick();
+  startClock();
+  startAutoRefresh();
+});
