@@ -1,47 +1,57 @@
 {
   "dayStartMin": 360,
   "dayEndMin": 1380,
-  "rooms": {
-    "1": {
+  "rooms": [
+    {
       "id": "1",
-      "label": "1"
+      "label": "1",
+      "group": "south"
     },
-    "2": {
+    {
       "id": "2",
-      "label": "2"
+      "label": "2",
+      "group": "south"
     },
-    "3": {
+    {
       "id": "3",
-      "label": "3"
+      "label": "3",
+      "group": "fieldhouse"
     },
-    "4": {
+    {
       "id": "4",
-      "label": "4"
+      "label": "4",
+      "group": "fieldhouse"
     },
-    "5": {
+    {
       "id": "5",
-      "label": "5"
+      "label": "5",
+      "group": "fieldhouse"
     },
-    "6": {
+    {
       "id": "6",
-      "label": "6"
+      "label": "6",
+      "group": "fieldhouse"
     },
-    "7": {
+    {
       "id": "7",
-      "label": "7"
+      "label": "7",
+      "group": "fieldhouse"
     },
-    "8": {
+    {
       "id": "8",
-      "label": "8"
+      "label": "8",
+      "group": "fieldhouse"
     },
-    "9": {
+    {
       "id": "9",
-      "label": "9"
+      "label": "9",
+      "group": "north"
     },
-    "10": {
+    {
       "id": "10",
-      "label": "10"
+      "label": "10",
+      "group": "north"
     }
-  },
+  ],
   "slots": []
 }
