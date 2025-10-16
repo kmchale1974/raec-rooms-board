@@ -8,27 +8,50 @@
 
   <style>
     :root{
-      /* Tweak this to change the “safe area” */
+      /* Safe padding around the 1920×1080 canvas */
       --safe: 40px;
 
+      /* Live preview scale (keeps canvas centered on any screen) */
+      --scale: min( calc(100vw / 1920), calc(100vh / 1080) );
+
       --bg:#0f1115; --panel:#12151c; --ink:#e7eaf1; --muted:#9aa3b2;
-      --accent:#2b87ff; --grid:#1b202a; --now:#ff6b6b;
+      --accent:#2b87ff; --grid:#1b202a;
       --chip:#2a3140; --chip-text:#e7eaf1;
     }
+
     html,body{
-      margin:0; height:100%; background:var(--bg); color:var(--ink);
+      margin:0; height:100%;
+      background:var(--bg); color:var(--ink);
       font-family: Inter, "SF Pro Text", Segoe UI, Roboto, Arial, sans-serif;
     }
 
-    /* Fixed 1920×1080 canvas */
+    /* ---- Preview scaler ----
+       Centers the fixed-size canvas and scales it for any viewport */
+    .preview-wrap{
+      display:flex; align-items:center; justify-content:center;
+      min-height:100vh;
+    }
+    .preview-frame{
+      width: calc(1920px * var(--scale));
+      height: calc(1080px * var(--scale));
+      position:relative;
+    }
+    .preview-frame .stage{
+      position:absolute; inset:0;
+      width:1920px; height:1080px;
+      transform: scale(var(--scale));
+      transform-origin: top left;
+    }
+
+    /* ---- 1920×1080 canvas ---- */
     .stage{
-      width:1920px; height:1080px; margin:0 auto; overflow:hidden;
+      overflow:hidden;
       display:grid; grid-template-rows: 96px 1fr; gap:24px;
-      padding: var(--safe);                /* ⬅️ safe-area padding */
+      padding: var(--safe);
       box-sizing: border-box;
-      background: var(--bg);
-      /* helper outline so you can *see* the safe area; remove later */
+      /* helper outline to verify the safe padding; remove if you want */
       box-shadow: inset 0 0 0 1px rgba(255,255,255,.06);
+      background: var(--bg);
     }
 
     /* Header */
@@ -37,7 +60,7 @@
       border-radius:16px;
       display:flex; align-items:center; justify-content:center;
       position:relative;
-      padding: 0 16px;                    /* inner breathing room */
+      padding: 0 16px;
     }
     .brand{
       position:absolute; left:24px; display:flex; align-items:center; gap:12px;
@@ -57,30 +80,27 @@
     .board{
       background:var(--panel);
       border-radius:16px;
-      padding: 18px;                      /* ⬅️ inner padding for the board */
+      padding: 18px;
       display:block;
     }
 
-    /* Three-column “South / Fieldhouse / North” layout */
+    /* Three-column layout: South / Fieldhouse / North */
     #grid{
       display:grid;
-      grid-template-columns: 1fr 1fr 1fr;
-      gap: 20px;                          /* space between the three blocks */
-      padding: 6px;                       /* ⬅️ prevents chips from touching edges */
+      grid-template-columns: repeat(3, minmax(0,1fr)); /* evenly spaced */
+      gap: 20px;
+      padding: 6px;
       box-sizing:border-box;
       min-height:0;
     }
 
-    .section{
-      display:grid; grid-template-rows: 40px repeat( ?  , 1fr);
-      /* we don’t know the row count at CSS time; JS just fills children */
-      gap: 14px;
-    }
+    .section{ min-width:0; } /* prevent grid children from forcing overflow */
 
     .section .title{
       color:var(--muted); font-size:14px; font-weight:600;
-      display:flex; align-items:center; padding:0 6px;
+      display:flex; align-items:center; padding:0 6px; height:40px;
       border-bottom:1px solid var(--grid);
+      margin-bottom:14px;
     }
 
     .room-cell{
@@ -88,7 +108,7 @@
       border-radius:12px;
       padding:12px;
       background:rgba(255,255,255,0.01);
-      min-height:86px;                    /* ensures a decent cell height */
+      min-height:86px;
       display:flex; flex-direction:column; gap:8px;
     }
 
@@ -106,35 +126,35 @@
     .chip strong{ font-weight:700; }
     .chip small{ color:var(--muted); margin-left:8px; }
 
-    /* Make sure nothing can overflow the canvas visually */
-    .truncate{
-      overflow:hidden; white-space:nowrap; text-overflow:ellipsis;
-    }
+    .truncate{ overflow:hidden; white-space:nowrap; text-overflow:ellipsis; }
   </style>
 </head>
 <body>
-  <div class="stage">
-    <!-- Header -->
-    <div class="header">
-      <div class="brand">
-        <img src="./logo.png" alt="Romeoville A&E Center">
-        <span>Romeoville Athletic & Event Center</span>
-      </div>
-      <div class="dateclock">
-        <div id="headerDate">—</div>
-        <div id="headerClock">—</div>
-      </div>
-      <div class="wifi">
-        <span>Wi-Fi: <b>RAEC_Public</b></span>
-        <span>Password: <b>Publ!c00</b></span>
-      </div>
-    </div>
+  <!-- The preview wrapper makes the 1920×1080 canvas centered and scaled.
+       Yodeck will ignore the scaling (it runs at native 1920×1080), which is fine. -->
+  <div class="preview-wrap">
+    <div class="preview-frame">
+      <div class="stage">
+        <!-- Header -->
+        <div class="header">
+          <div class="brand">
+            <img src="./logo.png" alt="Romeoville A&E Center">
+            <span>Romeoville Athletic & Event Center</span>
+          </div>
+          <div class="dateclock">
+            <div id="headerDate">—</div>
+            <div id="headerClock">—</div>
+          </div>
+          <div class="wifi">
+            <span>Wi-Fi: <b>RAEC_Public</b></span>
+            <span>Password: <b>Publ!c00</b></span>
+          </div>
+        </div>
 
-    <!-- Grid-only board -->
-    <div class="board">
-      <div id="grid">
-        <!-- JS will inject three sections (South / Fieldhouse / North),
-             each with .title and room cells (.room-cell) -->
+        <!-- Grid-only board -->
+        <div class="board">
+          <div id="grid"><!-- sections injected by app.js --></div>
+        </div>
       </div>
     </div>
   </div>
