@@ -1,189 +1,196 @@
-// app.js (grid-only board, fixed rows per section)
-// - Chips wrap to avoid right-edge cutoffs
-// - Section bodies use fixed grid rows (South=2, Fieldhouse=6, North=2)
-// - Past events auto-hide; header clock & date shown
-// - De-duplicate repeated labels like "Extreme Volleyball, Extreme Volleyball"
+// app.js – grid-only board, bigger fonts, no extra room time line,
+// past events fall off, and basic duplicate suppression.
 
-const WIFI_SSID = 'RAEC_Public';
-const WIFI_PASS = 'Publ!c00';
+const EVENTS_URL = `./events.json?ts=${Date.now()}`;
 
-// Map raw room ids to section buckets
-const ROOM_GROUP = {
-  '1': 'south', '2': 'south',
-  '3': 'fieldhouse', '4': 'fieldhouse', '5': 'fieldhouse',
-  '6': 'fieldhouse', '7': 'fieldhouse', '8': 'fieldhouse',
-  '9': 'north', '10': 'north'
-};
-
-function fmtDateTime(now = new Date()) {
-  const d = now.toLocaleDateString(undefined, { weekday:'long', month:'long', day:'numeric' });
-  const t = now.toLocaleTimeString(undefined, { hour:'numeric', minute:'2-digit' });
-  return { d, t };
+// ---- utils ----
+const pad = n => String(n).padStart(2, '0');
+function minsToLabel(mins) {
+  const h24 = Math.floor(mins / 60);
+  const m = mins % 60;
+  const h = ((h24 + 11) % 12) + 1;
+  const ampm = h24 >= 12 ? 'pm' : 'am';
+  return `${h}:${m < 10 ? '0'+m : m}${ampm}`;
 }
 
-function startClock() {
-  const tick = () => {
-    const { d, t } = fmtDateTime();
-    const hd = document.getElementById('headerDate');
-    const hc = document.getElementById('headerClock');
-    if (hd) hd.textContent = d;
-    if (hc) hc.textContent = t;
-  };
-  tick();
-  setInterval(tick, 1000 * 15);
+function formatRange(startMin, endMin) {
+  return `${minsToLabel(startMin)} - ${minsToLabel(endMin)}`;
 }
 
-async function loadData() {
-  const url = `./events.json?ts=${Date.now()}`;
-  const resp = await fetch(url, { cache: 'no-store' });
-  if (!resp.ok) throw new Error(`Failed to fetch events.json: ${resp.status}`);
-  const data = await resp.json();
-  console.log('Loaded events.json', data);
-  return data;
+function nowMinutesLocal() {
+  const d = new Date();
+  return d.getHours() * 60 + d.getMinutes();
 }
 
-// Remove duplicated "X, X" reservee patterns
-function cleanLabel(s) {
-  if (!s) return '';
-  const parts = s.split(',').map(x => x.trim()).filter(Boolean);
-  const uniq = [];
-  for (const p of parts) if (!uniq.includes(p)) uniq.push(p);
-  return uniq.join(', ');
-}
-
-function timeToWindow(startMin, endMin) {
-  const hhmm = (m) => {
-    const h24 = Math.floor(m / 60), m2 = m % 60;
-    const ampm = h24 >= 12 ? 'pm' : 'am';
-    const h12 = ((h24 + 11) % 12) + 1;
-    return `${h12}:${m2.toString().padStart(2,'0')}${ampm}`;
-  };
-  return `${hhmm(startMin)} - ${hhmm(endMin)}`;
-}
-
-function isPast(endMin, nowMin) { return endMin <= nowMin; }
-
-function buildSections(container) {
-  container.innerHTML = `
-    <div class="section section--south" data-group="south">
-      <div class="title">South Gym</div>
-      <div class="section-body" id="sec-south"></div>
-    </div>
-    <div class="section section--fieldhouse" data-group="fieldhouse">
-      <div class="title">Fieldhouse</div>
-      <div class="section-body" id="sec-fieldhouse"></div>
-    </div>
-    <div class="section section--north" data-group="north">
-      <div class="title">North Gym</div>
-      <div class="section-body" id="sec-north"></div>
-    </div>
-  `;
-}
-
-function renderRoomsShell(sections, rooms) {
-  // rooms is an array of {id,label,group}
-  const byGroup = { south:[], fieldhouse:[], north:[] };
-  for (const r of rooms) {
-    const g = ROOM_GROUP[r.id] || r.group || 'fieldhouse';
-    byGroup[g]?.push(r);
-  }
-  // Enforce strict ordering inside each group
-  const sortAsc = (a,b)=> Number(a.id)-Number(b.id);
-  byGroup.south.sort(sortAsc);
-  byGroup.fieldhouse.sort(sortAsc);
-  byGroup.north.sort(sortAsc);
-
-  const fill = (groupId, list) => {
-    const el = document.getElementById(`sec-${groupId}`);
-    if (!el) return;
-    el.innerHTML = list.map(r => `
-      <div class="room-cell" data-room="${r.id}">
-        <div class="room-head">
-          <div class="room-num">${r.label || r.id}</div>
-          <div class="room-window" id="win-${r.id}"></div>
-        </div>
-        <div class="chips" id="chips-${r.id}"></div>
-      </div>
-    `).join('');
-  };
-
-  fill('south', byGroup.south);
-  fill('fieldhouse', byGroup.fieldhouse);
-  fill('north', byGroup.north);
-}
-
-function renderSlotsIntoRooms(slots, dayStartMin, dayEndMin) {
-  // Aggregate by room
-  const byRoom = new Map();
+// Simple “same content” dedupe (room + time + normalized title/subtitle)
+function dedupeSlots(slots) {
+  const seen = new Set();
+  const out = [];
   for (const s of slots) {
-    if (!byRoom.has(s.roomId)) byRoom.set(s.roomId, []);
-    byRoom.get(s.roomId).push(s);
+    const title = (s.title || '').trim().toLowerCase();
+    const subtitle = (s.subtitle || '').trim().toLowerCase();
+    const key = `${s.roomId}|${s.startMin}|${s.endMin}|${title}|${subtitle}`;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    out.push(s);
   }
+  return out;
+}
 
-  for (const [roomId, items] of byRoom.entries()) {
-    // Sort by start time
-    items.sort((a,b)=> a.startMin - b.startMin);
+// ---- render ----
+function renderHeaderClock() {
+  const dateEl = document.getElementById('headerDate');
+  const clockEl = document.getElementById('headerClock');
 
-    // Compute visible window (min start to max end among visible)
-    const minStart = Math.min(...items.map(i => i.startMin));
-    const maxEnd = Math.max(...items.map(i => i.endMin));
-    const win = document.getElementById(`win-${roomId}`);
-    if (win) win.textContent = timeToWindow(minStart, maxEnd);
+  function tick() {
+    const d = new Date();
+    const y = d.getFullYear();
+    const mo = d.toLocaleString(undefined, { month: 'long' });
+    const day = d.getDate();
+    const dow = d.toLocaleString(undefined, { weekday: 'long' });
+    dateEl.textContent = `${dow}, ${mo} ${day}, ${y}`;
 
-    // Render chips
-    const holder = document.getElementById(`chips-${roomId}`);
-    if (!holder) continue;
-    holder.innerHTML = items.map(i => {
-      const title = cleanLabel(i.title);
-      const sub = cleanLabel(i.subtitle || '');
-      const time = timeToWindow(i.startMin, i.endMin);
-      const subHtml = sub ? `<small>${sub}</small>` : '';
-      return `<div class="chip"><strong class="truncate">${title}</strong> ${subHtml} <small class="faint">• ${time}</small></div>`;
-    }).join('');
+    const hh = d.getHours();
+    const mm = pad(d.getMinutes());
+    const ampm = hh >= 12 ? 'PM' : 'AM';
+    const h12 = ((hh + 11) % 12) + 1;
+    clockEl.textContent = `${h12}:${mm} ${ampm}`;
+  }
+  tick();
+  setInterval(tick, 1000);
+}
+
+function renderGrid(data) {
+  const grid = document.getElementById('grid');
+  grid.innerHTML = '';
+
+  // Build three sections
+  const sections = [
+    { id: 'south', title: 'South Gym', rows: ['1','2'], className: 'section--south' },
+    { id: 'fieldhouse', title: 'Fieldhouse', rows: ['3','4','5','6','7','8'], className: 'section--fieldhouse' },
+    { id: 'north', title: 'North Gym', rows: ['9','10'], className: 'section--north' },
+  ];
+
+  const now = nowMinutesLocal();
+
+  // Filter: show only events that haven’t ended
+  const futureSlots = (data.slots || []).filter(s => (s.endMin ?? 0) > now);
+
+  // Suppress exact duplicates
+  const slots = dedupeSlots(futureSlots);
+
+  // Index slots by “roomId” (which is already collapsed to 1..10 by your transform)
+  const byRoom = {};
+  for (const s of slots) {
+    if (!byRoom[s.roomId]) byRoom[s.roomId] = [];
+    byRoom[s.roomId].push(s);
+  }
+  // Sort each room’s events by start time
+  Object.values(byRoom).forEach(arr => arr.sort((a,b) => (a.startMin - b.startMin)));
+
+  for (const sec of sections) {
+    const secEl = document.createElement('div');
+    secEl.className = `section ${sec.className}`;
+
+    const title = document.createElement('div');
+    title.className = 'title';
+    title.textContent = sec.title;
+
+    const body = document.createElement('div');
+    body.className = 'section-body';
+
+    // Render each numbered room cell
+    for (const roomNum of sec.rows) {
+      const cell = document.createElement('div');
+      cell.className = 'room-cell';
+
+      const head = document.createElement('div');
+      head.className = 'room-head';
+
+      const rn = document.createElement('div');
+      rn.className = 'room-num';
+      rn.textContent = roomNum;
+
+      // (Removed room-window time line per your request)
+
+      head.appendChild(rn);
+      cell.appendChild(head);
+
+      // Chips
+      const chips = document.createElement('div');
+      chips.className = 'chips';
+
+      const events = byRoom[roomNum] || [];
+      if (events.length === 0) {
+        // leave empty cell (no “No reservations” text)
+      } else {
+        for (const ev of events) {
+          const chip = document.createElement('div');
+          chip.className = 'chip';
+
+          // Title with optional dedup of repeating ", X" part (e.g., "Extreme Volleyball, Extreme Volleyball")
+          const cleanTitle = (() => {
+            const t = (ev.title || '').trim();
+            const parts = t.split(',').map(s => s.trim()).filter(Boolean);
+            if (parts.length >= 2 && parts[0].toLowerCase() === parts[1].toLowerCase()) {
+              return parts[0];
+            }
+            return t;
+          })();
+
+          // Subtitle optional
+          const sub = (ev.subtitle || '').trim();
+
+          // Time in chip (keep)
+          const timeLabel = formatRange(ev.startMin, ev.endMin);
+
+          chip.innerHTML =
+            `<strong>${cleanTitle}</strong>` +
+            (sub ? `<small>• ${sub}</small>` : ``) +
+            `<small class="faint">• ${timeLabel}</small>`;
+
+          chips.appendChild(chip);
+        }
+      }
+
+      cell.appendChild(chips);
+      body.appendChild(cell);
+    }
+
+    secEl.appendChild(title);
+    secEl.appendChild(body);
+    grid.appendChild(secEl);
   }
 }
 
-function currentMinutes() {
-  const now = new Date();
-  return now.getHours()*60 + now.getMinutes();
+// ---- boot ----
+async function loadData() {
+  const resp = await fetch(EVENTS_URL, { cache: 'no-store' });
+  if (!resp.ok) throw new Error(`Failed to fetch events.json: ${resp.status}`);
+  const json = await resp.json();
+  console.log('Loaded events.json', json);
+  return json;
 }
 
 async function init() {
-  startClock();
+  renderHeaderClock();
 
-  const root = document.getElementById('grid');
-  if (!root) return;
+  try {
+    const data = await loadData();
+    renderGrid(data);
+  } catch (e) {
+    console.error(e);
+  }
 
-  const data = await loadData();
-
-  // Build fixed sections
-  buildSections(root);
-
-  // Ensure we have rooms; if file lists none, synthesize 1..10
-  let rooms = Array.isArray(data.rooms) && data.rooms.length
-    ? data.rooms
-    : [
-        {id:'1', label:'1'}, {id:'2', label:'2'},
-        {id:'3', label:'3'}, {id:'4', label:'4'}, {id:'5', label:'5'},
-        {id:'6', label:'6'}, {id:'7', label:'7'}, {id:'8', label:'8'},
-        {id:'9', label:'9'}, {id:'10', label:'10'}
-      ];
-
-  // Normalize group field if missing
-  rooms = rooms.map(r => ({ ...r, group: ROOM_GROUP[r.id] || r.group || 'fieldhouse' }));
-
-  // Draw empty room shells
-  renderRoomsShell(root, rooms);
-
-  // Filter out past events
-  const nowMin = currentMinutes();
-  const allSlots = Array.isArray(data.slots) ? data.slots : [];
-  const futureSlots = allSlots.filter(s => !isPast(s.endMin, nowMin));
-
-  console.log(`Slots filtered by time: ${allSlots.length} -> ${futureSlots.length} (now=${nowMin})`);
-
-  // Render chips into rooms
-  renderSlotsIntoRooms(futureSlots, data.dayStartMin ?? 360, data.dayEndMin ?? 1380);
+  // Refresh the board every 60s so finished events drop off
+  setInterval(async () => {
+    try {
+      const data = await loadData();
+      renderGrid(data);
+    } catch (e) {
+      console.error(e);
+    }
+  }, 60_000);
 }
 
 document.addEventListener('DOMContentLoaded', init);
