@@ -53,5 +53,132 @@
       "group": "north"
     }
   ],
-  "slots": []
+  "slots": [
+    {
+      "roomId": "1",
+      "startMin": 540,
+      "endMin": 1320,
+      "title": "3 Step Sports, Ray Glassman",
+      "subtitle": "3 STEP SPORTS"
+    },
+    {
+      "roomId": "2",
+      "startMin": 540,
+      "endMin": 1320,
+      "title": "3 Step Sports, Ray Glassman",
+      "subtitle": "3 STEP SPORTS"
+    },
+    {
+      "roomId": "3",
+      "startMin": 540,
+      "endMin": 1320,
+      "title": "3 Step Sports, Ray Glassman",
+      "subtitle": "3 STEP SPORTS"
+    },
+    {
+      "roomId": "4",
+      "startMin": 540,
+      "endMin": 1320,
+      "title": "3 Step Sports, Ray Glassman",
+      "subtitle": "3 STEP SPORTS"
+    },
+    {
+      "roomId": "5",
+      "startMin": 540,
+      "endMin": 1320,
+      "title": "3 Step Sports, Ray Glassman",
+      "subtitle": "3 STEP SPORTS"
+    },
+    {
+      "roomId": "6",
+      "startMin": 540,
+      "endMin": 1320,
+      "title": "3 Step Sports, Ray Glassman",
+      "subtitle": "3 STEP SPORTS"
+    },
+    {
+      "roomId": "7",
+      "startMin": 540,
+      "endMin": 1320,
+      "title": "3 Step Sports, Ray Glassman",
+      "subtitle": "3 STEP SPORTS"
+    },
+    {
+      "roomId": "8",
+      "startMin": 540,
+      "endMin": 1320,
+      "title": "3 Step Sports, Ray Glassman",
+      "subtitle": "3 STEP SPORTS"
+    },
+    {
+      "roomId": "10A",
+      "startMin": 540,
+      "endMin": 1320,
+      "title": "3 Step Sports, Ray Glassman",
+      "subtitle": "3 STEP SPORTS"
+    },
+    {
+      "roomId": "10",
+      "startMin": 540,
+      "endMin": 1320,
+      "title": "3 Step Sports, Ray Glassman",
+      "subtitle": "3 STEP SPORTS"
+    },
+    {
+      "roomId": "10B",
+      "startMin": 540,
+      "endMin": 1320,
+      "title": "3 Step Sports, Ray Glassman",
+      "subtitle": "3 STEP SPORTS"
+    },
+    {
+      "roomId": "9A",
+      "startMin": 540,
+      "endMin": 1320,
+      "title": "3 Step Sports, Ray Glassman",
+      "subtitle": "3 STEP SPORTS"
+    },
+    {
+      "roomId": "9",
+      "startMin": 540,
+      "endMin": 1320,
+      "title": "3 Step Sports, Ray Glassman",
+      "subtitle": "3 STEP SPORTS"
+    },
+    {
+      "roomId": "9B",
+      "startMin": 540,
+      "endMin": 1320,
+      "title": "3 Step Sports, Ray Glassman",
+      "subtitle": "3 STEP SPORTS"
+    },
+    {
+      "roomId": "1A",
+      "startMin": 540,
+      "endMin": 1320,
+      "title": "3 Step Sports, Ray Glassman",
+      "subtitle": "3 STEP SPORTS"
+    },
+    {
+      "roomId": "1B",
+      "startMin": 540,
+      "endMin": 1320,
+      "title": "3 Step Sports, Ray Glassman",
+      "subtitle": "3 STEP SPORTS"
+    },
+    {
+      "roomId": "2A",
+      "startMin": 540,
+      "endMin": 1320,
+      "title": "3 Step Sports, Ray Glassman",
+      "subtitle": "3 STEP SPORTS"
+    },
+    {
+      "roomId": "2B",
+      "startMin": 540,
+      "endMin": 1320,
+      "title": "3 Step Sports, Ray Glassman",
+      "subtitle": "3 STEP SPORTS"
+    }
+  ]
 }
