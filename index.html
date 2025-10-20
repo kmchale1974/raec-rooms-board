@@ -19,13 +19,20 @@
       --chip-text:#e7eaf1;
       --ok:#1f9d6a;
     }
-    html,body{ margin:0; height:100%; background:var(--bg); color:var(--ink); font-family: Inter, "SF Pro Text", Segoe UI, Roboto, Arial, sans-serif; }
 
-    /* Fixed canvas; we auto-scale this (see script at bottom) */
+    html, body{
+      margin:0;
+      height:100%;
+      overflow:hidden; /* prevent scrollbars that nudge scaling */
+      background:var(--bg);
+      color:var(--ink);
+      font-family: Inter, "SF Pro Text", Segoe UI, Roboto, Arial, sans-serif;
+    }
+
+    /* Fixed 1920x1080 canvas; scaled by the script below */
     .stage{
       width:1920px; height:1080px; padding:32px; box-sizing:border-box;
       display:grid; grid-template-rows: 120px 1fr; gap:24px;
-      margin: 0 auto;
     }
 
     /* Header row */
@@ -36,9 +43,7 @@
       display:flex; align-items:center; gap:16px;
     }
     .brand img{ height:80px; width:auto; object-fit:contain; }
-    .dateclock{
-      justify-self:center; text-align:center;
-    }
+    .dateclock{ justify-self:center; text-align:center; }
     #headerDate{ font-size:44px; font-weight:800; letter-spacing:.02em; }
     #headerClock{ font-size:28px; color:var(--muted); margin-top:6px; font-weight:600; }
 
@@ -88,22 +93,16 @@
       display:flex; align-items:center; justify-content:space-between; gap:12px;
       border-bottom:1px dashed var(--grid); padding-bottom:8px;
     }
-    .roomHeader .id{
-      font-size:28px; font-weight:800; letter-spacing:.04em;
-    }
-    .roomHeader .count{
-      font-size:13px; color:var(--muted);
-    }
+    .roomHeader .id{ font-size:28px; font-weight:800; letter-spacing:.04em; }
+    .roomHeader .count{ font-size:13px; color:var(--muted); }
 
     /* Events list within a room */
-    .events{
-      display:flex; flex-direction:column; gap:10px; overflow:auto;
-    }
+    .events{ display:flex; flex-direction:column; gap:10px; overflow:auto; }
     .event{
       background:var(--chip); border:1px solid var(--grid); border-radius:12px;
       padding:10px 12px; display:flex; flex-direction:column; gap:6px;
     }
-    .event .who{ font-size:18px; font-weight:800; line-height:1.15; }
+    .event .who{ font-size:18px; font-weight:800; line-height:1.1; }
     .event .what{ font-size:15px; color:var(--muted); line-height:1.2; }
     .event .when{ font-size:14px; color:#b7c0cf; font-weight:600; }
 
@@ -114,7 +113,7 @@
   <div class="stage">
     <div class="header">
       <div class="brand">
-        <!-- Put your file in the repo root as logo.png -->
+        <!-- Ensure this file exists at repo root -->
         <img src="./logo.png" alt="Romeoville Athletic & Event Center">
       </div>
 
@@ -151,27 +150,32 @@
     </div>
   </div>
 
-  <!-- Load your JS (cache-busted) -->
-  <script type="module" src="./app.js?v=2"></script>
+  <!-- App logic -->
+  <script type="module" src="./app.js?v=autoscale-fix-1"></script>
 
-  <!-- Auto-scale helper (fit 1920x1080 to any screen without scrollbars) -->
+  <!-- Anti-clipping autoscale helper -->
   <script>
     (function fitStageSetup(){
       const STAGE_W = 1920, STAGE_H = 1080;
+
       function fit() {
-        const sx = window.innerWidth  / STAGE_W;
-        const sy = window.innerHeight / STAGE_H;
-        const s  = Math.min(sx, sy);
+        const vw = document.documentElement.clientWidth;
+        const vh = document.documentElement.clientHeight;
+        const s  = Math.min(vw / STAGE_W, vh / STAGE_H) * 0.999; // tiny safety factor
+
         const stage = document.querySelector('.stage');
         if (!stage) return;
+
         stage.style.transform = `scale(${s})`;
         stage.style.transformOrigin = 'top left';
-        document.body.style.minHeight = (STAGE_H * s) + 'px';
-        // center horizontally, pin to top
+
+        // Center horizontally, pin to top; avoid scrollbars
         document.body.style.display = 'flex';
         document.body.style.justifyContent = 'center';
         document.body.style.alignItems = 'flex-start';
+        document.body.style.minHeight = (STAGE_H * s) + 'px';
       }
+
       window.addEventListener('resize', fit);
       window.addEventListener('orientationchange', fit);
       document.addEventListener('DOMContentLoaded', fit);
