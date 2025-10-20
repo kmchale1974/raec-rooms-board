@@ -1,7 +1,7 @@
-// app.js — readable, wrapping grid; past events auto-hide
+// app.js — grid only, no scrollbars, fits 1920×1080, past events auto-hide
 
-// Show as many as needed; rely on scrolling inside each cell
-const MAX_SHOW_PER_CELL = Infinity;
+// How many events to show per cell (to avoid overflow on non-interactive screens)
+const MAX_SHOW_PER_CELL = 3;
 
 // date/clock
 function formatDate(d){
@@ -16,7 +16,7 @@ function minsToLabel(m){
   return d.toLocaleTimeString(undefined, { hour:'numeric', minute:'2-digit' });
 }
 
-// collapse "X, X" -> "X" only (no other abbreviation)
+// collapse "X, X" to "X"
 function cleanName(s){
   if (!s) return s;
   const parts = s.split(',').map(p=>p.trim()).filter(Boolean);
@@ -62,13 +62,12 @@ function renderCells(data){
   const now = new Date();
   const nowMin = now.getHours()*60 + now.getMinutes();
 
-  // Group by room
+  // Group by room & hide past
   const perRoom = {};
   (data.slots || []).forEach(s=>{
-    if (typeof s.endMin === 'number' && s.endMin <= nowMin) return; // hide past
+    if (typeof s.endMin === 'number' && s.endMin <= nowMin) return;
     const roomId = String(s.roomId);
     if (!perRoom[roomId]) perRoom[roomId] = [];
-
     perRoom[roomId].push({
       startMin: s.startMin,
       endMin: s.endMin,
@@ -91,8 +90,9 @@ function renderCells(data){
       const eventsEl = cell.querySelector('.events');
       const badgeEl = cell.querySelector('.badge');
 
-      // Sort & dedupe identical title/time
       let items = (perRoom[roomId] || []).sort((a,b)=>(a.startMin||0)-(b.startMin||0));
+
+      // dedupe exact same (title/subtitle/time), keeps the first
       const seen = new Set();
       items = items.filter(ev=>{
         const key = `${ev.title}|${ev.subtitle}|${ev.startMin}|${ev.endMin}`;
@@ -100,7 +100,6 @@ function renderCells(data){
         seen.add(key); return true;
       });
 
-      // Render
       eventsEl.innerHTML = '';
       const showCount = Math.min(items.length, MAX_SHOW_PER_CELL);
       for (let i=0;i<showCount;i++){
@@ -125,7 +124,7 @@ function renderCells(data){
         eventsEl.appendChild(more);
       }
 
-      // Badge “Now” if active
+      // “Now” badge if something is currently active
       const active = items.some(ev => ev.startMin <= nowMin && nowMin < ev.endMin);
       if (active){
         badgeEl.textContent = 'Now';
@@ -153,7 +152,7 @@ async function init(){
   try{
     const data = await loadData();
     renderCells(data);
-    // refresh every minute to drop past events/live update
+    // refresh every minute to drop past events / load new email transform
     setInterval(async ()=>{
       try{
         const fresh = await loadData();
