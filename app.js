@@ -1,196 +1,175 @@
-// app.js – grid-only board, bigger fonts, no extra room time line,
-// past events fall off, and basic duplicate suppression.
+// app.js — grid-only board with Fieldhouse row taller and event clamping
 
-const EVENTS_URL = `./events.json?ts=${Date.now()}`;
+const MAX_SHOW_PER_CELL = 5; // show up to this many; rest collapse into "+N more"
 
-// ---- utils ----
-const pad = n => String(n).padStart(2, '0');
-function minsToLabel(mins) {
-  const h24 = Math.floor(mins / 60);
-  const m = mins % 60;
-  const h = ((h24 + 11) % 12) + 1;
-  const ampm = h24 >= 12 ? 'pm' : 'am';
-  return `${h}:${m < 10 ? '0'+m : m}${ampm}`;
+// Utility: format today’s date and live clock
+function formatDate(d){
+  return d.toLocaleDateString(undefined, { weekday:'long', month:'long', day:'numeric' });
 }
-
-function formatRange(startMin, endMin) {
-  return `${minsToLabel(startMin)} - ${minsToLabel(endMin)}`;
+function formatClock(d){
+  return d.toLocaleTimeString(undefined, { hour:'numeric', minute:'2-digit' });
 }
-
-function nowMinutesLocal() {
+// Utility: minutes to "h:mma" (e.g., 18:30 -> "6:30 PM")
+function minsToLabel(m){
+  const h = Math.floor(m/60), mm = m%60;
   const d = new Date();
-  return d.getHours() * 60 + d.getMinutes();
+  d.setHours(h, mm, 0, 0);
+  return d.toLocaleTimeString(undefined, { hour:'numeric', minute:'2-digit' });
+}
+// Clean repeated org names: "X, X" -> "X"
+function cleanName(s){
+  if (!s) return s;
+  const parts = s.split(',').map(p=>p.trim()).filter(Boolean);
+  if (parts.length>=2 && parts[0].toLowerCase()===parts[1].toLowerCase()) return parts[0];
+  return s;
+}
+// Load events.json fresh
+async function loadData(){
+  const url = `./events.json?ts=${Date.now()}`;
+  const resp = await fetch(url, { cache:'no-store' });
+  if (!resp.ok) throw new Error(`Failed to fetch ${url}: ${resp.status}`);
+  const data = await resp.json();
+  console.log('Loaded events.json', data);
+  return data;
 }
 
-// Simple “same content” dedupe (room + time + normalized title/subtitle)
-function dedupeSlots(slots) {
-  const seen = new Set();
-  const out = [];
-  for (const s of slots) {
-    const title = (s.title || '').trim().toLowerCase();
-    const subtitle = (s.subtitle || '').trim().toLowerCase();
-    const key = `${s.roomId}|${s.startMin}|${s.endMin}|${title}|${subtitle}`;
-    if (seen.has(key)) continue;
-    seen.add(key);
-    out.push(s);
-  }
-  return out;
+// Map room id -> row bucket
+function bucketForRoom(id){
+  const n = Number(id);
+  if (n===1 || n===2) return 'south';
+  if (n>=3 && n<=8) return 'field';
+  if (n===9 || n===10) return 'north';
+  return 'field';
 }
 
-// ---- render ----
-function renderHeaderClock() {
-  const dateEl = document.getElementById('headerDate');
-  const clockEl = document.getElementById('headerClock');
-
-  function tick() {
-    const d = new Date();
-    const y = d.getFullYear();
-    const mo = d.toLocaleString(undefined, { month: 'long' });
-    const day = d.getDate();
-    const dow = d.toLocaleString(undefined, { weekday: 'long' });
-    dateEl.textContent = `${dow}, ${mo} ${day}, ${y}`;
-
-    const hh = d.getHours();
-    const mm = pad(d.getMinutes());
-    const ampm = hh >= 12 ? 'PM' : 'AM';
-    const h12 = ((hh + 11) % 12) + 1;
-    clockEl.textContent = `${h12}:${mm} ${ampm}`;
+// Render 10 placeholder cells into each row so CSS visibility rules work
+function ensureRowSkeleton(rowEl){
+  rowEl.innerHTML = '';
+  for (let i=1;i<=10;i++){
+    const cell = document.createElement('div');
+    cell.className = 'cell';
+    cell.dataset.room = String(i);
+    cell.innerHTML = `
+      <div class="cellHeader">
+        <span class="roomLabel">${i}</span>
+        <span class="badge"></span>
+      </div>
+      <div class="events"></div>
+    `;
+    rowEl.appendChild(cell);
   }
-  tick();
-  setInterval(tick, 1000);
 }
 
-function renderGrid(data) {
-  const grid = document.getElementById('grid');
-  grid.innerHTML = '';
+// Insert events into their room cell with spacing, clamping, and dedupe
+function renderCells(data){
+  const now = new Date();
+  const nowMin = now.getHours()*60 + now.getMinutes();
 
-  // Build three sections
-  const sections = [
-    { id: 'south', title: 'South Gym', rows: ['1','2'], className: 'section--south' },
-    { id: 'fieldhouse', title: 'Fieldhouse', rows: ['3','4','5','6','7','8'], className: 'section--fieldhouse' },
-    { id: 'north', title: 'North Gym', rows: ['9','10'], className: 'section--north' },
-  ];
+  // Build per-room list
+  const perRoom = {};
+  (data.slots || []).forEach(s=>{
+    // hide past events
+    if (typeof s.endMin === 'number' && s.endMin <= nowMin) return;
 
-  const now = nowMinutesLocal();
+    const roomId = String(s.roomId);
+    if (!perRoom[roomId]) perRoom[roomId] = [];
 
-  // Filter: show only events that haven’t ended
-  const futureSlots = (data.slots || []).filter(s => (s.endMin ?? 0) > now);
+    // Normalize/clean title
+    const title = cleanName(s.title || '').trim();
+    const subtitle = (s.subtitle || '').trim();
 
-  // Suppress exact duplicates
-  const slots = dedupeSlots(futureSlots);
+    perRoom[roomId].push({
+      startMin: s.startMin, endMin: s.endMin,
+      title, subtitle
+    });
+  });
 
-  // Index slots by “roomId” (which is already collapsed to 1..10 by your transform)
-  const byRoom = {};
-  for (const s of slots) {
-    if (!byRoom[s.roomId]) byRoom[s.roomId] = [];
-    byRoom[s.roomId].push(s);
-  }
-  // Sort each room’s events by start time
-  Object.values(byRoom).forEach(arr => arr.sort((a,b) => (a.startMin - b.startMin)));
+  // Fill rows
+  ['south','field','north'].forEach(bucket=>{
+    const rowEl = document.getElementById(`row-${bucket}`);
+    ensureRowSkeleton(rowEl);
 
-  for (const sec of sections) {
-    const secEl = document.createElement('div');
-    secEl.className = `section ${sec.className}`;
+    // For each visible cell in this row, place events
+    Array.from(rowEl.children).forEach(cell=>{
+      const roomId = cell.dataset.room;
+      const rBucket = bucketForRoom(roomId);
+      const show = (rBucket === bucket);
+      cell.style.display = show ? 'flex' : 'none';
+      if (!show) return;
 
-    const title = document.createElement('div');
-    title.className = 'title';
-    title.textContent = sec.title;
+      const eventsEl = cell.querySelector('.events');
+      const badgeEl = cell.querySelector('.badge');
 
-    const body = document.createElement('div');
-    body.className = 'section-body';
+      // Sort by start time
+      let items = (perRoom[roomId] || []).sort((a,b)=>(a.startMin||0)-(b.startMin||0));
 
-    // Render each numbered room cell
-    for (const roomNum of sec.rows) {
-      const cell = document.createElement('div');
-      cell.className = 'room-cell';
+      // Dedupe identical (same title + same window)
+      const seen = new Set();
+      items = items.filter(ev=>{
+        const key = `${ev.title}|${ev.startMin}|${ev.endMin}`;
+        if (seen.has(key)) return false;
+        seen.add(key); return true;
+      });
 
-      const head = document.createElement('div');
-      head.className = 'room-head';
+      // Render up to MAX_SHOW_PER_CELL; remainder -> “+N more”
+      eventsEl.innerHTML = '';
+      const showCount = Math.min(items.length, MAX_SHOW_PER_CELL);
+      for (let i=0;i<showCount;i++){
+        const ev = items[i];
+        const timeStr = (typeof ev.startMin==='number' && typeof ev.endMin==='number')
+          ? `${minsToLabel(ev.startMin)} - ${minsToLabel(ev.endMin)}`
+          : '';
 
-      const rn = document.createElement('div');
-      rn.className = 'room-num';
-      rn.textContent = roomNum;
-
-      // (Removed room-window time line per your request)
-
-      head.appendChild(rn);
-      cell.appendChild(head);
-
-      // Chips
-      const chips = document.createElement('div');
-      chips.className = 'chips';
-
-      const events = byRoom[roomNum] || [];
-      if (events.length === 0) {
-        // leave empty cell (no “No reservations” text)
-      } else {
-        for (const ev of events) {
-          const chip = document.createElement('div');
-          chip.className = 'chip';
-
-          // Title with optional dedup of repeating ", X" part (e.g., "Extreme Volleyball, Extreme Volleyball")
-          const cleanTitle = (() => {
-            const t = (ev.title || '').trim();
-            const parts = t.split(',').map(s => s.trim()).filter(Boolean);
-            if (parts.length >= 2 && parts[0].toLowerCase() === parts[1].toLowerCase()) {
-              return parts[0];
-            }
-            return t;
-          })();
-
-          // Subtitle optional
-          const sub = (ev.subtitle || '').trim();
-
-          // Time in chip (keep)
-          const timeLabel = formatRange(ev.startMin, ev.endMin);
-
-          chip.innerHTML =
-            `<strong>${cleanTitle}</strong>` +
-            (sub ? `<small>• ${sub}</small>` : ``) +
-            `<small class="faint">• ${timeLabel}</small>`;
-
-          chips.appendChild(chip);
-        }
+        const div = document.createElement('div');
+        div.className = 'evt';
+        div.innerHTML = `
+          <div class="title">${ev.title || ''}</div>
+          <div class="time">${timeStr}${ev.subtitle ? ` • ${ev.subtitle}`:''}</div>
+        `;
+        eventsEl.appendChild(div);
+      }
+      if (items.length > showCount){
+        const more = document.createElement('div');
+        more.className = 'more';
+        more.textContent = `+${items.length - showCount} more`;
+        eventsEl.appendChild(more);
       }
 
-      cell.appendChild(chips);
-      body.appendChild(cell);
-    }
-
-    secEl.appendChild(title);
-    secEl.appendChild(body);
-    grid.appendChild(secEl);
-  }
+      // Badge: simple “Now” if any event currently active in this room
+      const active = items.some(ev => ev.startMin <= nowMin && nowMin < ev.endMin);
+      badgeEl.textContent = active ? 'Now' : '';
+      badgeEl.style.color = active ? '#fff' : 'var(--muted)';
+      badgeEl.style.background = active ? 'var(--accent)' : '#0d1118';
+      badgeEl.style.borderColor = active ? 'var(--accent)' : 'var(--grid)';
+    });
+  });
 }
 
-// ---- boot ----
-async function loadData() {
-  const resp = await fetch(EVENTS_URL, { cache: 'no-store' });
-  if (!resp.ok) throw new Error(`Failed to fetch events.json: ${resp.status}`);
-  const json = await resp.json();
-  console.log('Loaded events.json', json);
-  return json;
+function tickHeader(){
+  const now = new Date();
+  const d = document.getElementById('headerDate');
+  const c = document.getElementById('headerClock');
+  if (d) d.textContent = formatDate(now);
+  if (c) c.textContent = formatClock(now);
 }
 
-async function init() {
-  renderHeaderClock();
+async function init(){
+  tickHeader();
+  setInterval(tickHeader, 1000);
 
-  try {
+  try{
     const data = await loadData();
-    renderGrid(data);
-  } catch (e) {
+    renderCells(data);
+    // keep it fresh; re-pull every 60s to drop past events automatically
+    setInterval(async ()=>{
+      try{
+        const fresh = await loadData();
+        renderCells(fresh);
+      }catch(e){ console.error(e); }
+    }, 60000);
+  }catch(e){
     console.error(e);
   }
-
-  // Refresh the board every 60s so finished events drop off
-  setInterval(async () => {
-    try {
-      const data = await loadData();
-      renderGrid(data);
-    } catch (e) {
-      console.error(e);
-    }
-  }, 60_000);
 }
 
 document.addEventListener('DOMContentLoaded', init);
