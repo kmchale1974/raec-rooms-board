@@ -4,6 +4,7 @@
   <meta charset="utf-8" />
   <title>RAEC Rooms Board</title>
   <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <!-- Silence favicon 404s -->
   <link rel="icon" href="data:,">
 
   <style>
@@ -24,6 +25,7 @@
     .stage{
       width:1920px; height:1080px; padding:32px; box-sizing:border-box;
       display:grid; grid-template-rows: 120px 1fr; gap:24px;
+      margin: 0 auto;
     }
 
     /* Header row */
@@ -80,7 +82,7 @@
     .room{
       border:1px solid var(--grid); border-radius:14px; padding:14px;
       display:flex; flex-direction:column; gap:10px; min-height:0; overflow:hidden;
-      background:linear-gradient(180deg, rgba(255,255,255,0.02), rgba(0,0,0,0)) ;
+      background:linear-gradient(180deg, rgba(255,255,255,0.02), rgba(0,0,0,0));
     }
     .roomHeader{
       display:flex; align-items:center; justify-content:space-between; gap:12px;
@@ -101,17 +103,11 @@
       background:var(--chip); border:1px solid var(--grid); border-radius:12px;
       padding:10px 12px; display:flex; flex-direction:column; gap:6px;
     }
-    .event .who{ font-size:18px; font-weight:800; line-height:1.1; }
+    .event .who{ font-size:18px; font-weight:800; line-height:1.15; }
     .event .what{ font-size:15px; color:var(--muted); line-height:1.2; }
     .event .when{ font-size:14px; color:#b7c0cf; font-weight:600; }
 
-    /* Clip long text gracefully (no ellipses since you want full details; we wrap) */
     .who, .what{ word-wrap:break-word; overflow-wrap:anywhere; }
-
-    /* Subtle footer legend (optional) */
-    .legend{
-      position:absolute; right:24px; bottom:18px; color:var(--muted); font-size:12px;
-    }
   </style>
 </head>
 <body>
@@ -155,8 +151,8 @@
     </div>
   </div>
 
-  <!-- Your application code -->
-  <script type="module" src="./app.js"></script>
+  <!-- Load your JS (cache-busted) -->
+  <script type="module" src="./app.js?v=2"></script>
 
   <!-- Auto-scale helper (fit 1920x1080 to any screen without scrollbars) -->
   <script>
@@ -172,10 +168,9 @@
         stage.style.transformOrigin = 'top left';
         document.body.style.minHeight = (STAGE_H * s) + 'px';
         // center horizontally, pin to top
-        if (!stage.parentElement) return;
-        stage.parentElement.style.display = 'flex';
-        stage.parentElement.style.justifyContent = 'center';
-        stage.parentElement.style.alignItems = 'flex-start';
+        document.body.style.display = 'flex';
+        document.body.style.justifyContent = 'center';
+        document.body.style.alignItems = 'flex-start';
       }
       window.addEventListener('resize', fit);
       window.addEventListener('orientationchange', fit);
