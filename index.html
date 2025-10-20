@@ -16,115 +16,111 @@
       --grid:#1b202a;
       --chip:#2a3140;
       --chip-text:#e7eaf1;
-      --ok:#52d273;
-      --warn:#ffcc66;
     }
     html,body{
       margin:0; height:100%; background:var(--bg); color:var(--ink);
       font-family: Inter, "SF Pro Text", Segoe UI, Roboto, Arial, sans-serif;
     }
-    /* 1920×1080 stage with safe padding all around */
+    /* 1920×1080 stage with padding */
     .stage{
       width:1920px; height:1080px; margin:0 auto;
-      padding:28px; box-sizing:border-box;  /* <- edge padding */
-      display:grid; grid-template-rows: 96px 1fr; gap:20px;
+      padding:32px; box-sizing:border-box;
+      display:grid; grid-template-rows: 110px 1fr; gap:24px;
       overflow:hidden;
     }
 
     /* Header */
     .header{
-      background:var(--panel); border-radius:16px;
+      background:var(--panel); border-radius:18px;
       display:grid; grid-template-columns: 1fr auto 1fr; align-items:center;
-      padding:16px 20px;
+      padding:18px 24px;
     }
-    .brand{
-      display:flex; align-items:center; gap:12px;
-    }
-    .brand img{
-      height:56px; width:auto; display:block;
-    }
+    .brand{ display:flex; align-items:center; gap:14px; }
+    .brand img{ height:64px; width:auto; display:block; }
+
     .dateclock{
       justify-self:center; text-align:center;
-      display:flex; gap:16px; align-items:baseline;
-      font-weight:700;
+      display:flex; gap:18px; align-items:baseline;
+      font-weight:800;
     }
-    #headerDate{ font-size:36px; }
-    #headerClock{ font-size:28px; color:var(--muted); }
+    #headerDate{ font-size:40px; }
+    #headerClock{ font-size:30px; color:var(--muted); }
+
     .wifi{
       justify-self:end; text-align:right; color:var(--muted);
-      line-height:1.2; font-size:16px;
+      line-height:1.25; font-size:18px;
     }
-    .wifi .strong{ color:var(--ink); font-weight:600; }
+    .wifi .strong{ color:var(--ink); font-weight:700; }
 
-    /* Main grid: South (1fr), Fieldhouse (1.6fr), North (1fr) */
+    /* Main grid: give Fieldhouse the most height */
     .grid-wrap{
-      background:var(--panel); border-radius:16px; padding:16px; box-sizing:border-box;
-      display:grid; grid-template-rows: 1fr 1.6fr 1fr; gap:16px; height:100%;
+      background:var(--panel); border-radius:18px; padding:18px; box-sizing:border-box;
+      display:grid; grid-template-rows: 1.2fr 2.4fr 1.2fr; gap:18px; height:100%;
     }
 
     .row{
       display:grid;
       grid-template-columns: repeat(10, 1fr);
-      gap:12px;
+      gap:14px;
       height:100%;
     }
 
-    /* We only fill certain columns per row; others are just empty spacers */
     .cell{
-      background:transparent;
       border:1px solid var(--grid);
       border-radius:14px;
-      padding:10px 12px;
-      display:flex; flex-direction:column; gap:8px;
+      padding:14px 14px;
+      display:flex; flex-direction:column; gap:10px;
       overflow:hidden;
-      min-width:0; /* keep inner text ellipsized instead of overflowing */
+      min-width:0; box-sizing:border-box;
+      background:transparent;
     }
     .cellHeader{
       display:flex; justify-content:space-between; align-items:center;
-      font-weight:700; font-size:22px; color:#fff; letter-spacing:.02em;
+      font-weight:800; font-size:26px; color:#fff; letter-spacing:.02em;
     }
     .cellHeader .badge{
-      font-weight:600; font-size:13px; color:var(--muted);
-      background:#0d1118; border:1px solid var(--grid); padding:2px 8px; border-radius:999px;
+      font-weight:700; font-size:15px; color:#fff;
+      background:var(--accent); border:1px solid var(--accent);
+      padding:4px 10px; border-radius:999px;
+      display:none; /* shown only when “Now” */
     }
 
-    /* event list inside a cell */
     .events{
-      display:flex; flex-direction:column; gap:8px; overflow:auto;
+      display:flex; flex-direction:column; gap:10px;
+      overflow:auto;
     }
+    /* Always allow wrapping (no ellipses) */
     .evt{
-      background:var(--chip); border:1px solid var(--grid); border-radius:10px;
-      padding:8px 10px; display:flex; flex-direction:column; gap:4px;
-      line-height:1.2;
+      background:var(--chip); border:1px solid var(--grid); border-radius:12px;
+      padding:10px 12px; display:flex; flex-direction:column; gap:6px;
+      line-height:1.25;
     }
     .evt .title{
-      font-size:18px; font-weight:700; color:var(--chip-text);
-      white-space:nowrap; overflow:hidden; text-overflow:ellipsis;
+      font-size:22px; font-weight:800; color:var(--chip-text);
+      white-space:normal; word-break:break-word; overflow:visible;
     }
     .evt .time{
-      font-size:14px; color:var(--muted);
-      white-space:nowrap; overflow:hidden; text-overflow:ellipsis;
+      font-size:18px; color:var(--muted);
+      white-space:normal; word-break:break-word; overflow:visible;
     }
-    .more{
-      font-size:14px; color:var(--muted); padding-top:2px;
-    }
+    .more{ font-size:16px; color:var(--muted); }
 
-    /* Put the cells we use in each row; others are placeholders */
-    /* South row uses col 1–2, center empty, col 9–10 are not in this row */
-    .row.south .cell:nth-child(n+1):nth-child(-n+2){ display:flex; }
-    .row.south .cell:nth-child(n+3):nth-child(-n+10){ visibility:hidden; }
+    /* Visibility rules per row */
+    .row.south .cell:nth-child(-n+2){ display:flex; }
+    .row.south .cell:nth-child(n+3){ display:none; }
 
-    /* Fieldhouse row uses col 3–8 */
-    .row.field .cell:nth-child(1), .row.field .cell:nth-child(2){ visibility:hidden; }
+    .row.field .cell:nth-child(1),
+    .row.field .cell:nth-child(2),
+    .row.field .cell:nth-child(9),
+    .row.field .cell:nth-child(10){ display:none; }
     .row.field .cell:nth-child(n+3):nth-child(-n+8){ display:flex; }
-    .row.field .cell:nth-child(9), .row.field .cell:nth-child(10){ visibility:hidden; }
 
-    /* North row uses col 9–10 */
-    .row.north .cell:nth-child(n+1):nth-child(-n+8){ visibility:hidden; }
-    .row.north .cell:nth-child(9), .row.north .cell:nth-child(10){ display:flex; }
+    .row.north .cell:nth-child(-n+8){ display:none; }
+    .row.north .cell:nth-child(9),
+    .row.north .cell:nth-child(10){ display:flex; }
 
-    /* Scrollbars subtle */
-    .events::-webkit-scrollbar{ width:8px; }
+    /* Subtle scrollbars in the event lists */
+    .events::-webkit-scrollbar{ width:10px; }
     .events::-webkit-scrollbar-thumb{ background:var(--grid); border-radius:8px; }
   </style>
 </head>
@@ -145,16 +141,9 @@
     </div>
 
     <div class="grid-wrap">
-      <div class="row south" id="row-south">
-        <!-- 10 slots; we only show 1–2 here, others are hidden via CSS -->
-        <!-- JS will fill in order 1..10 so the mapping stays consistent -->
-      </div>
-      <div class="row field" id="row-field">
-        <!-- JS fills 1..10, but CSS makes only 3..8 visible here -->
-      </div>
-      <div class="row north" id="row-north">
-        <!-- JS fills 1..10, but CSS makes only 9..10 visible here -->
-      </div>
+      <div class="row south" id="row-south"></div>
+      <div class="row field" id="row-field"></div>
+      <div class="row north" id="row-north"></div>
     </div>
   </div>
 
