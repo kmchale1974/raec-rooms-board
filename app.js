@@ -1,186 +1,175 @@
-<!doctype html>
-<html lang="en">
-<head>
-  <meta charset="utf-8" />
-  <title>RAEC Rooms Board</title>
-  <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <link rel="icon" href="data:,">
+// app.js — pure JavaScript (no HTML here!)
 
-  <style>
-    :root{
-      --bg:#0f1115;
-      --panel:#12151c;
-      --ink:#e7eaf1;
-      --muted:#9aa3b2;
-      --accent:#2b87ff;
-      --grid:#1b202a;
-      --chip:#263043;
-      --chip-text:#e7eaf1;
-      --ok:#1f9d6a;
+/** Utilities **/
+const pad = (n) => String(n).padStart(2, '0');
+function minutesToLabel(m){
+  const h24 = Math.floor(m/60), mm = m%60;
+  const h12 = ((h24 + 11) % 12) + 1;
+  const ampm = h24 >= 12 ? 'pm' : 'am';
+  return `${h12}:${pad(mm)}${ampm}`;
+}
+
+// Pickleball label cleaner
+function normalizePickleball(title, subtitle){
+  const blob = `${title || ''} ${subtitle || ''}`.toLowerCase();
+  if (blob.includes('pickleball')) {
+    return {
+      who: 'Open Pickleball',
+      what: '', // hide internal note
+    };
+  }
+  // Normal case
+  return {
+    who: title || '',
+    what: subtitle || '',
+  };
+}
+
+// Collapse duplicate events per room by key
+function uniqueByKey(arr, keyFn){
+  const seen = new Set();
+  const out = [];
+  for (const item of arr) {
+    const k = keyFn(item);
+    if (seen.has(k)) continue;
+    seen.add(k);
+    out.push(item);
+  }
+  return out;
+}
+
+/** Load events.json (with cache-busting) **/
+async function loadData(){
+  const url = `./events.json?ts=${Date.now()}`;
+  const resp = await fetch(url, { cache: 'no-store' });
+  if (!resp.ok) throw new Error(`Failed to fetch ${url}: ${resp.status}`);
+  const data = await resp.json();
+  console.log('Loaded events.json', data);
+  return data;
+}
+
+/** Render the grid **/
+function ensureRoomsContainers(){
+  const south = document.getElementById('southRooms');
+  const field = document.getElementById('fieldhouseRooms');
+  const north = document.getElementById('northRooms');
+  if (!south || !field || !north) return;
+
+  // South: rooms 1,2 (stack)
+  south.innerHTML = `
+    <div class="room" data-room="1"><div class="roomHeader"><div class="id">1</div><div class="count" id="count-1"></div></div><div class="events" id="ev-1"></div></div>
+    <div class="room" data-room="2"><div class="roomHeader"><div class="id">2</div><div class="count" id="count-2"></div></div><div class="events" id="ev-2"></div></div>
+  `;
+
+  // Fieldhouse: 3..8 (2x3)
+  field.innerHTML = '';
+  [3,4,5,6,7,8].forEach(id => {
+    field.innerHTML += `
+      <div class="room" data-room="${id}">
+        <div class="roomHeader"><div class="id">${id}</div><div class="count" id="count-${id}"></div></div>
+        <div class="events" id="ev-${id}"></div>
+      </div>`;
+  });
+
+  // North: 9,10 (stack)
+  north.innerHTML = `
+    <div class="room" data-room="9"><div class="roomHeader"><div class="id">9</div><div class="count" id="count-9"></div></div><div class="events" id="ev-9"></div></div>
+    <div class="room" data-room="10"><div class="roomHeader"><div class="id">10</div><div class="count" id="count-10"></div></div><div class="events" id="ev-10"></div></div>
+  `;
+}
+
+function renderClock(){
+  const dateEl = document.getElementById('headerDate');
+  const clockEl = document.getElementById('headerClock');
+  const now = new Date();
+  const day = now.toLocaleDateString(undefined, { weekday: 'long' });
+  const date = now.toLocaleDateString(undefined, { month: 'long', day: 'numeric', year: 'numeric' });
+  const time = now.toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' });
+  if (dateEl) dateEl.textContent = `${day}, ${date}`;
+  if (clockEl) clockEl.textContent = time;
+}
+
+function render(data){
+  ensureRoomsContainers();
+
+  const now = new Date();
+  const nowMin = now.getHours()*60 + now.getMinutes();
+
+  // events.json expected: { rooms:[{id,label,group}...], slots:[{roomId,startMin,endMin,title,subtitle}] }
+  const allSlots = Array.isArray(data.slots) ? data.slots : [];
+  // Hide past events: only keep where end is in the future
+  let future = allSlots.filter(s => (s.endMin ?? 0) > nowMin);
+
+  // Clean labels, normalize Pickleball titles, remove exact dupes per room+window+who+what
+  future = future.map(s => {
+    const clean = normalizePickleball(s.title, s.subtitle);
+    return {
+      ...s,
+      who: clean.who,
+      what: clean.what,
+      startLabel: minutesToLabel(s.startMin ?? 0),
+      endLabel: minutesToLabel(s.endMin ?? 0),
+    };
+  });
+
+  // De-duplicate exact repeats within a room and same time range and same text
+  const dedupedByRoom = {};
+  for (const slot of future) {
+    const room = String(slot.roomId);
+    if (!dedupedByRoom[room]) dedupedByRoom[room] = [];
+    dedupedByRoom[room].push(slot);
+  }
+  Object.keys(dedupedByRoom).forEach(room => {
+    dedupedByRoom[room] = uniqueByKey(
+      dedupedByRoom[room].sort((a,b)=> (a.startMin-b.startMin) || (a.endMin-b.endMin) || a.who.localeCompare(b.who)),
+      s => `${s.startMin}-${s.endMin}-${s.who}-${s.what}`
+    );
+  });
+
+  // Render per room
+  const rooms = (data.rooms || []).map(r => String(r.id));
+  rooms.forEach(id => {
+    const listEl = document.getElementById(`ev-${id}`);
+    const countEl = document.getElementById(`count-${id}`);
+    if (!listEl) return;
+    const items = dedupedByRoom[id] || [];
+    listEl.innerHTML = '';
+    if (countEl) countEl.textContent = items.length ? `${items.length} event${items.length>1?'s':''}` : '';
+    for (const ev of items) {
+      const who = ev.who || '';
+      const what = ev.what || '';
+      const when = `${ev.startLabel} – ${ev.endLabel}`;
+      const card = document.createElement('div');
+      card.className = 'event';
+      card.innerHTML = `
+        <div class="who">${who}</div>
+        ${what ? `<div class="what">${what}</div>` : ``}
+        <div class="when">${when}</div>
+      `;
+      listEl.appendChild(card);
     }
-    html,body{ margin:0; height:100%; background:var(--bg); color:var(--ink); font-family: Inter, "SF Pro Text", Segoe UI, Roboto, Arial, sans-serif; }
+  });
+}
 
-    /* Fixed canvas; we auto-scale this (see script at bottom) */
-    .stage{
-      width:1920px; height:1080px; padding:32px; box-sizing:border-box;
-      display:grid; grid-template-rows: 120px 1fr; gap:24px;
-    }
+/** Init **/
+async function init(){
+  try {
+    renderClock();
+    setInterval(renderClock, 1000 * 30); // refresh clock every 30s
 
-    /* Header row */
-    .header{
-      display:grid; grid-template-columns: 360px 1fr 360px; align-items:center;
-    }
-    .brand{
-      display:flex; align-items:center; gap:16px;
-    }
-    .brand img{ height:80px; width:auto; object-fit:contain; }
-    .dateclock{
-      justify-self:center; text-align:center;
-    }
-    #headerDate{ font-size:44px; font-weight:800; letter-spacing:.02em; }
-    #headerClock{ font-size:28px; color:var(--muted); margin-top:6px; font-weight:600; }
+    const data = await loadData();
+    render(data);
 
-    .wifi{
-      justify-self:end; background:var(--panel); border:1px solid var(--grid);
-      border-radius:14px; padding:14px 16px; min-width:320px;
-    }
-    .wifi .title{ font-size:16px; color:var(--muted); letter-spacing:.08em; text-transform:uppercase; }
-    .wifi .row{ display:flex; justify-content:space-between; gap:12px; margin-top:6px; }
-    .wifi .row span:first-child{ color:var(--muted); }
-    .wifi .row span:last-child{ font-weight:700; }
+    // Optionally refresh events every few minutes
+    setInterval(async () => {
+      try {
+        const fresh = await loadData();
+        render(fresh);
+      } catch (e) { console.warn('Refresh failed:', e); }
+    }, 1000 * 60 * 5);
+  } catch (e) {
+    console.error(e);
+  }
+}
 
-    /* Grid container: South | Fieldhouse | North */
-    .grid{
-      display:grid; grid-template-columns: 1fr 1.5fr 1fr; gap:24px;
-      height:100%;
-    }
-
-    .group{
-      background:var(--panel); border:1px solid var(--grid); border-radius:18px;
-      padding:16px; display:grid; grid-template-rows: 44px 1fr; gap:12px;
-      overflow:hidden;
-    }
-    .group .title{
-      font-size:18px; color:var(--muted); letter-spacing:.1em; text-transform:uppercase;
-      border-bottom:1px solid var(--grid); display:flex; align-items:center; padding-bottom:6px;
-    }
-
-    /* South/North: 2 rows (1..2) and (9..10) stacked */
-    .rooms-stack{
-      display:grid; grid-template-rows: 1fr 1fr; gap:12px; min-height:0;
-    }
-
-    /* Fieldhouse: 2 rows x 3 cols for 3..8 */
-    .rooms-fieldhouse{
-      display:grid; grid-template-columns: repeat(3, 1fr); grid-template-rows: 1fr 1fr;
-      gap:12px; min-height:0;
-    }
-
-    /* Individual room card */
-    .room{
-      border:1px solid var(--grid); border-radius:14px; padding:14px;
-      display:flex; flex-direction:column; gap:10px; min-height:0; overflow:hidden;
-      background:linear-gradient(180deg, rgba(255,255,255,0.02), rgba(0,0,0,0)) ;
-    }
-    .roomHeader{
-      display:flex; align-items:center; justify-content:space-between; gap:12px;
-      border-bottom:1px dashed var(--grid); padding-bottom:8px;
-    }
-    .roomHeader .id{
-      font-size:28px; font-weight:800; letter-spacing:.04em;
-    }
-    .roomHeader .count{
-      font-size:13px; color:var(--muted);
-    }
-
-    /* Events list within a room */
-    .events{
-      display:flex; flex-direction:column; gap:10px; overflow:auto;
-    }
-    .event{
-      background:var(--chip); border:1px solid var(--grid); border-radius:12px;
-      padding:10px 12px; display:flex; flex-direction:column; gap:6px;
-    }
-    .event .who{ font-size:18px; font-weight:800; line-height:1.1; }
-    .event .what{ font-size:15px; color:var(--muted); line-height:1.2; }
-    .event .when{ font-size:14px; color:#b7c0cf; font-weight:600; }
-
-    /* Clip long text gracefully (no ellipses since you want full details; we wrap) */
-    .who, .what{ word-wrap:break-word; overflow-wrap:anywhere; }
-
-    /* Subtle footer legend (optional) */
-    .legend{
-      position:absolute; right:24px; bottom:18px; color:var(--muted); font-size:12px;
-    }
-  </style>
-</head>
-<body>
-  <div class="stage">
-    <div class="header">
-      <div class="brand">
-        <!-- Put your file in the repo root as logo.png -->
-        <img src="./logo.png" alt="Romeoville Athletic & Event Center">
-      </div>
-
-      <div class="dateclock">
-        <div id="headerDate">—</div>
-        <div id="headerClock">—</div>
-      </div>
-
-      <div class="wifi">
-        <div class="title">Guest Wi-Fi</div>
-        <div class="row"><span>Network</span><span id="wifiSsid">RAEC-Public</span></div>
-        <div class="row"><span>Password</span><span id="wifiPass">Publ!c00</span></div>
-      </div>
-    </div>
-
-    <div class="grid">
-      <!-- South Gym (1,2) -->
-      <section class="group" id="group-south">
-        <div class="title">South Gym</div>
-        <div class="rooms-stack" id="southRooms"></div>
-      </section>
-
-      <!-- Fieldhouse (3..8) -->
-      <section class="group" id="group-fieldhouse">
-        <div class="title">Fieldhouse</div>
-        <div class="rooms-fieldhouse" id="fieldhouseRooms"></div>
-      </section>
-
-      <!-- North Gym (9,10) -->
-      <section class="group" id="group-north">
-        <div class="title">North Gym</div>
-        <div class="rooms-stack" id="northRooms"></div>
-      </section>
-    </div>
-  </div>
-
-  <!-- Your application code -->
-  <script type="module" src="./app.js"></script>
-
-  <!-- Auto-scale helper (fit 1920x1080 to any screen without scrollbars) -->
-  <script>
-    (function fitStageSetup(){
-      const STAGE_W = 1920, STAGE_H = 1080;
-      function fit() {
-        const sx = window.innerWidth  / STAGE_W;
-        const sy = window.innerHeight / STAGE_H;
-        const s  = Math.min(sx, sy);
-        const stage = document.querySelector('.stage');
-        if (!stage) return;
-        stage.style.transform = `scale(${s})`;
-        stage.style.transformOrigin = 'top left';
-        document.body.style.minHeight = (STAGE_H * s) + 'px';
-        // center horizontally, pin to top
-        if (!stage.parentElement) return;
-        stage.parentElement.style.display = 'flex';
-        stage.parentElement.style.justifyContent = 'center';
-        stage.parentElement.style.alignItems = 'flex-start';
-      }
-      window.addEventListener('resize', fit);
-      window.addEventListener('orientationchange', fit);
-      document.addEventListener('DOMContentLoaded', fit);
-    })();
-  </script>
-</body>
-</html>
+document.addEventListener('DOMContentLoaded', init);
