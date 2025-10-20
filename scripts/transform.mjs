@@ -1,326 +1,281 @@
 // scripts/transform.mjs
-// Node 20+ ESM
-
+// Node 20+, package.json should have: { "type": "module" }
 import fs from 'fs';
 import path from 'path';
-import { fileURLToPath } from 'url';
 
-// --- Config ---
-const CSV_PATH = process.env.CSV_PATH || 'data/inbox/latest.csv';
-const JSON_OUT = process.env.JSON_OUT || 'events.json';
-const DAY_START_MIN = 6 * 60;   // 06:00
-const DAY_END_MIN   = 23 * 60;  // 23:00
+const CSV_PATH  = process.env.CSV_PATH  || 'data/inbox/latest.csv';
+const JSON_OUT  = process.env.JSON_OUT  || 'events.json';
 
-// --- Helpers ---
-const __filename = fileURLToPath(import.meta.url);
-const __dirname  = path.dirname(__filename);
+// Day window (minutes after midnight) — your board expects 6:00–23:00
+const dayStartMin = 6 * 60;
+const dayEndMin   = 23 * 60;
 
-function readFileUtf8(p) {
-  try { return fs.readFileSync(p, 'utf8'); }
-  catch { return ''; }
-}
-
-function toMinutes(h12, m, ampm) {
-  let h = parseInt(h12, 10);
-  let min = parseInt(m, 10);
-  if (ampm.toLowerCase() === 'pm' && h !== 12) h += 12;
-  if (ampm.toLowerCase() === 'am' && h === 12) h = 0;
-  return h * 60 + min;
-}
-
-function parseTimeRange(s) {
-  // e.g. "9:30am - 12:30pm" or "4:00pm -  7:00pm"
-  if (!s) return null;
-  const m = s.toLowerCase().match(/(\d{1,2}):(\d{2})\s*(am|pm)\s*-\s*(\d{1,2}):(\d{2})\s*(am|pm)/i);
-  if (!m) return null;
-  const start = toMinutes(m[1], m[2], m[3]);
-  const end   = toMinutes(m[4], m[5], m[6]);
-  return { startMin: start, endMin: end };
-}
-
-function thirdMondayOfMarch(y) {
-  const d = new Date(y, 2, 1); // Mar 1
-  const day = d.getDay(); // 0..6 Sun..Sat
-  const offset = (8 - day) % 7; // first Monday
-  return new Date(y, 2, 1 + offset + 14); // third Monday
-}
-function secondMondayOfNovember(y) {
-  const d = new Date(y, 10, 1); // Nov 1
-  const day = d.getDay();
-  const offset = (8 - day) % 7; // first Monday
-  return new Date(y, 10, 1 + offset + 7); // second Monday
-}
-function isBasketballFloorDown(date = new Date()) {
-  // Basketball floors: from 3rd Mon of March through 2nd Mon of Nov
-  const y = date.getFullYear();
-  const start = thirdMondayOfMarch(y);
-  const end = secondMondayOfNovember(y);
-  return date >= start && date < end;
-}
-
-function looksLikePickleball(purpose) {
-  return /pickleball/i.test(purpose || '');
-}
-
-function cleanOrgName(s) {
-  if (!s) return '';
-  // Remove duplicate trailing segment after comma: "Extreme Volleyball, Extreme Volleyball" -> "Extreme Volleyball"
-  const parts = s.split(',').map(x => x.trim()).filter(Boolean);
-  if (parts.length >= 2) {
-    const last = parts[parts.length - 1];
-    const first = parts[0];
-    if (last.toLowerCase() === first.toLowerCase()) {
-      return first;
-    }
-  }
-  // Remove “, Rentals - On Hold” etc. for public display
-  return s.replace(/\s*,\s*Rentals\s*-\s*On\s*Hold/i, '').trim();
-}
-
-function cleanPurpose(s) {
-  if (!s) return '';
-  // Drop internal-only note
-  return s.replace(/\s*internal hold per nm\s*/ig, '').trim();
-}
-
-function formatWhoWhat(reservee, purpose) {
-  const who = cleanOrgName(reservee);
-  let what = cleanPurpose(purpose);
-
-  // Pickleball rule: title becomes "Open Pickleball"
-  if (looksLikePickleball(purpose)) return { title: 'Open Pickleball', subtitle: '' };
-
-  // If subtitle just repeats who, drop it
-  if (what && who && what.toLowerCase() === who.toLowerCase()) what = '';
-  return { title: who || what || '—', subtitle: (who && what && who.toLowerCase() !== what.toLowerCase()) ? what : '' };
-}
-
-function normalize(s) {
-  return (s || '')
-    .toLowerCase()
-    .replace(/\s+/g, ' ')
-    .replace(/[^\w\s:&]/g, '')
-    .trim();
-}
-
-// Facility → rooms map (single-facility rows)
-// Return array of room ids (strings)
-function mapFacilityToRooms(facility) {
-  const f = facility || '';
-
-  // South gym
-  if (/AC Gym - (Half Court 1[AB]|Court 1-AB|Full Gym 1AB & 2AB|Championship Court)/i.test(f)) {
-    if (/Court 1-AB/i.test(f) || /Half Court 1[AB]/i.test(f)) return ['1'];
-    // Championship Court is the same as Court 1 & 2 (both shown)
-    if (/Championship Court/i.test(f)) return ['1','2'];
-    if (/Full Gym 1AB & 2AB/i.test(f)) return ['1','2'];
-  }
-  if (/AC Gym - (Half Court 2[AB]|Court 2-AB|Full Gym 1AB & 2AB|Championship Court)/i.test(f)) {
-    if (/Court 2-AB/i.test(f) || /Half Court 2[AB]/i.test(f)) return ['2'];
-    if (/Championship Court/i.test(f)) return ['1','2'];
-    if (/Full Gym 1AB & 2AB/i.test(f)) return ['1','2'];
-  }
-
-  // North gym
-  if (/AC Gym - (Half Court 9[AB]|Court 9-AB|Full Gym 9 & 10)/i.test(f)) {
-    if (/Court 9-AB/i.test(f) || /Half Court 9[AB]/i.test(f)) return ['9'];
-    if (/Full Gym 9 & 10/i.test(f)) return ['9','10'];
-  }
-  if (/AC Gym - (Half Court 10[AB]|Court 10-AB|Full Gym 9 & 10)/i.test(f)) {
-    if (/Court 10-AB/i.test(f) || /Half Court 10[AB]/i.test(f)) return ['10'];
-    if (/Full Gym 9 & 10/i.test(f)) return ['9','10'];
-  }
-
-  // Fieldhouse (basketball floor down): explicit “Court X”
-  if (/AC Fieldhouse - Court\s*[3-8]/i.test(f)) {
-    const m = f.match(/Court\s*(\d+)/i);
-    if (m) return [String(parseInt(m[1], 10))];
-  }
-
-  // Fieldhouse broad range: “AC Fieldhouse Court 3-8”
-  if (/AC Fieldhouse Court 3-8/i.test(f)) {
-    // we’ll resolve to specific courts later if we find overlapping specific rows
-    return ['3','4','5','6','7','8'];
-  }
-
-  // Turf names — ignored when basketball floor is down
-  if (/AC Fieldhouse - (Full Turf|Half Turf North|Half Turf South|Quarter Turf)/i.test(f)) {
-    // handled outside depending on season
-    return ['3','4','5','6','7','8']; // placeholder; filtered later if needed
-  }
-
-  return []; // unknown → ignore
-}
-
-function overlaps(aStart, aEnd, bStart, bEnd) {
-  return aStart < bEnd && bStart < aEnd;
-}
-
-// --- CSV parsing (simple) ---
+// --- tiny CSV reader that handles quotes ---
 function parseCsv(text) {
-  if (!text.trim()) return [];
-  // Split lines tolerant of CRLF
-  const lines = text.split(/\r?\n/).filter(Boolean);
-
-  // Header row (support “Location:” vs “Location”)
-  const header = lines[0].split(',').map(h => h.trim().replace(/:$/,'').toLowerCase());
-  const idx = {
-    location: header.findIndex(h => h === 'location'),
-    facility: header.findIndex(h => h === 'facility'),
-    reserved: header.findIndex(h => h.startsWith('reserved time')),
-    reservee: header.findIndex(h => h === 'reservee'),
-    purpose: header.findIndex(h => h.startsWith('reservation purpose')),
-    headcount: header.findIndex(h => h === 'headcount'),
-  };
-
+  const lines = text.replace(/\r\n/g, '\n').replace(/\r/g, '\n').split('\n').filter(Boolean);
   const rows = [];
-  for (let i = 1; i < lines.length; i++) {
-    const raw = lines[i];
-    // naïve split; works for these exports (no embedded commas in fields we care about)
-    const cols = raw.split(',').map(s => s.trim());
-    const rec = {
-      location: cols[idx.location] || '',
-      facility: cols[idx.facility] || '',
-      reserved: cols[idx.reserved] || '',
-      reservee: cols[idx.reservee] || '',
-      purpose: cols[idx.purpose] || '',
-      headcount: cols[idx.headcount] || '',
-    };
-    if (!rec.facility || !rec.reserved) continue;
-    rows.push(rec);
+  for (const line of lines) {
+    const out = [];
+    let cur = '';
+    let inQ = false;
+    for (let i = 0; i < line.length; i++) {
+      const ch = line[i];
+      if (inQ) {
+        if (ch === '"' && line[i + 1] === '"') { cur += '"'; i++; }
+        else if (ch === '"') { inQ = false; }
+        else cur += ch;
+      } else {
+        if (ch === '"') inQ = true;
+        else if (ch === ',') { out.push(cur.trim()); cur = ''; }
+        else cur += ch;
+      }
+    }
+    out.push(cur.trim());
+    rows.push(out);
   }
   return rows;
 }
 
-// --- Main transform ---
-(function main() {
-  const csvPath = path.resolve(__dirname, '..', CSV_PATH);
-  const outPath = path.resolve(__dirname, '..', JSON_OUT);
+// normalize headers like "Location:" -> "location"
+const normKey = (h) => h.toLowerCase().replace(/[^a-z0-9]/g, '');
 
-  const csv = readFileUtf8(csvPath);
-  if (!csv) {
-    console.log('No CSV found; writing empty scaffold.');
-    const empty = scaffold();
-    fs.writeFileSync(outPath, JSON.stringify(empty, null, 2));
+// map a facility string to a board “room number”
+function mapFacilityToRoom(facility) {
+  if (!facility) return null;
+  const f = facility.toLowerCase();
+
+  // South gym (1–2)
+  if (f.includes('half court 1a') || f.includes('court 1-ab') || f.includes('full gym 1ab') || f.includes('championship')) return '1';
+  if (f.includes('half court 1b')) return '1';
+  if (f.includes('half court 2a') || f.includes('court 2-ab') || f.includes('full gym 1ab & 2ab')) return '2';
+  if (f.includes('half court 2b')) return '2';
+
+  // North gym (9–10)
+  if (f.includes('half court 9a') || f.includes('court 9-ab') || f.includes('full gym 9 & 10')) return '9';
+  if (f.includes('half court 9b')) return '9';
+  if (f.includes('half court 10a') || f.includes('court 10-ab')) return '10';
+  if (f.includes('half court 10b')) return '10';
+
+  // Fieldhouse (basketball floor period → ignore “turf” rows)
+  // Courts 3..8 when floors are down:
+  if (f.includes('fieldhouse - court 3')) return '3';
+  if (f.includes('fieldhouse - court 4')) return '4';
+  if (f.includes('fieldhouse - court 5')) return '5';
+  if (f.includes('fieldhouse - court 6')) return '6';
+  if (f.includes('fieldhouse - court 7')) return '7';
+  if (f.includes('fieldhouse - court 8')) return '8';
+
+  // Court range “3-8” → we’ll split later using reservee-specific overrides
+  if (f.includes('court 3-8') || f.includes('court 3 – 8') || f.includes('fieldhouse court 3-8')) return '3-8';
+
+  // Turf (ignore during basketball floor season)
+  if (f.includes('full turf') || f.includes('half turf') || f.includes('quarter turf')) return null;
+
+  return null;
+}
+
+// parse “4:30pm - 9:30pm” into [minutes, minutes]
+function parseTimeRange(s) {
+  if (!s) return null;
+  const m = s.match(/(\d{1,2}:\d{2}\s*[ap]m)\s*-\s*(\d{1,2}:\d{2}\s*[ap]m)/i);
+  if (!m) return null;
+  const toMin = (t) => {
+    const mm = t.trim().match(/(\d{1,2}):(\d{2})\s*([ap]m)/i);
+    if (!mm) return null;
+    let hh = parseInt(mm[1], 10);
+    const min = parseInt(mm[2], 10);
+    const ap = mm[3].toLowerCase();
+    if (ap === 'pm' && hh !== 12) hh += 12;
+    if (ap === 'am' && hh === 12) hh = 0;
+    return hh * 60 + min;
+  };
+  const a = toMin(m[1]);
+  const b = toMin(m[2]);
+  if (a == null || b == null) return null;
+  return [a, b];
+}
+
+// “clean” the who/what strings
+function cleanTitle(str) {
+  if (!str) return '';
+  // Remove exact duplicates after comma (e.g., "X, X")
+  str = str.replace(/\b([^,]+),\s*\1\b/gi, '$1');
+  // Collapse repeated spaces
+  return str.replace(/\s{2,}/g, ' ').trim();
+}
+
+// SPECIAL RULES:
+// 1) Pickleball: if reservee contains “RAEC Front Desk, Rentals - On Hold” AND purpose contains “Open Pickleball”
+//    → show “Open Pickleball” and HIDE the “Front Desk / Internal Hold” text.
+// 2) Court 3–8 overrides: if an org appears both on “Court 3-8” AND specific 3/4/5/6/7/8 entries,
+//    we keep only the specific courts for that org/time window.
+function isPickleball(reservee, purpose) {
+  const r = (reservee || '').toLowerCase();
+  const p = (purpose || '').toLowerCase();
+  return p.includes('pickleball') || r.includes('front desk') && p.includes('pickleball');
+}
+
+function pickleballWhoWhat(reservee, purpose) {
+  // Force “Open Pickleball”; strip internal hold notes
+  return { who: 'Open Pickleball', what: '' };
+}
+
+function orgKey(s) {
+  return (s || '').toLowerCase()
+    .replace(/raec front desk.*$/i, '') // drop the FD hold postfix
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+function rangesOverlap(a1, a2, b1, b2) {
+  return Math.max(a1, b1) < Math.min(a2, b2);
+}
+
+function main() {
+  if (!fs.existsSync(CSV_PATH)) {
+    console.log('No rows; wrote empty scaffold.');
+    fs.writeFileSync(JSON_OUT, JSON.stringify({
+      dayStartMin, dayEndMin,
+      rooms: [
+        { id: '1', label: '1', group: 'south' },
+        { id: '2', label: '2', group: 'south' },
+        { id: '3', label: '3', group: 'fieldhouse' },
+        { id: '4', label: '4', group: 'fieldhouse' },
+        { id: '5', label: '5', group: 'fieldhouse' },
+        { id: '6', label: '6', group: 'fieldhouse' },
+        { id: '7', label: '7', group: 'fieldhouse' },
+        { id: '8', label: '8', group: 'fieldhouse' },
+        { id: '9', label: '9', group: 'north' },
+        { id: '10', label: '10', group: 'north' },
+      ],
+      slots: []
+    }, null, 2));
     return;
   }
 
-  const now = new Date();
-  const basketballDown = isBasketballFloorDown(now);
-
-  const rows = parseCsv(csv);
-
-  // 1) Pre-scan: for each (reservee, time window) collect specific fieldhouse courts 3..8
-  // key: reserveeNorm|start|end  -> Set of court numbers (strings) in 3..8
-  const specificFH = new Map();
-  for (const r of rows) {
-    const t = parseTimeRange(r.reserved);
-    if (!t) continue;
-    const f = r.facility || '';
-    if (/AC Fieldhouse - Court\s*[3-8]/i.test(f)) {
-      const m = f.match(/Court\s*(\d+)/i);
-      if (!m) continue;
-      const court = String(parseInt(m[1], 10));
-      const key = [normalize(r.reservee), t.startMin, t.endMin].join('|');
-      if (!specificFH.has(key)) specificFH.set(key, new Set());
-      specificFH.get(key).add(court);
-    }
+  const text = fs.readFileSync(CSV_PATH, 'utf8');
+  const rows = parseCsv(text);
+  if (!rows.length) {
+    console.log('Empty CSV; writing empty scaffold.');
+    return main();
   }
 
-  // 2) Build raw slots (fan out per facility mapping)
-  let slots = [];
-  for (const r of rows) {
-    // Only RAEC location (you said others shouldn't appear)
-    if (r.location && !/athletic & event center/i.test(r.location)) continue;
-
-    const t = parseTimeRange(r.reserved);
-    if (!t) continue;
-
-    // Ignore past completely
-    if (t.endMin <= minutesNow()) continue;
-
-    // Turf rows are ignored when basketball floor is down (your rule)
-    const isTurf = /AC Fieldhouse - (Full Turf|Half Turf North|Half Turf South|Quarter Turf)/i.test(r.facility || '');
-    if (basketballDown && isTurf) continue;
-
-    let rooms = mapFacilityToRooms(r.facility);
-
-    // Resolve Fieldhouse 3-8 override: if we have specific courts for same reservee+time, use only those
-    if (rooms.length === 6 && rooms.every(id => ['3','4','5','6','7','8'].includes(id))) {
-      const key = [normalize(r.reservee), t.startMin, t.endMin].join('|');
-      const spec = specificFH.get(key);
-      if (spec && spec.size) {
-        rooms = Array.from(spec).sort((a,b) => parseInt(a)-parseInt(b));
-      }
-    }
-
-    if (!rooms.length) continue;
-
-    // Clean who/what (Pickleball rename, internal hold note scrub, duplicate commas, etc.)
-    const { title, subtitle } = formatWhoWhat(r.reservee, r.purpose);
-
-    for (const roomId of rooms) {
-      slots.push({
-        roomId,
-        startMin: t.startMin,
-        endMin: t.endMin,
-        title,
-        subtitle
-      });
-    }
-  }
-
-  // 3) De-duplicate per room
-  const seen = new Set();
-  slots = slots.filter(s => {
-    const key = [s.roomId, normalize(s.title), normalize(s.subtitle), s.startMin, s.endMin].join('|');
-    if (seen.has(key)) return false;
-    seen.add(key);
-    return true;
-  });
-
-  // 4) Clamp to board day bounds (optional)
-  slots = slots.map(s => ({
-    ...s,
-    startMin: Math.max(s.startMin, DAY_START_MIN),
-    endMin: Math.min(s.endMin, DAY_END_MIN),
-  })).filter(s => s.startMin < s.endMin);
-
-  // 5) Sort by room, then start time
-  slots.sort((a, b) => {
-    const ra = parseInt(a.roomId, 10), rb = parseInt(b.roomId, 10);
-    if (ra !== rb) return ra - rb;
-    return a.startMin - b.startMin;
-  });
-
-  // 6) Write out
-  const payload = scaffold(slots);
-  fs.writeFileSync(outPath, JSON.stringify(payload, null, 2));
-  console.log(`Wrote ${JSON_OUT} • rooms=${payload.rooms.length} • slots=${payload.slots.length}`);
-
-  // --- helpers ---
-  function minutesNow(d = new Date()) {
-    return d.getHours() * 60 + d.getMinutes();
-  }
-})();
-
-// Scaffold board schema
-function scaffold(slots = []) {
-  return {
-    dayStartMin: DAY_START_MIN,
-    dayEndMin: DAY_END_MIN,
-    rooms: [
-      { id: '1',  label: '1',  group: 'south' },
-      { id: '2',  label: '2',  group: 'south' },
-      { id: '3',  label: '3',  group: 'fieldhouse' },
-      { id: '4',  label: '4',  group: 'fieldhouse' },
-      { id: '5',  label: '5',  group: 'fieldhouse' },
-      { id: '6',  label: '6',  group: 'fieldhouse' },
-      { id: '7',  label: '7',  group: 'fieldhouse' },
-      { id: '8',  label: '8',  group: 'fieldhouse' },
-      { id: '9',  label: '9',  group: 'north' },
-      { id: '10', label: '10', group: 'north' },
-    ],
-    slots
+  // header map
+  const header = rows[0].map(normKey);
+  const idx = {
+    location: header.indexOf('location'),
+    facility: header.indexOf('facility'),
+    reservedtime: header.indexOf('reservedtime'),
+    reservee: header.indexOf('reservee'),
+    reservationpurpose: header.indexOf('reservationpurpose'),
+    headcount: header.indexOf('headcount'),
   };
+
+  const outRooms = [
+    { id: '1', label: '1', group: 'south' },
+    { id: '2', label: '2', group: 'south' },
+    { id: '3', label: '3', group: 'fieldhouse' },
+    { id: '4', label: '4', group: 'fieldhouse' },
+    { id: '5', label: '5', group: 'fieldhouse' },
+    { id: '6', label: '6', group: 'fieldhouse' },
+    { id: '7', label: '7', group: 'fieldhouse' },
+    { id: '8', label: '8', group: 'fieldhouse' },
+    { id: '9', label: '9', group: 'north' },
+    { id: '10', label: '10', group: 'north' },
+  ];
+
+  // collect preliminary slots
+  const raw = [];
+  for (let i = 1; i < rows.length; i++) {
+    const r = rows[i];
+
+    const location = idx.location >= 0 ? r[idx.location] : '';
+    // ignore non-RAEC locations if present
+    if (location && !/athletic\s*&?\s*event\s*center/i.test(location)) continue;
+
+    const facility = idx.facility >= 0 ? r[idx.facility] : '';
+    const room = mapFacilityToRoom(facility);
+    if (!room) continue; // ignore turf when floors are down, or unknowns
+
+    const tr = idx.reservedtime >= 0 ? r[idx.reservedtime] : '';
+    const range = parseTimeRange(tr);
+    if (!range) continue;
+    let [startMin, endMin] = range;
+
+    // clamp to display day
+    startMin = Math.max(startMin, dayStartMin);
+    endMin   = Math.min(endMin,   dayEndMin);
+    if (endMin <= startMin) continue;
+
+    const reservee = idx.reservee >= 0 ? r[idx.reservee] : '';
+    const purpose  = idx.reservationpurpose >= 0 ? r[idx.reservationpurpose] : '';
+
+    // build who/what
+    let who, what;
+    if (isPickleball(reservee, purpose)) {
+      ({ who, what } = pickleballWhoWhat(reservee, purpose));
+    } else {
+      who  = cleanTitle(reservee);
+      what = cleanTitle(purpose);
+    }
+
+    // Expand “Court 3-8” into tentative courts 3..8 (we’ll dedupe/override later)
+    if (room === '3-8') {
+      for (const n of ['3','4','5','6','7','8']) {
+        raw.push({ roomId: n, startMin, endMin, who, what, org: orgKey(reservee) });
+      }
+    } else {
+      raw.push({ roomId: room, startMin, endMin, who, what, org: orgKey(reservee) });
+    }
+  }
+
+  // --- Override logic for court 3–8 conflicts ---
+  // If an org has both generic (from expanded 3-8) and specific court rows, drop the generic ones overlapping the specific ones.
+  const keep = [];
+  for (let i = 0; i < raw.length; i++) {
+    const a = raw[i];
+    let drop = false;
+
+    // Generic ones are the items that came from expanding 3-8. We can't mark them now,
+    // but we can detect they clash: if there exists another row for the same org, same time window,
+    // and same roomId explicitly coming from a named “Court N”.
+    // Heuristic: if there are duplicates (same org, roomId, overlapping time) keep only ONE of them.
+    for (let j = 0; j < raw.length; j++) {
+      if (i === j) continue;
+      const b = raw[j];
+      if (a.org !== b.org) continue;
+      if (a.roomId !== b.roomId) continue;
+      if (!rangesOverlap(a.startMin, a.endMin, b.startMin, b.endMin)) continue;
+
+      // Prefer the entry whose `what` is not empty (specific reservation line often has better detail)
+      if (b.what && !a.what) { drop = true; break; }
+
+      // Or simply keep the earliest created (i > j → drop a)
+      if (i > j) { drop = true; break; }
+    }
+
+    if (!drop) keep.push(a);
+  }
+
+  // Coalesce exact duplicates (same org, room, same time range) into one
+  const dedupKey = (s) => `${s.org}|${s.roomId}|${s.startMin}|${s.endMin}|${s.who}|${s.what}`;
+  const seen = new Set();
+  const slots = [];
+  for (const s of keep) {
+    const k = dedupKey(s);
+    if (seen.has(k)) continue;
+    seen.add(k);
+    slots.push({ roomId: s.roomId, startMin: s.startMin, endMin: s.endMin, title: s.who, subtitle: s.what });
+  }
+
+  // write out
+  fs.writeFileSync(JSON_OUT, JSON.stringify({
+    dayStartMin, dayEndMin,
+    rooms: outRooms,
+    slots
+  }, null, 2));
+
+  console.log(`Wrote ${JSON_OUT} • rooms=${outRooms.length} • slots=${slots.length}`);
 }
+
+main();
