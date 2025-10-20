@@ -76,13 +76,6 @@
       "subtitle": "2025 Q4 Pattern"
     },
     {
-      "roomId": "10",
-      "startMin": 960,
-      "endMin": 1140,
-      "title": "Sam Franklin Training, Sam Franklin",
-      "subtitle": "2025 Q4 Pattern"
-    },
-    {
       "roomId": "1",
       "startMin": 1080,
       "endMin": 1170,
@@ -95,34 +88,6 @@
       "endMin": 1170,
       "title": "Belusa United Volleyball, Nicole Diamond",
       "subtitle": "Volleyball"
-    },
-    {
-      "roomId": "3",
-      "startMin": 1080,
-      "endMin": 1260,
-      "title": "Illinois Flight, Brandon Brown",
-      "subtitle": "Basketball"
-    },
-    {
-      "roomId": "4",
-      "startMin": 1080,
-      "endMin": 1260,
-      "title": "Illinois Flight, Brandon Brown",
-      "subtitle": "Basketball"
-    },
-    {
-      "roomId": "5",
-      "startMin": 1080,
-      "endMin": 1260,
-      "title": "Illinois Flight, Brandon Brown",
-      "subtitle": "Basketball"
-    },
-    {
-      "roomId": "6",
-      "startMin": 1080,
-      "endMin": 1260,
-      "title": "Illinois Flight, Brandon Brown",
-      "subtitle": "Basketball"
     },
     {
       "roomId": "7",
@@ -153,6 +118,13 @@
       "subtitle": "Basketball"
     },
     {
+      "roomId": "6",
+      "startMin": 1170,
+      "endMin": 1260,
+      "title": "Illinois Flight, Brandon Brown",
+      "subtitle": "Basketball"
+    },
+    {
       "roomId": "3",
       "startMin": 1140,
       "endMin": 1260,
@@ -171,69 +143,6 @@
       "startMin": 1140,
       "endMin": 1260,
       "title": "Pink Elite Basketball",
-      "subtitle": "2025 Q4 Pattern"
-    },
-    {
-      "roomId": "6",
-      "startMin": 1140,
-      "endMin": 1260,
-      "title": "Pink Elite Basketball",
-      "subtitle": "2025 Q4 Pattern"
-    },
-    {
-      "roomId": "7",
-      "startMin": 1140,
-      "endMin": 1260,
-      "title": "Pink Elite Basketball",
-      "subtitle": "2025 Q4 Pattern"
-    },
-    {
-      "roomId": "8",
-      "startMin": 1140,
-      "endMin": 1260,
-      "title": "Pink Elite Basketball",
-      "subtitle": "2025 Q4 Pattern"
-    },
-    {
-      "roomId": "3",
-      "startMin": 1170,
-      "endMin": 1260,
-      "title": "Illinois Flight, Brandon Brown",
-      "subtitle": "Basketball"
-    },
-    {
-      "roomId": "4",
-      "startMin": 1170,
-      "endMin": 1260,
-      "title": "Illinois Flight, Brandon Brown",
-      "subtitle": "Basketball"
-    },
-    {
-      "roomId": "5",
-      "startMin": 1170,
-      "endMin": 1260,
-      "title": "Illinois Flight, Brandon Brown",
-      "subtitle": "Basketball"
-    },
-    {
-      "roomId": "6",
-      "startMin": 1170,
-      "endMin": 1260,
-      "title": "Illinois Flight, Brandon Brown",
-      "subtitle": "Basketball"
-    },
-    {
-      "roomId": "7",
-      "startMin": 1170,
-      "endMin": 1260,
-      "title": "Illinois Flight, Brandon Brown",
-      "subtitle": "Basketball"
-    },
-    {
-      "roomId": "8",
-      "startMin": 1170,
-      "endMin": 1260,
-      "title": "Illinois Flight, Brandon Brown",
       "subtitle": "Basketball"
     },
     {
