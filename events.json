@@ -58,76 +58,15 @@
       "roomId": "10",
       "startMin": 570,
       "endMin": 750,
-      "title": "RAEC Front Desk, Rentals - On Hold",
-      "subtitle": "Open Pickleball Internal Hold per NM",
-      "lane": "A"
-    },
-    {
-      "roomId": "10",
-      "startMin": 570,
-      "endMin": 750,
-      "title": "RAEC Front Desk, Rentals - On Hold",
-      "subtitle": "Open Pickleball Internal Hold per NM"
-    },
-    {
-      "roomId": "10",
-      "startMin": 570,
-      "endMin": 750,
-      "title": "RAEC Front Desk, Rentals - On Hold",
-      "subtitle": "Open Pickleball Internal Hold per NM",
-      "lane": "B"
+      "title": "Open Pickleball",
+      "subtitle": ""
     },
     {
       "roomId": "9",
       "startMin": 570,
       "endMin": 750,
-      "title": "RAEC Front Desk, Rentals - On Hold",
-      "subtitle": "Open Pickleball Internal Hold per NM",
-      "lane": "A"
-    },
-    {
-      "roomId": "9",
-      "startMin": 570,
-      "endMin": 750,
-      "title": "RAEC Front Desk, Rentals - On Hold",
-      "subtitle": "Open Pickleball Internal Hold per NM"
-    },
-    {
-      "roomId": "9",
-      "startMin": 570,
-      "endMin": 750,
-      "title": "RAEC Front Desk, Rentals - On Hold",
-      "subtitle": "Open Pickleball Internal Hold per NM",
-      "lane": "B"
-    },
-    {
-      "roomId": "9",
-      "startMin": 570,
-      "endMin": 750,
-      "title": "RAEC Front Desk, Rentals - On Hold",
-      "subtitle": "Open Pickleball Internal Hold per NM"
-    },
-    {
-      "roomId": "10",
-      "startMin": 570,
-      "endMin": 750,
-      "title": "RAEC Front Desk, Rentals - On Hold",
-      "subtitle": "Open Pickleball Internal Hold per NM"
-    },
-    {
-      "roomId": "9",
-      "startMin": 960,
-      "endMin": 1140,
-      "title": "Sam Franklin Training, Sam Franklin",
-      "subtitle": "2025 Q4 Pattern"
-    },
-    {
-      "roomId": "9",
-      "startMin": 960,
-      "endMin": 1140,
-      "title": "Sam Franklin Training, Sam Franklin",
-      "subtitle": "2025 Q4 Pattern",
-      "lane": "B"
+      "title": "Open Pickleball",
+      "subtitle": ""
     },
     {
       "roomId": "9",
@@ -142,64 +81,6 @@
       "endMin": 1140,
       "title": "Sam Franklin Training, Sam Franklin",
       "subtitle": "2025 Q4 Pattern"
-    },
-    {
-      "roomId": "1",
-      "startMin": 1080,
-      "endMin": 1170,
-      "title": "Belusa United Volleyball, Nicole Diamond",
-      "subtitle": "Volleyball"
-    },
-    {
-      "roomId": "2",
-      "startMin": 1080,
-      "endMin": 1170,
-      "title": "Belusa United Volleyball, Nicole Diamond",
-      "subtitle": "Volleyball"
-    },
-    {
-      "roomId": "2",
-      "startMin": 1080,
-      "endMin": 1170,
-      "title": "Belusa United Volleyball, Nicole Diamond",
-      "subtitle": "Volleyball",
-      "lane": "A"
-    },
-    {
-      "roomId": "2",
-      "startMin": 1080,
-      "endMin": 1170,
-      "title": "Belusa United Volleyball, Nicole Diamond",
-      "subtitle": "Volleyball"
-    },
-    {
-      "roomId": "2",
-      "startMin": 1080,
-      "endMin": 1170,
-      "title": "Belusa United Volleyball, Nicole Diamond",
-      "subtitle": "Volleyball"
-    },
-    {
-      "roomId": "2",
-      "startMin": 1080,
-      "endMin": 1170,
-      "title": "Belusa United Volleyball, Nicole Diamond",
-      "subtitle": "Volleyball",
-      "lane": "B"
-    },
-    {
-      "roomId": "1",
-      "startMin": 1080,
-      "endMin": 1170,
-      "title": "Belusa United Volleyball, Nicole Diamond",
-      "subtitle": "Volleyball"
-    },
-    {
-      "roomId": "2",
-      "startMin": 1080,
-      "endMin": 1170,
-      "title": "Belusa United Volleyball, Nicole Diamond",
-      "subtitle": "Volleyball"
     },
     {
       "roomId": "1",
@@ -262,21 +143,6 @@
       "startMin": 1080,
       "endMin": 1170,
       "title": "Illinois Flight, Brandon Brown",
-      "subtitle": "Basketball",
-      "lane": "A"
-    },
-    {
-      "roomId": "1",
-      "startMin": 1080,
-      "endMin": 1170,
-      "title": "Illinois Flight, Brandon Brown",
-      "subtitle": "Basketball"
-    },
-    {
-      "roomId": "1",
-      "startMin": 1080,
-      "endMin": 1170,
-      "title": "Illinois Flight, Brandon Brown",
       "subtitle": "Basketball"
     },
     {
@@ -284,48 +150,6 @@
       "startMin": 1080,
       "endMin": 1170,
       "title": "Illinois Flight, Brandon Brown",
-      "subtitle": "Basketball"
-    },
-    {
-      "roomId": "3",
-      "startMin": 1140,
-      "endMin": 1260,
-      "title": "Pink Elite Basketball",
-      "subtitle": "Basketball"
-    },
-    {
-      "roomId": "4",
-      "startMin": 1140,
-      "endMin": 1260,
-      "title": "Pink Elite Basketball",
-      "subtitle": "Basketball"
-    },
-    {
-      "roomId": "5",
-      "startMin": 1140,
-      "endMin": 1260,
-      "title": "Pink Elite Basketball",
-      "subtitle": "Basketball"
-    },
-    {
-      "roomId": "6",
-      "startMin": 1140,
-      "endMin": 1260,
-      "title": "Pink Elite Basketball",
-      "subtitle": "Basketball"
-    },
-    {
-      "roomId": "7",
-      "startMin": 1140,
-      "endMin": 1260,
-      "title": "Pink Elite Basketball",
-      "subtitle": "Basketball"
-    },
-    {
-      "roomId": "8",
-      "startMin": 1140,
-      "endMin": 1260,
-      "title": "Pink Elite Basketball",
       "subtitle": "Basketball"
     },
     {
@@ -411,66 +235,6 @@
       "endMin": 1260,
       "title": "Illinois Flight, Brandon Brown",
       "subtitle": "Basketball"
-    },
-    {
-      "roomId": "1",
-      "startMin": 1260,
-      "endMin": 1380,
-      "title": "Chicago Sport and Social Club",
-      "subtitle": "Volleyball (Grab A Game)"
-    },
-    {
-      "roomId": "2",
-      "startMin": 1260,
-      "endMin": 1380,
-      "title": "Chicago Sport and Social Club",
-      "subtitle": "Volleyball (Grab A Game)"
-    },
-    {
-      "roomId": "1",
-      "startMin": 1260,
-      "endMin": 1380,
-      "title": "Chicago Sport and Social Club",
-      "subtitle": "Volleyball (Grab A Game)",
-      "lane": "A"
-    },
-    {
-      "roomId": "1",
-      "startMin": 1260,
-      "endMin": 1380,
-      "title": "Chicago Sport and Social Club",
-      "subtitle": "Volleyball (Grab A Game)"
-    },
-    {
-      "roomId": "1",
-      "startMin": 1260,
-      "endMin": 1380,
-      "title": "Chicago Sport and Social Club",
-      "subtitle": "Volleyball (Grab A Game)",
-      "lane": "B"
-    },
-    {
-      "roomId": "2",
-      "startMin": 1260,
-      "endMin": 1380,
-      "title": "Chicago Sport and Social Club",
-      "subtitle": "Volleyball (Grab A Game)",
-      "lane": "A"
-    },
-    {
-      "roomId": "2",
-      "startMin": 1260,
-      "endMin": 1380,
-      "title": "Chicago Sport and Social Club",
-      "subtitle": "Volleyball (Grab A Game)"
-    },
-    {
-      "roomId": "2",
-      "startMin": 1260,
-      "endMin": 1380,
-      "title": "Chicago Sport and Social Club",
-      "subtitle": "Volleyball (Grab A Game)",
-      "lane": "B"
     },
     {
       "roomId": "1",
