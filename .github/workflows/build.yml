@@ -1,15 +1,13 @@
 name: build
-
 on:
-  push:
-    branches: [ main ]
   workflow_dispatch:
   schedule:
-    - cron: "*/30 * * * *"  # optional: refresh every 30 minutes
+    - cron: "*/30 10-23 * * *"   # run every 30 min during your open hours (UTC-adjust as needed)
+  push:
+    branches: [ main ]
 
-# 👇 allow the GITHUB_TOKEN to push commits
 permissions:
-  contents: write
+  contents: write   # needed so the action can commit the updated events.json
 
 jobs:
   build:
@@ -17,10 +15,8 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
-        with:
-          persist-credentials: true  # uses GITHUB_TOKEN
 
-      - name: Setup Node
+      - name: Use Node
         uses: actions/setup-node@v4
         with:
           node-version: 20
@@ -28,30 +24,35 @@ jobs:
       - name: Install deps
         run: npm i
 
-      - name: Ensure inbox dir
+      - name: Ensure inbox folder
         run: mkdir -p data/inbox
 
-      # Optional: fetch latest CSV from the Gmail account (requires secrets set)
-      - name: Fetch latest CSV from email
+      # (Optional) Pull the newest CSV attachment from Gmail
+      - name: Fetch latest CSV from Gmail
         env:
-          IMAP_USER: "raecroominfo.board@gmail.com"
-          IMAP_PASS: ${{ secrets.GMAILIMAP }}  # your 16-char app password in repo secrets
+          IMAP_USER: ${{ secrets.IMAP_USER }}
+          IMAP_PASS: ${{ secrets.IMAP_PASS }}
+          IMAP_HOST: imap.gmail.com
+          IMAP_FOLDER: INBOX
+          OUT_CSV: data/inbox/latest.csv
         run: node scripts/fetch_email.js
 
-      - name: Transform CSV -> events.json
-        # If you sometimes want to bypass site filter, append 'FORCE_ALL=true'
+      # ⬇️ THIS is the step I meant: run the new transformer
+      - name: Transform CSV → events.json
+        env:
+          CSV_PATH: data/inbox/latest.csv   # defaults match these, env is optional
+          JSON_OUT: events.json
         run: node scripts/transform.mjs
 
-      - name: Show top of events.json (debug)
+      - name: Show a preview
         run: |
           echo "Top of events.json:"
-          head -n 60 events.json || true
+          head -n 60 events.json
 
-      - name: Commit & push events.json
+      - name: Commit updated events.json
         run: |
           git config user.name  "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
           git add events.json
-          git diff --quiet --cached && echo "No changes" && exit 0
-          git commit -m "Update events.json [skip ci]"
+          git diff --cached --quiet || git commit -m "Update events.json [skip ci]"
           git push
