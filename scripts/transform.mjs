@@ -1,285 +1,357 @@
-import fs from 'fs';
+// scripts/transform.mjs
+// ESM. No external CSV lib; includes a simple CSV parser.
+// Usage in CI: `node scripts/transform.mjs`
+// Reads:  data/inbox/latest.csv
+// Writes: events.json
+
+import fs from 'fs/promises';
 import path from 'path';
 import { fileURLToPath } from 'url';
 
-// ---------------- paths & env ----------------
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
-const CSV_IN = process.env.CSV_PATH || path.join(__dirname, '..', 'data', 'inbox', 'latest.csv');
-const JSON_OUT = process.env.JSON_OUT || path.join(__dirname, '..', 'events.json');
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
-// ---------------- tiny utils ----------------
-const norm = (s='') =>
-  s.replace(/^\uFEFF/, '')             // BOM
-   .replace(/\u00A0/g, ' ')            // NBSP -> space
-   .replace(/\s+/g, ' ')               // collapse spaces
-   .trim();
+const IN_CSV  = process.env.CSV_PATH   || path.join(__dirname, '..', 'data', 'inbox', 'latest.csv');
+const OUT_JSON= process.env.JSON_OUT   || path.join(__dirname, '..', 'events.json');
 
-const lc = (s='') => norm(s).toLowerCase();
+// --- helpers ---------------------------------------------------------------
 
-// Robust 12h time like "9:30am"
-function minutesFrom12h(t) {
-  const m = norm(t).match(/^(\d{1,2}):(\d{2})\s*([ap]m)$/i);
-  if (!m) return null;
-  let hr = parseInt(m[1], 10);
-  const min = parseInt(m[2], 10);
-  const ampm = m[3].toLowerCase();
-  if (ampm === 'pm' && hr !== 12) hr += 12;
-  if (ampm === 'am' && hr === 12) hr = 0;
-  return hr * 60 + min;
-}
+function trim(s){ return (s ?? '').toString().trim(); }
 
-// "9:30am - 12:30pm"
-function parseTimeRange(s='') {
-  const m = s.match(/(\d{1,2}:\d{2}\s*[ap]m)\s*-\s*(\d{1,2}:\d{2}\s*[ap]m)/i);
-  if (!m) return null;
-  const startMin = minutesFrom12h(m[1]);
-  const endMin   = minutesFrom12h(m[2]);
-  if (startMin == null || endMin == null) return null;
-  return { startMin, endMin };
-}
-
-// Remove “X, X”
-function cleanTitle(s='') {
-  const parts = s.split(',').map(p => norm(p)).filter(Boolean);
-  if (parts.length === 2 && lc(parts[0]) === lc(parts[1])) return parts[0];
-  return norm(s);
-}
-
-// ---------------- CSV parser (quote-aware) ----------------
-function parseCSV(text) {
+// very small CSV parser that handles quotes + commas
+function parseCSV(text){
   const rows = [];
   let row = [];
-  let field = '';
-  let inQuotes = false;
+  let cur = '';
+  let inQ = false;
 
-  for (let i = 0; i < text.length; i++) {
+  for (let i=0;i<text.length;i++){
     const ch = text[i];
-
-    if (inQuotes) {
-      if (ch === '"') {
-        // escaped quote?
-        if (text[i + 1] === '"') {
-          field += '"';
-          i++;
-        } else {
-          inQuotes = false;
-        }
+    if (inQ){
+      if (ch === '"'){
+        if (text[i+1] === '"'){ cur += '"'; i++; }
+        else { inQ = false; }
       } else {
-        field += ch;
+        cur += ch;
       }
     } else {
-      if (ch === '"') {
-        inQuotes = true;
-      } else if (ch === ',') {
-        row.push(field);
-        field = '';
-      } else if (ch === '\r') {
-        // ignore; handle on \n
-      } else if (ch === '\n') {
-        row.push(field);
-        rows.push(row);
-        row = [];
-        field = '';
+      if (ch === '"'){ inQ = true; }
+      else if (ch === ','){ row.push(cur); cur = ''; }
+      else if (ch === '\n'){
+        row.push(cur); cur = '';
+        rows.push(row); row = [];
+      } else if (ch === '\r'){
+        // ignore, handle on \n
       } else {
-        field += ch;
+        cur += ch;
       }
     }
   }
   // last field
-  row.push(field);
-  rows.push(row);
-
-  // strip trailing blank lines
-  while (rows.length && rows[rows.length - 1].every(c => norm(c) === '')) rows.pop();
+  if (cur.length || row.length) { row.push(cur); rows.push(row); }
   return rows;
 }
 
-// ---------------- season helpers ----------------
-// Courts down: 3rd Monday in March → 2nd Monday in Nov
-function isCourtsSeason(date) {
-  const y = date.getFullYear();
-  const start = nthWeekdayOfMonth(y, 2, 1, 3); // March (2), Monday(1), 3rd
-  const stop  = nthWeekdayOfMonth(y, 10, 1, 2); // Nov (10), Monday(1), 2nd
-  return date >= start && date < stop;
+function parseTimeRange(s){
+  // "9:30am - 12:30pm" or "4:00pm -  7:00pm" (note double spaces sometimes)
+  const m = trim(s).match(/(\d{1,2}:\d{2}\s*[ap]m)\s*-\s*(\d{1,2}:\d{2}\s*[ap]m)/i);
+  if (!m) return null;
+  return [toMin(m[1]), toMin(m[2])];
+}
+function toMin(label){
+  // "4:30pm" → minutes since midnight
+  const t = trim(label).toLowerCase();
+  const m = t.match(/(\d{1,2}):(\d{2})\s*([ap]m)/);
+  if (!m) return null;
+  let h = parseInt(m[1],10);
+  const mm = parseInt(m[2],10);
+  const ap = m[3];
+  if (ap === 'pm' && h !== 12) h += 12;
+  if (ap === 'am' && h === 12) h = 0;
+  return h*60 + mm;
 }
 
-function nthWeekdayOfMonth(year, monthIndex, weekdayMon1, nth) {
-  // weekdayMon1: 1=Mon..7=Sun
-  const want = (weekdayMon1 % 7); // 1..6,0
-  const first = new Date(year, monthIndex, 1);
-  const firstJS = first.getDay(); // 0=Sun..6=Sat
-  const wantJS = want; // since our 1..0 mapping above matches modulo
-  let diff = wantJS - firstJS;
-  if (diff < 0) diff += 7;
-  const day = 1 + diff + (nth - 1) * 7;
-  return new Date(year, monthIndex, day);
+// business logic: turf vs basketball in fieldhouse (yearly)
+function nthWeekdayOfMonth(year, month /*0-11*/, weekday /*0=Sun*/, n){
+  const d = new Date(year, month, 1);
+  const offset = (7 + weekday - d.getDay()) % 7;
+  const day = 1 + offset + (n-1)*7;
+  return new Date(year, month, day);
+}
+function isTurfSeason(d){
+  const y = d.getFullYear();
+  const secondMonNov = nthWeekdayOfMonth(y, 10, 1, 2);    // Nov, Monday, 2nd
+  const thirdMonMar  = nthWeekdayOfMonth(y+1, 2, 1, 3);   // Next year March, Monday, 3rd
+
+  // Turf from 2nd Mon Nov until 3rd Mon Mar (exclusive)
+  // If date >= Nov cutoff, it's turf season; else if < Mar cutoff, also turf.
+  const novCutoff = secondMonNov;
+  const marCutoff = thirdMonMar;
+  if (d >= novCutoff) return true;
+  const jan1 = new Date(y, 0, 1);
+  if (d >= jan1 && d < marCutoff) return true;
+  return false;
 }
 
-// ---------------- facility → rooms mapping ----------------
-function mapFacilityToRooms(fac, courtsSeason) {
-  const f = norm(fac);
+// normalize reservee wording
+function normalizePickleball(title, purpose){
+  const t = (title||'').toLowerCase();
+  const p = (purpose||'').toLowerCase();
+  if (t.includes('raec front desk') || t.includes('on hold')){
+    if (p.includes('open pickleball')) return 'Open Pickleball';
+  }
+  return null;
+}
 
-  // South/North gyms (numbers 1,2,9,10; allow A/B if explicit)
-  let m = f.match(/^AC Gym - Half Court (\d{1,2})([AB])$/i);
-  if (m) return [`${parseInt(m[1],10)}${m[2].toUpperCase()}`];
+// collapse "Name, Name" to "Name"
+function cleanName(s){
+  if (!s) return '';
+  const parts = s.split(',').map(p=>p.trim()).filter(Boolean);
+  if (parts.length>=2 && parts[0].toLowerCase()===parts[1].toLowerCase()) return parts[0];
+  return s;
+}
 
-  m = f.match(/^AC Gym - Court (\d{1,2})-AB$/i);
-  if (m) return [String(parseInt(m[1],10))];
+// map facility → room id(s) (numbers only UI: 1..10)
+function mapFacilityToRooms(facility, todayIsTurf){
+  const f = (facility||'').toLowerCase();
 
-  if (/^AC Gym - Full Gym 9 & 10$/i.test(f)) return ['9','10'];
-  if (/^AC Gym - Full Gym 1AB & 2AB$/i.test(f)) return ['1','2'];
-  m = f.match(/^AC Gym - Full Gym (\d{1,2})$/i);
-  if (m) return [String(parseInt(m[1],10))];
+  // South Gym (always)
+  if (f.includes('ac gym - half court 1a') || f.includes('ac gym - court 1-ab') || f.includes('full gym 1ab & 2ab') || f.includes('championship court')){
+    return ['1','2']; // champ court equals 1 & 2; full gym 1&2 too.
+  }
+  if (f.includes('ac gym - half court 1b')) return ['1'];
+  if (f.includes('ac gym - half court 2a') || f.includes('ac gym - court 2-ab')) return ['2'];
+  if (f.includes('ac gym - half court 2b')) return ['2'];
 
-  if (/^AC Gym - Championship Court$/i.test(f)) return ['1','2'];
-
-  // explicit alternatives
-  if (/^AC Gym - Court 1-AB$/i.test(f)) return ['1'];
-  if (/^AC Gym - Court 2-AB$/i.test(f)) return ['2'];
+  // North Gym (always)
+  if (f.includes('ac gym - half court 9a') || f.includes('ac gym - court 9-ab')) return ['9'];
+  if (f.includes('ac gym - half court 9b')) return ['9'];
+  if (f.includes('ac gym - half court 10a') || f.includes('ac gym - court 10-ab')) return ['10'];
+  if (f.includes('ac gym - half court 10b')) return ['10'];
+  if (f.includes('full gym 9 & 10')) return ['9','10'];
 
   // Fieldhouse
-  if (courtsSeason) {
-    // Courts season: accept “Court 3..8” and “Court 3-8”, ignore turf
-    m = f.match(/^AC Fieldhouse - Court ([3-8])$/i);
-    if (m) return [m[1]];
-    if (/^AC Fieldhouse(?: -)? Court 3-8$/i.test(f)) return ['3','4','5','6','7','8'];
-    if (/^AC Fieldhouse - (Full|Half|Quarter) Turf/i.test(f)) return [];
+  if (!todayIsTurf){
+    // Basketball season → courts 3..8
+    if (f.includes('fieldhouse court 3-8')) return ['3','4','5','6','7','8'];
+    const m = f.match(/fieldhouse\s*-\s*court\s*(\d+)/i);
+    if (m){
+      const n = parseInt(m[1],10);
+      if (n>=3 && n<=8) return [String(n)];
+    }
+    // Ignore turf descriptors during court season
+    if (f.includes('fieldhouse - full turf') ||
+        f.includes('half turf') ||
+        f.includes('quarter turf')){
+      return []; // ignored out of season
+    }
   } else {
-    // Turf season: map turf → 3..8
-    if (/^AC Fieldhouse - Full Turf$/i.test(f)) return ['3','4','5','6','7','8'];
-    if (/^AC Fieldhouse - Half Turf North$/i.test(f)) return ['6','7','8'];
-    if (/^AC Fieldhouse - Half Turf South$/i.test(f)) return ['3','4','5'];
-    if (/^AC Fieldhouse - Quarter Turf NA$/i.test(f)) return ['6','7'];
-    if (/^AC Fieldhouse - Quarter Turf NB$/i.test(f)) return ['7','8'];
-    if (/^AC Fieldhouse - Quarter Turf SA$/i.test(f)) return ['3','4'];
-    if (/^AC Fieldhouse - Quarter Turf SB$/i.test(f)) return ['4','5'];
-    // If CSV still uses numbered courts, accept those too
-    m = f.match(/^AC Fieldhouse - Court ([3-8])$/i);
-    if (m) return [m[1]];
-    if (/^AC Fieldhouse(?: -)? Court 3-8$/i.test(f)) return ['3','4','5','6','7','8'];
+    // Turf season: keep turf descriptors
+    if (f.includes('fieldhouse - full turf')) return ['3','4','5','6','7','8']; // show across all six
+    if (f.includes('half turf north')) return ['6','7','8'];
+    if (f.includes('half turf south')) return ['3','4','5'];
+    if (f.includes('quarter turf')){
+      // map NA/NB = 6/7 ; SA/SB = 4/5 (or similar) – tweak as needed
+      if (f.includes('na')) return ['6'];
+      if (f.includes('nb')) return ['7'];
+      if (f.includes('sa')) return ['4'];
+      if (f.includes('sb')) return ['5'];
+      return [];
+    }
+    const m = f.match(/fieldhouse\s*-\s*court\s*(\d+)/i);
+    if (m){
+      const n = parseInt(m[1],10);
+      if (n>=3 && n<=8) return [String(n)];
+    }
   }
 
   return [];
 }
 
-// ---------------- main ----------------
-(function main(){
-  if (!fs.existsSync(CSV_IN)) {
-    console.log(`CSV not found at ${CSV_IN}. Writing empty scaffold.`);
-    writeOut([]);
+// --- main transform --------------------------------------------------------
+
+async function main(){
+  let csvRaw = '';
+  try {
+    csvRaw = await fs.readFile(IN_CSV, 'utf8');
+  } catch (e){
+    console.log('No CSV found; writing empty scaffold.');
+    await writeOut({ rooms: defaultRooms(), slots: [] });
     return;
   }
 
-  const raw = fs.readFileSync(CSV_IN, 'utf8');
-  if (!raw.trim()) {
-    console.log('CSV exists but is empty. Writing empty scaffold.');
-    writeOut([]);
+  const rows = parseCSV(csvRaw);
+  if (!rows.length){
+    console.log('Empty CSV; writing empty scaffold.');
+    await writeOut({ rooms: defaultRooms(), slots: [] });
     return;
   }
 
-  const rows = parseCSV(raw);
-  if (!rows.length) {
-    console.log('CSV parsed to 0 rows. Writing empty scaffold.');
-    writeOut([]);
-    return;
-  }
-
-  const header = rows[0].map(h => norm(h));
-  const body = rows.slice(1).filter(r => r.some(c => norm(c) !== ''));
-
-  // find header indices with tolerant matching
-  const hidx = (cands) => {
-    for (const c of cands) {
-      const i = header.findIndex(h => lc(h) === lc(c));
-      if (i >= 0) return i;
-    }
-    // also try contains (for stray colon)
-    for (const c of cands) {
-      const i = header.findIndex(h => lc(h).includes(lc(c)));
-      if (i >= 0) return i;
-    }
-    return -1;
+  // header detection
+  const header = rows[0].map(h => trim(h).toLowerCase());
+  const idx = {
+    location: header.findIndex(h => h.startsWith('location')),
+    facility: header.findIndex(h => h.startsWith('facility')),
+    time:     header.findIndex(h => h.startsWith('reserved time')),
+    reservee: header.findIndex(h => h.startsWith('reservee')),
+    purpose:  header.findIndex(h => h.startsWith('reservation purpose')),
+    headcnt:  header.findIndex(h => h.startsWith('headcount')),
   };
-
-  const I = {
-    location:  hidx(['Location', 'Location:', 'location']),
-    facility:  hidx(['Facility']),
-    reserved:  hidx(['Reserved Time','reservedtime','ReservedTime']),
-    reservee:  hidx(['Reservee']),
-    purpose:   hidx(['Reservation Purpose','reservationpurpose']),
-    headcount: hidx(['Headcount']),
-  };
-
-  // noisy logging so you can confirm in Actions
-  console.log('Detected headers:', header.join(' | '));
-  console.log('Header indices:', I);
-  console.log('First 3 data rows (trimmed):',
-    body.slice(0,3).map(r => r.map(c => norm(c)).join(' | '))
-  );
 
   const today = new Date();
-  today.setSeconds(0,0);
-  const courtsSeason = isCourtsSeason(today);
-  console.log(`Season: ${courtsSeason ? 'COURTS' : 'TURF'} (${today.toDateString()})`);
+  const turf = isTurfSeason(today);
 
-  const slots = [];
-  let kept=0, skipLoc=0, skipTime=0, skipMap=0;
+  // Parse rows -> raw events
+  const raw = [];
+  for (let i=1;i<rows.length;i++){
+    const r = rows[i];
+    if (!r || !r.length) continue;
 
-  for (const r of body) {
-    const location = I.location >= 0 ? norm(r[I.location] || '') : '';
-    // keep if blank OR contains the phrase
-    if (location && !/athletic & event center/i.test(location)) { skipLoc++; continue; }
+    const loc = trim(r[idx.location] ?? '');
+    // Only care about the Athletic & Event Center (drop others)
+    if (loc && !/^athletic\s*&\s*event\s*center$/i.test(loc)) continue;
 
-    const reserved = I.reserved >= 0 ? norm(r[I.reserved] || '') : '';
-    const t = parseTimeRange(reserved);
-    if (!t) { skipTime++; continue; }
+    const facility = trim(r[idx.facility] ?? '');
+    const time = trim(r[idx.time] ?? '');
+    const reservee = trim(r[idx.reservee] ?? '');
+    const purpose  = trim(r[idx.purpose] ?? '');
 
-    const facility = I.facility >= 0 ? r[I.facility] || '' : '';
-    const rooms = mapFacilityToRooms(facility, courtsSeason);
-    if (!rooms.length) { skipMap++; continue; }
+    const t = parseTimeRange(time);
+    if (!t) continue;
+    const [startMin, endMin] = t;
 
-    const title = cleanTitle(I.reservee >= 0 ? r[I.reservee] || '' : '') || 'Reserved';
-    const subtitle = norm(I.purpose >= 0 ? r[I.purpose] || '' : '');
+    let title = cleanName(reservee);
+    const pb = normalizePickleball(reservee, purpose);
+    if (pb) title = pb;
 
-    for (const roomId of rooms) {
-      slots.push({ roomId, startMin: t.startMin, endMin: t.endMin, title, subtitle });
-      kept++;
+    const rooms = mapFacilityToRooms(facility, turf);
+    if (!rooms.length) continue;
+
+    raw.push({ rooms, startMin, endMin, title, purpose, facility });
+  }
+
+  // --- Fieldhouse “3-8” disambiguation (basketball season only) ------------
+  let processed = [];
+  if (!turf){
+    // Build explicit court map by (reservee/time)
+    const keyOf = (ev)=> `${ev.title}|${ev.startMin}|${ev.endMin}`;
+    const explicitByKey = new Map();   // key -> Set(room)
+    const allKeysAtWindow = new Map(); // "start|end" -> Map(title -> Set(room))
+
+    for (const ev of raw){
+      const isExact = ev.rooms.length===1 && ['3','4','5','6','7','8'].includes(ev.rooms[0]);
+      if (isExact){
+        const k = keyOf(ev);
+        if (!explicitByKey.has(k)) explicitByKey.set(k, new Set());
+        explicitByKey.get(k).add(ev.rooms[0]);
+
+        const win = `${ev.startMin}|${ev.endMin}`;
+        if (!allKeysAtWindow.has(win)) allKeysAtWindow.set(win, new Map());
+        const m = allKeysAtWindow.get(win);
+        if (!m.has(ev.title)) m.set(ev.title, new Set());
+        m.get(ev.title).add(ev.rooms[0]);
+      }
+    }
+
+    for (const ev of raw){
+      const isRange = ev.rooms.length===6 && ev.rooms.every(x => ['3','4','5','6','7','8'].includes(x));
+      if (!isRange){
+        processed.push(ev);
+        continue;
+      }
+      // If explicit courts exist for same title + time → use only those
+      const k = keyOf(ev);
+      const exp = explicitByKey.get(k);
+      if (exp && exp.size){
+        processed.push({ ...ev, rooms: Array.from(exp).sort() });
+        continue;
+      }
+
+      // Otherwise, see if other orgs at same window grabbed explicit courts;
+      // assign remainder to this org if it’s the only range holder.
+      const win = `${ev.startMin}|${ev.endMin}`;
+      const m = allKeysAtWindow.get(win); // Map(title -> Set(courts))
+      if (m && m.size){
+        const taken = new Set();
+        for (const [t,_set] of m) for (const c of _set) taken.add(c);
+        const all = new Set(['3','4','5','6','7','8']);
+        for (const c of taken) all.delete(c);
+
+        // If there’s only one range org at this window, give them remaining courts
+        const rangeCount = raw.filter(x =>
+          x !== ev &&
+          x.rooms.length===6 &&
+          x.startMin===ev.startMin &&
+          x.endMin===ev.endMin
+        ).length + 1; // include current
+
+        if (rangeCount === 1 && all.size){
+          processed.push({ ...ev, rooms: Array.from(all).sort() });
+          continue;
+        }
+      }
+
+      // fallback: keep full 3–8
+      processed.push(ev);
+    }
+  } else {
+    processed = raw;
+  }
+
+  // --- Expand per-room events; dedupe identical slots ----------------------
+  const outSlots = [];
+  const seen = new Set();
+  for (const ev of processed){
+    for (const room of ev.rooms){
+      const sub = ev.purpose ? ` ${ev.purpose}` : '';
+      const key = `${room}|${ev.startMin}|${ev.endMin}|${ev.title}|${ev.purpose||''}`;
+      if (seen.has(key)) continue;
+      seen.add(key);
+
+      outSlots.push({
+        roomId: room,
+        startMin: ev.startMin,
+        endMin: ev.endMin,
+        title: ev.title,
+        subtitle: ev.purpose ? ev.purpose : ''
+      });
     }
   }
 
-  // dedupe exact matches
-  const seen = new Set();
-  const deduped = [];
-  for (const s of slots) {
-    const key = `${s.roomId}|${s.startMin}|${s.endMin}|${s.title}|${s.subtitle}`;
-    if (seen.has(key)) continue;
-    seen.add(key);
-    deduped.push(s);
-  }
+  // Sort by room then time
+  outSlots.sort((a,b)=> (Number(a.roomId)-Number(b.roomId)) || (a.startMin-b.startMin));
 
-  console.log(`Row stats • total=${body.length} kept=${kept} skipLoc=${skipLoc} skipMap=${skipMap} skipTime=${skipTime}`);
-  writeOut(deduped);
-})();
-
-function writeOut(slots) {
   const out = {
-    dayStartMin: 360,  // 6:00
-    dayEndMin: 1380,   // 23:00
-    rooms: [
-      { id:'1', label:'1', group:'south' },
-      { id:'2', label:'2', group:'south' },
-      { id:'3', label:'3', group:'fieldhouse' },
-      { id:'4', label:'4', group:'fieldhouse' },
-      { id:'5', label:'5', group:'fieldhouse' },
-      { id:'6', label:'6', group:'fieldhouse' },
-      { id:'7', label:'7', group:'fieldhouse' },
-      { id:'8', label:'8', group:'fieldhouse' },
-      { id:'9', label:'9', group:'north' },
-      { id:'10', label:'10', group:'north' },
-    ],
-    slots
+    dayStartMin: 360,
+    dayEndMin: 1380,
+    rooms: defaultRooms(),
+    slots: outSlots
   };
-  fs.writeFileSync(JSON_OUT, JSON.stringify(out, null, 2));
-  console.log(`Wrote ${path.basename(JSON_OUT)} • rooms=${out.rooms.length} • slots=${out.slots.length}`);
+
+  await writeOut(out);
+  console.log(`Wrote events.json • rooms=${out.rooms.length} • slots=${out.slots.length}`);
 }
+
+function defaultRooms(){
+  return [
+    { id:'1',  label:'1',  group:'south' },
+    { id:'2',  label:'2',  group:'south' },
+    { id:'3',  label:'3',  group:'fieldhouse' },
+    { id:'4',  label:'4',  group:'fieldhouse' },
+    { id:'5',  label:'5',  group:'fieldhouse' },
+    { id:'6',  label:'6',  group:'fieldhouse' },
+    { id:'7',  label:'7',  group:'fieldhouse' },
+    { id:'8',  label:'8',  group:'fieldhouse' },
+    { id:'9',  label:'9',  group:'north' },
+    { id:'10', label:'10', group:'north' }
+  ];
+}
+
+async function writeOut(obj){
+  await fs.writeFile(OUT_JSON, JSON.stringify(obj, null, 2), 'utf8');
+}
+
+// run
+main().catch(err=>{
+  console.error('transform failed:', err);
+  process.exit(1);
+});
