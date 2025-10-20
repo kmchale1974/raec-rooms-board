@@ -6,9 +6,8 @@ import readline from 'readline';
 const CSV_PATH = process.env.CSV_PATH || 'data/inbox/latest.csv';
 const JSON_OUT = process.env.JSON_OUT || 'events.json';
 
-// ---------- Helpers ----------
+// ---------------- Time helpers ----------------
 function parseTimeRange(raw) {
-  // handles: "9:30am - 12:30pm" and "3:00pm -  4:30pm" (note double space)
   if (!raw) return null;
   const t = raw.replace(/\s+/g, ' ').trim();
   const m = t.match(/^(\d{1,2}:\d{2}\s*[ap]m)\s*-\s*(\d{1,2}:\d{2}\s*[ap]m)$/i);
@@ -31,19 +30,17 @@ function clampDay(startMin, endMin, dayStartMin = 360, dayEndMin = 1380) {
   const e = Math.min(endMin, dayEndMin);
   return e > s ? { startMin: s, endMin: e } : null;
 }
+
+// ---------------- CSV helpers ----------------
 function csvSplit(line, delim = ',') {
-  // minimal CSV split (double-quote safe enough for our export)
   const out = [];
   let cur = '';
   let inQ = false;
   for (let i = 0; i < line.length; i++) {
     const ch = line[i];
     if (ch === '"') {
-      if (inQ && line[i + 1] === '"') {
-        cur += '"'; i++;
-      } else {
-        inQ = !inQ;
-      }
+      if (inQ && line[i + 1] === '"') { cur += '"'; i++; }
+      else { inQ = !inQ; }
     } else if (ch === delim && !inQ) {
       out.push(cur); cur = '';
     } else {
@@ -53,111 +50,29 @@ function csvSplit(line, delim = ',') {
   out.push(cur);
   return out.map(s => s.trim());
 }
-function normalize(s) { return (s || '').trim(); }
-function includesAny(s, arr) {
-  const t = s.toLowerCase();
-  return arr.some(k => t.includes(k));
-}
+const norm = s => (s || '').trim();
+const includes = (s, sub) => (s || '').toLowerCase().includes(sub.toLowerCase());
+const anyIncludes = (s, arr) => arr.some(k => includes(s, k));
 
-// ---------- Season Logic (turf vs courts) ----------
-// Turf available from the **second Monday in November** through the **third Monday in March** (inclusive).
-// Outside of that period, we treat fieldhouse as 3–8 courts and **ignore turf-labeled facilities**.
+// ---------------- Season logic: turf vs courts ----------------
+// Turf season: 2nd Monday in Nov  -> 3rd Monday in Mar (next year)
 function nthMonday(year, monthIndex, n) {
-  // monthIndex: 0=Jan ... 11=Dec
   const d = new Date(Date.UTC(year, monthIndex, 1));
-  const day = d.getUTCDay(); // 0=Sun..6=Sat
-  // first Monday date:
+  const day = d.getUTCDay();
   const firstMon = 1 + ((8 - day) % 7);
   const date = firstMon + 7 * (n - 1);
   return new Date(Date.UTC(year, monthIndex, date));
 }
 function isTurfSeason(dateUtc) {
   const y = dateUtc.getUTCFullYear();
-  const nov2 = nthMonday(y, 10, 2);      // Nov (10) 2nd Monday
-  const mar3 = nthMonday(y + 1, 2, 3);   // Mar (2) 3rd Monday, next year
-
-  // Window spans across year boundary: [nov2..mar3]
+  const nov2 = nthMonday(y, 10, 2);
+  const mar3 = nthMonday(y + 1, 2, 3);
   return dateUtc >= nov2 && dateUtc <= mar3;
 }
 
-// ---------- Facility Mapping ----------
-function mapFacilityToRooms(rawFacility, turfSeason) {
-  const f = (rawFacility || '').toLowerCase().replace(/\s+/g, ' ').trim();
-
-  // South gym: 1/2; North gym: 9/10
-  // Half Court => same room id + lane
-  // Court X-AB or Full Gym X => map to the single room number X (or both for combined)
-  // Championship Court => same as courts 1 and 2 (both rooms)
-  // Fieldhouse (courts 3–8) vs turf (full/half/quarter); ignore turf outside turf season.
-
-  // --- Championship Court -> 1 and 2
-  if (includesAny(f, ['championship court'])) return { rooms: ['1', '2'] };
-
-  // --- Full gym combos
-  if (includesAny(f, ['full gym 1ab & 2ab'])) return { rooms: ['1', '2'] };
-  if (includesAny(f, ['full gym 9 & 10'])) return { rooms: ['9', '10'] };
-
-  // --- Specific court ranges
-  // “Court 1-AB”, “Court 2-AB”, “Court 9-AB”, “Court 10-AB”
-  const courtAB = f.match(/court\s+(1|2|9|10)-ab/);
-  if (courtAB) return { rooms: [courtAB[1]] };
-
-  // Single specific court “- Court N”
-  const fieldhouseCourt = f.match(/fieldhouse\s*-\s*court\s*(3|4|5|6|7|8)/);
-  if (fieldhouseCourt) return { rooms: [fieldhouseCourt[1]] };
-
-  // Group range “Fieldhouse Court 3-8”
-  if (includesAny(f, ['fieldhouse court 3-8'])) return { rooms: ['3','4','5','6','7','8'] };
-
-  // Half Court lanes A/B
-  const halfCourt = f.match(/ac gym - half court\s*(1|2|9|10)\s*([ab])/);
-  if (halfCourt) {
-    const room = halfCourt[1];
-    const lane = halfCourt[2].toUpperCase();
-    return { rooms: [room], lane };
-  }
-
-  // “AC Gym - Court X-AB”
-  const acGymCourtAB = f.match(/ac gym - court\s*(1|2|9|10)-ab/);
-  if (acGymCourtAB) return { rooms: [acGymCourtAB[1]] };
-
-  // Turf labels (only when turf season)
-  const turfLabels = [
-    'full turf',
-    'half turf north',
-    'half turf south',
-    'quarter turf na',
-    'quarter turf nb',
-    'quarter turf sa',
-    'quarter turf sb'
-  ];
-  if (turfLabels.some(t => f.includes(t))) {
-    if (!turfSeason) return { rooms: [] }; // ignore turf when courts are down
-    // During turf season, we still display by turf “zones” using 3–8 boxes:
-    // Full turf => show across 3–8; half north => 6–8; half south => 3–5; quarters map to single courts.
-    if (f.includes('full turf')) return { rooms: ['3','4','5','6','7','8'] };
-    if (f.includes('half turf north')) return { rooms: ['6','7','8'] };
-    if (f.includes('half turf south')) return { rooms: ['3','4','5'] };
-    if (f.includes('quarter turf na')) return { rooms: ['6'] };
-    if (f.includes('quarter turf nb')) return { rooms: ['7'] };
-    if (f.includes('quarter turf sa')) return { rooms: ['3'] };
-    if (f.includes('quarter turf sb')) return { rooms: ['4'] };
-  }
-
-  // Plain “AC Gym - Court X” (rare)
-  const acCourtSingle = f.match(/ac gym - court\s*(1|2|9|10)\b/);
-  if (acCourtSingle) return { rooms: [acCourtSingle[1]] };
-
-  // If we reach here and it’s a half/quarter/fieldhouse generic we can’t map -> []
-  return { rooms: [] };
-}
-
-function isPickleball(row) {
-  const purpose = (row['Reservation Purpose'] || row['reservationpurpose'] || '').toLowerCase();
-  return purpose.includes('pickleball');
-}
-function cleanTitle(reservee) {
-  const t = normalize(reservee);
+// ---------------- Mapping & normalization ----------------
+function cleanReservee(reservee) {
+  const t = norm(reservee);
   if (!t) return t;
   // collapse "Extreme Volleyball, Extreme Volleyball" -> "Extreme Volleyball"
   const parts = t.split(',').map(s => s.trim()).filter(Boolean);
@@ -166,12 +81,215 @@ function cleanTitle(reservee) {
   return uniq.join(', ');
 }
 
-// ---------- Main ----------
+function isPickleballRow(row) {
+  const purpose = (row['reservation purpose'] || row['reservationpurpose'] || '').toLowerCase();
+  return purpose.includes('pickleball');
+}
+
+function cleanPurposeForPublic(purpose, isPickleball) {
+  let p = norm(purpose);
+  if (!p) return '';
+  // Hide internal notes
+  p = p.replace(/internal hold.*$/i, '').trim();
+  // For pickleball, don't repeat the word (title already "Open Pickleball")
+  if (isPickleball) {
+    p = p.replace(/open\s*pickleball/ig, '').trim();
+  }
+  return p;
+}
+
+// We tag coverage so we can collapse A/B later
+// coverage: 'A', 'B', 'AB', 'FULL_PAIR' (9&10 or 1&2), or undefined (single full room)
+function mapFacilityToCoverage(facility, turfSeason) {
+  const f = (facility || '').toLowerCase().replace(/\s+/g, ' ').trim();
+
+  // ---- Championship Court => rooms 1 & 2 (pair)
+  if (includes(f, 'championship court')) return { rooms: ['1', '2'], coverage: 'FULL_PAIR' };
+
+  // ---- Full gym pairs
+  if (includes(f, 'full gym 1ab & 2ab')) return { rooms: ['1', '2'], coverage: 'FULL_PAIR' };
+  if (includes(f, 'full gym 9 & 10'))    return { rooms: ['9', '10'], coverage: 'FULL_PAIR' };
+
+  // ---- Court X-AB
+  const courtAB = f.match(/court\s+(1|2|9|10)-ab/);
+  if (courtAB) return { rooms: [courtAB[1]], coverage: 'AB' };
+
+  // ---- Half Court X[A/B]
+  const half = f.match(/half court\s*(1|2|9|10)\s*([ab])/);
+  if (half) return { rooms: [half[1]], coverage: half[2].toUpperCase() }; // 'A' or 'B'
+
+  // ---- Plain Court X (rare in feed)
+  const singleCourt = f.match(/\bac gym - court\s*(1|2|9|10)\b/);
+  if (singleCourt) return { rooms: [singleCourt[1]] };
+
+  // ---- Fieldhouse courts and ranges
+  const fhSingle = f.match(/fieldhouse\s*-\s*court\s*(3|4|5|6|7|8)/);
+  if (fhSingle) return { rooms: [fhSingle[1]] };
+
+  if (includes(f, 'fieldhouse court 3-8')) return { rooms: ['3','4','5','6','7','8'], coverage: 'AB' }; // treat like a general range (multi)
+
+  // ---- Turf labels (only respected in turf season)
+  const isTurf =
+    includes(f, 'full turf') ||
+    includes(f, 'half turf north') ||
+    includes(f, 'half turf south') ||
+    includes(f, 'quarter turf na') ||
+    includes(f, 'quarter turf nb') ||
+    includes(f, 'quarter turf sa') ||
+    includes(f, 'quarter turf sb');
+
+  if (isTurf) {
+    if (!turfSeason) return { rooms: [] };
+    if (includes(f, 'full turf'))        return { rooms: ['3','4','5','6','7','8'], coverage: 'AB' };
+    if (includes(f, 'half turf north'))  return { rooms: ['6','7','8'] };
+    if (includes(f, 'half turf south'))  return { rooms: ['3','4','5'] };
+    if (includes(f, 'quarter turf na'))  return { rooms: ['6'] };
+    if (includes(f, 'quarter turf nb'))  return { rooms: ['7'] };
+    if (includes(f, 'quarter turf sa'))  return { rooms: ['3'] };
+    if (includes(f, 'quarter turf sb'))  return { rooms: ['4'] };
+  }
+
+  return { rooms: [] };
+}
+
+// ---------------- Collapse A/B to single room when fully covered ----------------
+// We collect coverage fragments for each logical key and then materialize slots.
+function collapseCoverage(frags) {
+  // key: room|start|end|title -> set of coverages observed
+  const byKey = new Map(); // key -> { roomId, startMin, endMin, title, subtitle?, flags:Set, hasPair:boolean }
+  const keyOf = f => `${f.roomId}|${f.startMin}|${f.endMin}|${f.title}`;
+
+  for (const f of frags) {
+    const k = keyOf(f);
+    if (!byKey.has(k)) {
+      byKey.set(k, {
+        roomId: f.roomId,
+        startMin: f.startMin,
+        endMin: f.endMin,
+        title: f.title,
+        subtitle: f.subtitle || '',
+        flags: new Set(),
+        pairRooms: new Set([f.roomId]) // will be unioned if FULL_PAIR contributed
+      });
+    }
+    const rec = byKey.get(k);
+    if (f.coverage) rec.flags.add(f.coverage); // A, B, AB, FULL_PAIR
+    if (f.pairRooms) f.pairRooms.forEach(r => rec.pairRooms.add(r));
+    // keep the richest subtitle if needed (longer)
+    if ((f.subtitle || '').length > (rec.subtitle || '').length) rec.subtitle = f.subtitle || '';
+  }
+
+  const out = [];
+  for (const rec of byKey.values()) {
+    const flags = rec.flags;
+    const hasAB = flags.has('AB');
+    const hasA = flags.has('A');
+    const hasB = flags.has('B');
+    const hasPair = flags.has('FULL_PAIR');
+
+    // If FULL_PAIR, materialize one slot per room in pair (1&2 or 9&10). No lane.
+    if (hasPair) {
+      for (const r of rec.pairRooms) {
+        out.push({
+          roomId: r, startMin: rec.startMin, endMin: rec.endMin,
+          title: rec.title, subtitle: rec.subtitle
+        });
+      }
+      continue;
+    }
+
+    // For single room: if AB present, or A+B both present, collapse to one (no lane)
+    if (hasAB || (hasA && hasB)) {
+      out.push({
+        roomId: rec.roomId, startMin: rec.startMin, endMin: rec.endMin,
+        title: rec.title, subtitle: rec.subtitle
+      });
+    } else if (hasA || hasB) {
+      // Only one half observed -> still show (with lane badge)
+      out.push({
+        roomId: rec.roomId, startMin: rec.startMin, endMin: rec.endMin,
+        title: rec.title, subtitle: rec.subtitle, lane: hasA ? 'A' : 'B'
+      });
+    } else {
+      // No half markers — treat as a plain full-room reservation
+      out.push({
+        roomId: rec.roomId, startMin: rec.startMin, endMin: rec.endMin,
+        title: rec.title, subtitle: rec.subtitle
+      });
+    }
+  }
+
+  // De-dupe per {room, start, end, title} in case multiple identical records came in
+  const seen = new Set();
+  const deduped = [];
+  for (const s of out) {
+    const k = `${s.roomId}|${s.startMin}|${s.endMin}|${s.title}`;
+    if (seen.has(k)) continue;
+    seen.add(k);
+    deduped.push(s);
+  }
+  return deduped;
+}
+
+// ---------------- Fieldhouse de-dup (range vs specific) ----------------
+function dedupeFieldhouse(slots) {
+  const field = new Set(['3','4','5','6','7','8']);
+  // If the exact same {title,start,end} appears across many fieldhouse rooms AND also appears
+  // as a single-court entry, keep one per room but drop duplicates created by the "range" rows.
+  const key = s => `${s.title}|${s.startMin}|${s.endMin}|${s.subtitle || ''}`;
+  const byKeyRoom = new Map(); // `${key}|room` -> count
+  const countsByKey = new Map(); // key -> count across fieldhouse
+
+  for (const s of slots) {
+    if (!field.has(s.roomId)) continue;
+    const k = key(s);
+    countsByKey.set(k, (countsByKey.get(k) || 0) + 1);
+    const kr = `${k}|${s.roomId}`;
+    byKeyRoom.set(kr, (byKeyRoom.get(kr) || 0) + 1);
+  }
+
+  const toDrop = new Set();
+  slots.forEach((s, idx) => {
+    if (!field.has(s.roomId)) return;
+    const k = key(s);
+    // If the key is present many times (range) we only keep one per room.
+    const kr = `${k}|${s.roomId}`;
+    const countInRoom = byKeyRoom.get(kr) || 0;
+    if (countInRoom > 1) {
+      // drop extras beyond 1
+      // The first occurrence wins; the rest are dropped
+      if (byKeyRoom.get(kr) > 1) {
+        byKeyRoom.set(kr, 1); // mark we've kept one
+      } else {
+        toDrop.add(idx);
+      }
+    }
+  });
+
+  return slots.filter((_, i) => !toDrop.has(i));
+}
+
+// ---------------- Default rooms ----------------
+function defaultRooms() {
+  return [
+    { id: '1',  label: '1',  group: 'south' },
+    { id: '2',  label: '2',  group: 'south' },
+    { id: '3',  label: '3',  group: 'fieldhouse' },
+    { id: '4',  label: '4',  group: 'fieldhouse' },
+    { id: '5',  label: '5',  group: 'fieldhouse' },
+    { id: '6',  label: '6',  group: 'fieldhouse' },
+    { id: '7',  label: '7',  group: 'fieldhouse' },
+    { id: '8',  label: '8',  group: 'fieldhouse' },
+    { id: '9',  label: '9',  group: 'north' },
+    { id: '10', label: '10', group: 'north' }
+  ];
+}
+
+// ---------------- Main ----------------
 async function run() {
-  // Read CSV
   if (!fs.existsSync(CSV_PATH)) {
-    console.log('No CSV found; writing empty scaffold.');
-    return writeJson({ rooms: defaultRooms(), slots: [], dayStartMin: 360, dayEndMin: 1380 });
+    writeJson({ dayStartMin: 360, dayEndMin: 1380, rooms: defaultRooms(), slots: [] });
+    return;
   }
 
   const rl = readline.createInterface({
@@ -182,7 +300,6 @@ async function run() {
   let headers = [];
   const rows = [];
   let lineNo = 0;
-
   for await (const line of rl) {
     lineNo++;
     if (lineNo === 1) {
@@ -196,137 +313,68 @@ async function run() {
     rows.push(row);
   }
 
-  // Determine season (UTC date so it’s deterministic in GH Actions too)
-  const today = new Date(); // local is fine for signage; change to UTC if you prefer
-  const turfSeason = isTurfSeason(new Date(Date.UTC(today.getFullYear(), today.getMonth(), today.getDate())));
+  const today = new Date();
+  const utc = new Date(Date.UTC(today.getFullYear(), today.getMonth(), today.getDate()));
+  const turfSeason = isTurfSeason(utc);
 
-  const slots = [];
-  const dayStartMin = 360;  // 6:00a
-  const dayEndMin   = 1380; // 11:00p
+  const dayStartMin = 360;
+  const dayEndMin = 1380;
 
-  // Collect events raw
+  // Collect fragments with coverage tags
+  const frags = [];
+
   for (const r of rows) {
-    const loc = normalize(r['location'] || r['Location:']);
-    if (loc && loc !== 'Athletic & Event Center') {
-      // your instruction: ignore other locations (report is for RAEC only)
-      continue;
-    }
-    const fac = normalize(r['facility']);
-    const rt  = normalize(r['reserved time'] || r['reservedtime']);
-    const titleRaw = r['reservee'];
-    const purpose = r['reservation purpose'] || r['reservationpurpose'] || '';
+    const loc = norm(r['location'] || r['Location:']);
+    if (loc && loc !== 'Athletic & Event Center') continue; // ignore other locations
 
+    const fac = norm(r['facility']);
+    const rt  = norm(r['reserved time'] || r['reservedtime']);
     const tr = parseTimeRange(rt);
     if (!tr) continue;
-    const clamped = clampDay(tr.startMin, tr.endMin, dayStartMin, dayEndMin);
-    if (!clamped) continue;
+    const clamp = clampDay(tr.startMin, tr.endMin, dayStartMin, dayEndMin);
+    if (!clamp) continue;
 
-    // Replace "RAEC Front Desk..." + purpose contains "Pickleball" => show "Open Pickleball"
-    let title = cleanTitle(titleRaw);
-    if (isPickleball(r)) title = 'Open Pickleball';
+    const pickle = isPickleballRow(r);
+    let title = pickle ? 'Open Pickleball' : cleanReservee(r['reservee']);
+    // Special case: “RAEC Front Desk, Rentals - On Hold” => suppress for pickleball
+    if (pickle && includes(title, 'raec front desk')) title = 'Open Pickleball';
 
-    const mapped = mapFacilityToRooms(fac, turfSeason);
+    const purpose = r['reservation purpose'] || r['reservationpurpose'] || '';
+    const subtitle = cleanPurposeForPublic(purpose, pickle);
+
+    const mapped = mapFacilityToCoverage(fac, turfSeason);
     const rooms = mapped.rooms || [];
-    const lane = mapped.lane; // A or B when Half Court
+    const coverage = mapped.coverage; // 'A'|'B'|'AB'|'FULL_PAIR'|undefined
+
+    if (!rooms.length) continue;
 
     for (const room of rooms) {
-      slots.push({
+      const frag = {
         roomId: room,
-        startMin: clamped.startMin,
-        endMin: clamped.endMin,
+        startMin: clamp.startMin,
+        endMin: clamp.endMin,
         title,
-        subtitle: normalize(purpose),
-        lane
-      });
+        subtitle
+      };
+      if (coverage) frag.coverage = coverage;
+      // If FULL_PAIR, annotate the pair (1&2 or 9&10)
+      if (coverage === 'FULL_PAIR') {
+        frag.pairRooms = new Set(rooms);
+      }
+      frags.push(frag);
     }
   }
 
-  // Fieldhouse “3–8” vs specific per-court de-dup:
-  // If an event targets general set (3..8) and there is a matching event for a specific court in the same time window
-  // with the same title, drop the general one for that court to avoid duplicates.
-  const result = dedupeFieldhouse(slots);
+  // Collapse A/B -> single, materialize pairs, and de-duplicate per room
+  let slots = collapseCoverage(frags);
+
+  // Fieldhouse de-dup (range vs specific per-court)
+  slots = dedupeFieldhouse(slots);
 
   // Sort by time then title
-  result.sort((a, b) => a.startMin - b.startMin || (a.title || '').localeCompare(b.title || ''));
+  slots.sort((a, b) => a.startMin - b.startMin || (a.title || '').localeCompare(b.title || ''));
 
-  const payload = {
-    dayStartMin,
-    dayEndMin,
-    rooms: defaultRooms(), // fixed 1..10 with groups
-    slots: result
-  };
-
-  writeJson(payload);
-}
-
-// Build fixed room list 1..10
-function defaultRooms() {
-  return [
-    { id: '1', label: '1', group: 'south' },
-    { id: '2', label: '2', group: 'south' },
-    { id: '3', label: '3', group: 'fieldhouse' },
-    { id: '4', label: '4', group: 'fieldhouse' },
-    { id: '5', label: '5', group: 'fieldhouse' },
-    { id: '6', label: '6', group: 'fieldhouse' },
-    { id: '7', label: '7', group: 'fieldhouse' },
-    { id: '8', label: '8', group: 'fieldhouse' },
-    { id: '9', label: '9', group: 'north' },
-    { id: '10', label: '10', group: 'north' }
-  ];
-}
-
-function overlaps(a, b) {
-  return a.startMin < b.endMin && b.startMin < a.endMin;
-}
-function dedupeFieldhouse(slots) {
-  const field = new Set(['3','4','5','6','7','8']);
-  const byRoom = new Map(); // roomId -> slots[]
-  for (const s of slots) {
-    if (!byRoom.has(s.roomId)) byRoom.set(s.roomId, []);
-    byRoom.get(s.roomId).push(s);
-  }
-
-  // For each general “3-8” source, we can’t easily detect, but we approximate:
-  // If a slot appears for multiple fieldhouse rooms with same title/time, and also appears for a single
-  // specific room with same title/time, drop the “duplicate” general in that room.
-  // We detect multi-room clones by a key.
-  const key = s => `${s.title}|${s.startMin}|${s.endMin}|${s.subtitle || ''}`;
-
-  // Gather keys that appear in multiple fieldhouse rooms
-  const keyRooms = new Map(); // key -> Set(rooms)
-  for (const s of slots) {
-    if (!field.has(s.roomId)) continue;
-    const k = key(s);
-    if (!keyRooms.has(k)) keyRooms.set(k, new Set());
-    keyRooms.get(k).add(s.roomId);
-  }
-
-  // If an event also appears as a “unique specific” (e.g., “- Court 6”) we keep the specific instance.
-  // Here we approximate: if key appears 3+ rooms AND also appears in a single-room occurrence
-  // that we consider “specific”, we will drop the general from the rooms that also have a “specific duplicate”.
-  // (In practice, your CSV provides both the range row and per-court rows for the actual assignment.)
-  const toDrop = new Set(); // indexes of slots to drop
-  // Build fast lookup by key + room
-  const byKeyRoom = new Map(); // k|room -> [indices]
-  slots.forEach((s, idx) => {
-    const k = key(s);
-    const kr = `${k}|${s.roomId}`;
-    if (!byKeyRoom.has(kr)) byKeyRoom.set(kr, []);
-    byKeyRoom.get(kr).push(idx);
-  });
-
-  for (const [k, rooms] of keyRooms.entries()) {
-    if (rooms.size <= 1) continue; // only a single room has it—fine
-    // If the same k has any explicit single-room rows in the CSV (we treat presence itself as specificity),
-    // then for each of those rooms, drop the duplicates in that room beyond one instance.
-    for (const r of rooms) {
-      const list = byKeyRoom.get(`${k}|${r}`) || [];
-      // keep only one (the “specific”) — drop others
-      for (let i = 1; i < list.length; i++) toDrop.add(list[i]);
-    }
-  }
-
-  return slots.filter((_, idx) => !toDrop.has(idx));
+  writeJson({ dayStartMin, dayEndMin, rooms: defaultRooms(), slots });
 }
 
 function writeJson(obj) {
