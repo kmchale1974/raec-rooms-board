@@ -1,29 +1,29 @@
-// app.js — grid-only board with Fieldhouse row taller and event clamping
+// app.js — readable, wrapping grid; past events auto-hide
 
-const MAX_SHOW_PER_CELL = 5; // show up to this many; rest collapse into "+N more"
+// Show as many as needed; rely on scrolling inside each cell
+const MAX_SHOW_PER_CELL = Infinity;
 
-// Utility: format today’s date and live clock
+// date/clock
 function formatDate(d){
   return d.toLocaleDateString(undefined, { weekday:'long', month:'long', day:'numeric' });
 }
 function formatClock(d){
   return d.toLocaleTimeString(undefined, { hour:'numeric', minute:'2-digit' });
 }
-// Utility: minutes to "h:mma" (e.g., 18:30 -> "6:30 PM")
 function minsToLabel(m){
   const h = Math.floor(m/60), mm = m%60;
-  const d = new Date();
-  d.setHours(h, mm, 0, 0);
+  const d = new Date(); d.setHours(h, mm, 0, 0);
   return d.toLocaleTimeString(undefined, { hour:'numeric', minute:'2-digit' });
 }
-// Clean repeated org names: "X, X" -> "X"
+
+// collapse "X, X" -> "X" only (no other abbreviation)
 function cleanName(s){
   if (!s) return s;
   const parts = s.split(',').map(p=>p.trim()).filter(Boolean);
   if (parts.length>=2 && parts[0].toLowerCase()===parts[1].toLowerCase()) return parts[0];
   return s;
 }
-// Load events.json fresh
+
 async function loadData(){
   const url = `./events.json?ts=${Date.now()}`;
   const resp = await fetch(url, { cache:'no-store' });
@@ -33,7 +33,6 @@ async function loadData(){
   return data;
 }
 
-// Map room id -> row bucket
 function bucketForRoom(id){
   const n = Number(id);
   if (n===1 || n===2) return 'south';
@@ -42,7 +41,6 @@ function bucketForRoom(id){
   return 'field';
 }
 
-// Render 10 placeholder cells into each row so CSS visibility rules work
 function ensureRowSkeleton(rowEl){
   rowEl.innerHTML = '';
   for (let i=1;i<=10;i++){
@@ -60,36 +58,29 @@ function ensureRowSkeleton(rowEl){
   }
 }
 
-// Insert events into their room cell with spacing, clamping, and dedupe
 function renderCells(data){
   const now = new Date();
   const nowMin = now.getHours()*60 + now.getMinutes();
 
-  // Build per-room list
+  // Group by room
   const perRoom = {};
   (data.slots || []).forEach(s=>{
-    // hide past events
-    if (typeof s.endMin === 'number' && s.endMin <= nowMin) return;
-
+    if (typeof s.endMin === 'number' && s.endMin <= nowMin) return; // hide past
     const roomId = String(s.roomId);
     if (!perRoom[roomId]) perRoom[roomId] = [];
 
-    // Normalize/clean title
-    const title = cleanName(s.title || '').trim();
-    const subtitle = (s.subtitle || '').trim();
-
     perRoom[roomId].push({
-      startMin: s.startMin, endMin: s.endMin,
-      title, subtitle
+      startMin: s.startMin,
+      endMin: s.endMin,
+      title: cleanName((s.title||'').trim()),
+      subtitle: (s.subtitle||'').trim()
     });
   });
 
-  // Fill rows
   ['south','field','north'].forEach(bucket=>{
     const rowEl = document.getElementById(`row-${bucket}`);
     ensureRowSkeleton(rowEl);
 
-    // For each visible cell in this row, place events
     Array.from(rowEl.children).forEach(cell=>{
       const roomId = cell.dataset.room;
       const rBucket = bucketForRoom(roomId);
@@ -100,18 +91,16 @@ function renderCells(data){
       const eventsEl = cell.querySelector('.events');
       const badgeEl = cell.querySelector('.badge');
 
-      // Sort by start time
+      // Sort & dedupe identical title/time
       let items = (perRoom[roomId] || []).sort((a,b)=>(a.startMin||0)-(b.startMin||0));
-
-      // Dedupe identical (same title + same window)
       const seen = new Set();
       items = items.filter(ev=>{
-        const key = `${ev.title}|${ev.startMin}|${ev.endMin}`;
+        const key = `${ev.title}|${ev.subtitle}|${ev.startMin}|${ev.endMin}`;
         if (seen.has(key)) return false;
         seen.add(key); return true;
       });
 
-      // Render up to MAX_SHOW_PER_CELL; remainder -> “+N more”
+      // Render
       eventsEl.innerHTML = '';
       const showCount = Math.min(items.length, MAX_SHOW_PER_CELL);
       for (let i=0;i<showCount;i++){
@@ -119,12 +108,13 @@ function renderCells(data){
         const timeStr = (typeof ev.startMin==='number' && typeof ev.endMin==='number')
           ? `${minsToLabel(ev.startMin)} - ${minsToLabel(ev.endMin)}`
           : '';
+        const subtitle = ev.subtitle ? ` • ${ev.subtitle}` : '';
 
         const div = document.createElement('div');
         div.className = 'evt';
         div.innerHTML = `
           <div class="title">${ev.title || ''}</div>
-          <div class="time">${timeStr}${ev.subtitle ? ` • ${ev.subtitle}`:''}</div>
+          <div class="time">${timeStr}${subtitle}</div>
         `;
         eventsEl.appendChild(div);
       }
@@ -135,12 +125,15 @@ function renderCells(data){
         eventsEl.appendChild(more);
       }
 
-      // Badge: simple “Now” if any event currently active in this room
+      // Badge “Now” if active
       const active = items.some(ev => ev.startMin <= nowMin && nowMin < ev.endMin);
-      badgeEl.textContent = active ? 'Now' : '';
-      badgeEl.style.color = active ? '#fff' : 'var(--muted)';
-      badgeEl.style.background = active ? 'var(--accent)' : '#0d1118';
-      badgeEl.style.borderColor = active ? 'var(--accent)' : 'var(--grid)';
+      if (active){
+        badgeEl.textContent = 'Now';
+        badgeEl.style.display = 'inline-block';
+      }else{
+        badgeEl.textContent = '';
+        badgeEl.style.display = 'none';
+      }
     });
   });
 }
@@ -160,7 +153,7 @@ async function init(){
   try{
     const data = await loadData();
     renderCells(data);
-    // keep it fresh; re-pull every 60s to drop past events automatically
+    // refresh every minute to drop past events/live update
     setInterval(async ()=>{
       try{
         const fresh = await loadData();
