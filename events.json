@@ -98,13 +98,6 @@
     },
     {
       "roomId": "3",
-      "startMin": 540,
-      "endMin": 1320,
-      "title": "RAEC Front Desk, Rentals - On Hold",
-      "subtitle": "Fieldhouse Installed per NM"
-    },
-    {
-      "roomId": "3",
       "startMin": 1140,
       "endMin": 1260,
       "title": "Pink Elite Basketball",
@@ -112,24 +105,10 @@
     },
     {
       "roomId": "4",
-      "startMin": 540,
-      "endMin": 1320,
-      "title": "RAEC Front Desk, Rentals - On Hold",
-      "subtitle": "Fieldhouse Installed per NM"
-    },
-    {
-      "roomId": "4",
       "startMin": 1140,
       "endMin": 1260,
       "title": "Pink Elite Basketball",
       "subtitle": "2025 Q4 Pattern"
-    },
-    {
-      "roomId": "5",
-      "startMin": 540,
-      "endMin": 1320,
-      "title": "RAEC Front Desk, Rentals - On Hold",
-      "subtitle": "Fieldhouse Installed per NM"
     },
     {
       "roomId": "5",
@@ -137,13 +116,6 @@
       "endMin": 1260,
       "title": "Pink Elite Basketball",
       "subtitle": "Basketball"
-    },
-    {
-      "roomId": "6",
-      "startMin": 540,
-      "endMin": 1320,
-      "title": "RAEC Front Desk, Rentals - On Hold",
-      "subtitle": "Fieldhouse Installed per NM"
     },
     {
       "roomId": "6",
@@ -154,24 +126,10 @@
     },
     {
       "roomId": "7",
-      "startMin": 540,
-      "endMin": 1320,
-      "title": "RAEC Front Desk, Rentals - On Hold",
-      "subtitle": "Fieldhouse Installed per NM"
-    },
-    {
-      "roomId": "7",
       "startMin": 1080,
       "endMin": 1260,
       "title": "Illinois Flight, Brandon Brown",
       "subtitle": "Basketball"
-    },
-    {
-      "roomId": "8",
-      "startMin": 540,
-      "endMin": 1320,
-      "title": "RAEC Front Desk, Rentals - On Hold",
-      "subtitle": "Fieldhouse Installed per NM"
     },
     {
       "roomId": "8",
