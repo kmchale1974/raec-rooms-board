@@ -14,94 +14,173 @@
       --muted:#9aa3b2;
       --accent:#2b87ff;
       --grid:#1b202a;
-      --south:#1f2a44;
-      --field:#1f3a2a;
-      --north:#3a2a2a;
-      --chip:#2a3140;
+      --chip:#263043;
+      --chip-text:#e7eaf1;
+      --ok:#1f9d6a;
     }
-    html,body{ height:100%; margin:0; background:var(--bg); color:var(--ink);
-      font-family: Inter, "SF Pro Text", Segoe UI, Roboto, Arial, sans-serif; }
-    /* Fixed 1920×1080 stage with padding */
+    html,body{ margin:0; height:100%; background:var(--bg); color:var(--ink); font-family: Inter, "SF Pro Text", Segoe UI, Roboto, Arial, sans-serif; }
+
+    /* Fixed canvas; we auto-scale this (see script at bottom) */
     .stage{
-      width:1920px; height:1080px; margin:0 auto; padding:24px;
-      box-sizing:border-box; display:grid; grid-template-rows: 96px 1fr; gap:16px;
+      width:1920px; height:1080px; padding:32px; box-sizing:border-box;
+      display:grid; grid-template-rows: 120px 1fr; gap:24px;
     }
+
+    /* Header row */
     .header{
-      display:grid; grid-template-columns: 1fr 1fr 1fr; align-items:center;
-      background:var(--panel); border-radius:16px; padding:12px 16px; box-sizing:border-box;
+      display:grid; grid-template-columns: 360px 1fr 360px; align-items:center;
     }
-    .logo{
-      display:flex; align-items:center; gap:12px;
+    .brand{
+      display:flex; align-items:center; gap:16px;
     }
-    .logo img{ height:64px; width:auto; display:block; }
+    .brand img{ height:80px; width:auto; object-fit:contain; }
     .dateclock{
       justify-self:center; text-align:center;
     }
-    #headerDate{ font-weight:800; font-size:42px; line-height:1; }
-    #headerClock{ color:var(--muted); font-size:28px; margin-top:4px; }
+    #headerDate{ font-size:44px; font-weight:800; letter-spacing:.02em; }
+    #headerClock{ font-size:28px; color:var(--muted); margin-top:6px; font-weight:600; }
+
     .wifi{
-      justify-self:end; text-align:right; color:var(--muted); font-size:22px; line-height:1.2;
+      justify-self:end; background:var(--panel); border:1px solid var(--grid);
+      border-radius:14px; padding:14px 16px; min-width:320px;
     }
-    .board{
-      background:var(--panel); border-radius:16px; padding:18px; box-sizing:border-box;
-      display:grid; grid-template-columns: 1fr 1.5fr 1fr; gap:18px; width:100%; height:100%;
+    .wifi .title{ font-size:16px; color:var(--muted); letter-spacing:.08em; text-transform:uppercase; }
+    .wifi .row{ display:flex; justify-content:space-between; gap:12px; margin-top:6px; }
+    .wifi .row span:first-child{ color:var(--muted); }
+    .wifi .row span:last-child{ font-weight:700; }
+
+    /* Grid container: South | Fieldhouse | North */
+    .grid{
+      display:grid; grid-template-columns: 1fr 1.5fr 1fr; gap:24px;
+      height:100%;
     }
 
-    .col{ display:flex; flex-direction:column; gap:12px; min-width:0; }
-    .grouphead{
-      font-weight:800; letter-spacing:.02em; font-size:28px; color:var(--ink);
-      padding:6px 8px; border-left:4px solid var(--accent);
+    .group{
+      background:var(--panel); border:1px solid var(--grid); border-radius:18px;
+      padding:16px; display:grid; grid-template-rows: 44px 1fr; gap:12px;
+      overflow:hidden;
     }
-    .gridcol{
-      display:grid; gap:12px;
-      /* South/North = 2 rooms, Fieldhouse = 6 rooms; JS just renders the rooms it has. */
-      grid-auto-rows: 1fr;
-    }
-
-    .cell{
-      background:#141924; border:1px solid var(--grid); border-radius:14px; padding:12px;
-      display:flex; flex-direction:column; min-height:0; overflow:hidden;
-    }
-    .cell.south{ outline:1px solid rgba(43,135,255,.15); }
-    .cell.fieldhouse{ outline:1px solid rgba(76,175,80,.12); }
-    .cell.north{ outline:1px solid rgba(255,99,71,.12); }
-
-    .roomtag{
-      display:flex; align-items:center; justify-content:flex-start; gap:10px;
-      font-weight:900; font-size:48px; line-height:1; margin-bottom:10px;
+    .group .title{
+      font-size:18px; color:var(--muted); letter-spacing:.1em; text-transform:uppercase;
+      border-bottom:1px solid var(--grid); display:flex; align-items:center; padding-bottom:6px;
     }
 
-    .events{ display:flex; flex-direction:column; gap:10px; min-height:0; overflow:hidden; }
-    .evt{
-      background:var(--chip); border:1px solid var(--grid); border-radius:10px;
+    /* South/North: 2 rows (1..2) and (9..10) stacked */
+    .rooms-stack{
+      display:grid; grid-template-rows: 1fr 1fr; gap:12px; min-height:0;
+    }
+
+    /* Fieldhouse: 2 rows x 3 cols for 3..8 */
+    .rooms-fieldhouse{
+      display:grid; grid-template-columns: repeat(3, 1fr); grid-template-rows: 1fr 1fr;
+      gap:12px; min-height:0;
+    }
+
+    /* Individual room card */
+    .room{
+      border:1px solid var(--grid); border-radius:14px; padding:14px;
+      display:flex; flex-direction:column; gap:10px; min-height:0; overflow:hidden;
+      background:linear-gradient(180deg, rgba(255,255,255,0.02), rgba(0,0,0,0)) ;
+    }
+    .roomHeader{
+      display:flex; align-items:center; justify-content:space-between; gap:12px;
+      border-bottom:1px dashed var(--grid); padding-bottom:8px;
+    }
+    .roomHeader .id{
+      font-size:28px; font-weight:800; letter-spacing:.04em;
+    }
+    .roomHeader .count{
+      font-size:13px; color:var(--muted);
+    }
+
+    /* Events list within a room */
+    .events{
+      display:flex; flex-direction:column; gap:10px; overflow:auto;
+    }
+    .event{
+      background:var(--chip); border:1px solid var(--grid); border-radius:12px;
       padding:10px 12px; display:flex; flex-direction:column; gap:6px;
     }
-    .evt .title{ font-weight:800; font-size:28px; }
-    .evt .sub{ color:var(--muted); font-size:22px; }
+    .event .who{ font-size:18px; font-weight:800; line-height:1.1; }
+    .event .what{ font-size:15px; color:var(--muted); line-height:1.2; }
+    .event .when{ font-size:14px; color:#b7c0cf; font-weight:600; }
 
-    /* prevent scrollbars on signage */
-    body { overflow: hidden; }
+    /* Clip long text gracefully (no ellipses since you want full details; we wrap) */
+    .who, .what{ word-wrap:break-word; overflow-wrap:anywhere; }
+
+    /* Subtle footer legend (optional) */
+    .legend{
+      position:absolute; right:24px; bottom:18px; color:var(--muted); font-size:12px;
+    }
   </style>
 </head>
 <body>
   <div class="stage">
     <div class="header">
-      <div class="logo">
-        <!-- Put your logo file as /logo.png in the repo root -->
+      <div class="brand">
+        <!-- Put your file in the repo root as logo.png -->
         <img src="./logo.png" alt="Romeoville Athletic & Event Center">
       </div>
+
       <div class="dateclock">
         <div id="headerDate">—</div>
         <div id="headerClock">—</div>
       </div>
-      <div class="wifi" id="wifi">Wi-Fi: — • Pass: —</div>
+
+      <div class="wifi">
+        <div class="title">Guest Wi-Fi</div>
+        <div class="row"><span>Network</span><span id="wifiSsid">RAEC-Public</span></div>
+        <div class="row"><span>Password</span><span id="wifiPass">Publ!c00</span></div>
+      </div>
     </div>
 
-    <div class="board">
-      <div id="gridRoot" class="gridroot" style="display:contents;"></div>
+    <div class="grid">
+      <!-- South Gym (1,2) -->
+      <section class="group" id="group-south">
+        <div class="title">South Gym</div>
+        <div class="rooms-stack" id="southRooms"></div>
+      </section>
+
+      <!-- Fieldhouse (3..8) -->
+      <section class="group" id="group-fieldhouse">
+        <div class="title">Fieldhouse</div>
+        <div class="rooms-fieldhouse" id="fieldhouseRooms"></div>
+      </section>
+
+      <!-- North Gym (9,10) -->
+      <section class="group" id="group-north">
+        <div class="title">North Gym</div>
+        <div class="rooms-stack" id="northRooms"></div>
+      </section>
     </div>
   </div>
 
+  <!-- Your application code -->
   <script type="module" src="./app.js"></script>
+
+  <!-- Auto-scale helper (fit 1920x1080 to any screen without scrollbars) -->
+  <script>
+    (function fitStageSetup(){
+      const STAGE_W = 1920, STAGE_H = 1080;
+      function fit() {
+        const sx = window.innerWidth  / STAGE_W;
+        const sy = window.innerHeight / STAGE_H;
+        const s  = Math.min(sx, sy);
+        const stage = document.querySelector('.stage');
+        if (!stage) return;
+        stage.style.transform = `scale(${s})`;
+        stage.style.transformOrigin = 'top left';
+        document.body.style.minHeight = (STAGE_H * s) + 'px';
+        // center horizontally, pin to top
+        if (!stage.parentElement) return;
+        stage.parentElement.style.display = 'flex';
+        stage.parentElement.style.justifyContent = 'center';
+        stage.parentElement.style.alignItems = 'flex-start';
+      }
+      window.addEventListener('resize', fit);
+      window.addEventListener('orientationchange', fit);
+      document.addEventListener('DOMContentLoaded', fit);
+    })();
+  </script>
 </body>
 </html>
