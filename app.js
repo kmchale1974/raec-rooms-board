@@ -1,175 +1,189 @@
-// app.js — pure JavaScript (no HTML here!)
+// app.js
 
-/** Utilities **/
-const pad = (n) => String(n).padStart(2, '0');
-function minutesToLabel(m){
-  const h24 = Math.floor(m/60), mm = m%60;
-  const h12 = ((h24 + 11) % 12) + 1;
-  const ampm = h24 >= 12 ? 'pm' : 'am';
-  return `${h12}:${pad(mm)}${ampm}`;
+// ---------- config ----------
+const WIFI_SSID = 'RAEC-Public';
+const WIFI_PASS = 'Publ!c00';
+
+// Groups by room id (must match index.html containers)
+const GROUPS = {
+  south:    ['1', '2'],
+  fieldhouse:['3','4','5','6','7','8'],
+  north:    ['9', '10'],
+};
+
+// ---------- time helpers ----------
+function fmt12(min) {
+  let h = Math.floor(min/60), m = min%60;
+  const ap = h >= 12 ? 'pm' : 'am';
+  h = h % 12; if (h === 0) h = 12;
+  return `${h}:${m.toString().padStart(2,'0')}${ap}`;
+}
+function fmtRange(startMin, endMin) {
+  return `${fmt12(startMin)} - ${fmt12(endMin)}`;
+}
+function nowMinutes() {
+  const d = new Date();
+  return d.getHours() * 60 + d.getMinutes();
+}
+function formatHeaderDate(d=new Date()) {
+  const opts = { weekday:'long', month:'long', day:'numeric' };
+  return d.toLocaleDateString(undefined, opts);
+}
+function formatHeaderClock(d=new Date()) {
+  let h = d.getHours();
+  const m = d.getMinutes().toString().padStart(2,'0');
+  const ap = h >= 12 ? 'PM' : 'AM';
+  h = h % 12; if (h === 0) h = 12;
+  return `${h}:${m} ${ap}`;
 }
 
-// Pickleball label cleaner
-function normalizePickleball(title, subtitle){
-  const blob = `${title || ''} ${subtitle || ''}`.toLowerCase();
-  if (blob.includes('pickleball')) {
-    return {
-      who: 'Open Pickleball',
-      what: '', // hide internal note
-    };
+// ---------- DOM helpers ----------
+function el(tag, cls, text) {
+  const n = document.createElement(tag);
+  if (cls) n.className = cls;
+  if (text != null) n.textContent = text;
+  return n;
+}
+
+// ---------- rendering ----------
+function renderHeader() {
+  const dateEl  = document.getElementById('headerDate');
+  const clockEl = document.getElementById('headerClock');
+  const ssidEl  = document.getElementById('wifiSsid');
+  const passEl  = document.getElementById('wifiPass');
+  if (ssidEl) ssidEl.textContent = WIFI_SSID;
+  if (passEl) passEl.textContent = WIFI_PASS;
+
+  function tick() {
+    if (dateEl)  dateEl.textContent  = formatHeaderDate();
+    if (clockEl) clockEl.textContent = formatHeaderClock();
   }
-  // Normal case
-  return {
-    who: title || '',
-    what: subtitle || '',
-  };
+  tick();
+  // Update clock once per second (smooth)
+  setInterval(tick, 1000);
 }
 
-// Collapse duplicate events per room by key
-function uniqueByKey(arr, keyFn){
-  const seen = new Set();
-  const out = [];
-  for (const item of arr) {
-    const k = keyFn(item);
-    if (seen.has(k)) continue;
-    seen.add(k);
-    out.push(item);
+function buildRoomCard(roomId, roomEvents) {
+  // Card
+  const card = el('div', 'room');
+
+  // Header: room id at left; count at right (optional)
+  const header = el('div', 'roomHeader');
+  header.appendChild(el('div', 'id', roomId));
+  if (roomEvents.length > 0) {
+    header.appendChild(el('div', 'count', `${roomEvents.length} event${roomEvents.length>1?'s':''}`));
+  } else {
+    header.appendChild(el('div', 'count', ''));
   }
-  return out;
+  card.appendChild(header);
+
+  // Events list
+  const list = el('div', 'events');
+  if (roomEvents.length === 0) {
+    // Keep cell empty per your request (no "No reservations")
+  } else {
+    for (const evt of roomEvents) {
+      const chip = el('div', 'event');
+      const who  = el('div', 'who', evt.title || 'Reserved');
+      const what = evt.subtitle ? el('div', 'what', evt.subtitle) : null;
+      const when = el('div', 'when', fmtRange(evt.startMin, evt.endMin));
+
+      chip.appendChild(who);
+      if (what) chip.appendChild(what);
+      chip.appendChild(when);
+      list.appendChild(chip);
+    }
+  }
+  card.appendChild(list);
+  return card;
 }
 
-/** Load events.json (with cache-busting) **/
-async function loadData(){
+function renderGrid(data) {
+  // Containers
+  const southEl      = document.getElementById('southRooms');
+  const fieldhouseEl = document.getElementById('fieldhouseRooms');
+  const northEl      = document.getElementById('northRooms');
+
+  if (!southEl || !fieldhouseEl || !northEl) {
+    console.error('Grid containers missing in index.html');
+    return;
+  }
+
+  // Clear existing
+  southEl.innerHTML = '';
+  fieldhouseEl.innerHTML = '';
+  northEl.innerHTML = '';
+
+  const nowMin = nowMinutes();
+  const dayStart = data.dayStartMin ?? 360;
+  const dayEnd   = data.dayEndMin   ?? 1380;
+
+  // Filter to current/future events (hide fully past)
+  const visibleSlots = Array.isArray(data.slots) ? data.slots.filter(s => s && s.endMin > nowMin && s.startMin < dayEnd) : [];
+
+  // Group events by room id
+  const byRoom = new Map();
+  for (const id of [...GROUPS.south, ...GROUPS.fieldhouse, ...GROUPS.north]) {
+    byRoom.set(id, []);
+  }
+  for (const s of visibleSlots) {
+    if (!s.roomId) continue;
+    if (!byRoom.has(s.roomId)) byRoom.set(s.roomId, []);
+    byRoom.get(s.roomId).push(s);
+  }
+
+  // Sort events inside each room by start time
+  for (const [rid, list] of byRoom) {
+    list.sort((a,b) => a.startMin - b.startMin || a.endMin - b.endMin);
+  }
+
+  // Build South (1,2)
+  GROUPS.south.forEach(rid => {
+    const card = buildRoomCard(rid, byRoom.get(rid) || []);
+    southEl.appendChild(card);
+  });
+
+  // Build Fieldhouse (3..8) in a 2x3 grid; index.html CSS already arranges it
+  GROUPS.fieldhouse.forEach(rid => {
+    const card = buildRoomCard(rid, byRoom.get(rid) || []);
+    fieldhouseEl.appendChild(card);
+  });
+
+  // Build North (9,10)
+  GROUPS.north.forEach(rid => {
+    const card = buildRoomCard(rid, byRoom.get(rid) || []);
+    northEl.appendChild(card);
+  });
+}
+
+// ---------- data load ----------
+async function loadData() {
   const url = `./events.json?ts=${Date.now()}`;
   const resp = await fetch(url, { cache: 'no-store' });
-  if (!resp.ok) throw new Error(`Failed to fetch ${url}: ${resp.status}`);
+  if (!resp.ok) {
+    throw new Error(`Failed to fetch ${url}: ${resp.status} ${resp.statusText}`);
+  }
   const data = await resp.json();
   console.log('Loaded events.json', data);
   return data;
 }
 
-/** Render the grid **/
-function ensureRoomsContainers(){
-  const south = document.getElementById('southRooms');
-  const field = document.getElementById('fieldhouseRooms');
-  const north = document.getElementById('northRooms');
-  if (!south || !field || !north) return;
-
-  // South: rooms 1,2 (stack)
-  south.innerHTML = `
-    <div class="room" data-room="1"><div class="roomHeader"><div class="id">1</div><div class="count" id="count-1"></div></div><div class="events" id="ev-1"></div></div>
-    <div class="room" data-room="2"><div class="roomHeader"><div class="id">2</div><div class="count" id="count-2"></div></div><div class="events" id="ev-2"></div></div>
-  `;
-
-  // Fieldhouse: 3..8 (2x3)
-  field.innerHTML = '';
-  [3,4,5,6,7,8].forEach(id => {
-    field.innerHTML += `
-      <div class="room" data-room="${id}">
-        <div class="roomHeader"><div class="id">${id}</div><div class="count" id="count-${id}"></div></div>
-        <div class="events" id="ev-${id}"></div>
-      </div>`;
-  });
-
-  // North: 9,10 (stack)
-  north.innerHTML = `
-    <div class="room" data-room="9"><div class="roomHeader"><div class="id">9</div><div class="count" id="count-9"></div></div><div class="events" id="ev-9"></div></div>
-    <div class="room" data-room="10"><div class="roomHeader"><div class="id">10</div><div class="count" id="count-10"></div></div><div class="events" id="ev-10"></div></div>
-  `;
+// Re-render frequently so events fall off after they end without reloading the page.
+let latestData = null;
+async function renderLoop() {
+  if (!latestData) return;
+  renderGrid(latestData);
 }
+setInterval(renderLoop, 30 * 1000); // refresh view every 30s
 
-function renderClock(){
-  const dateEl = document.getElementById('headerDate');
-  const clockEl = document.getElementById('headerClock');
-  const now = new Date();
-  const day = now.toLocaleDateString(undefined, { weekday: 'long' });
-  const date = now.toLocaleDateString(undefined, { month: 'long', day: 'numeric', year: 'numeric' });
-  const time = now.toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' });
-  if (dateEl) dateEl.textContent = `${day}, ${date}`;
-  if (clockEl) clockEl.textContent = time;
-}
-
-function render(data){
-  ensureRoomsContainers();
-
-  const now = new Date();
-  const nowMin = now.getHours()*60 + now.getMinutes();
-
-  // events.json expected: { rooms:[{id,label,group}...], slots:[{roomId,startMin,endMin,title,subtitle}] }
-  const allSlots = Array.isArray(data.slots) ? data.slots : [];
-  // Hide past events: only keep where end is in the future
-  let future = allSlots.filter(s => (s.endMin ?? 0) > nowMin);
-
-  // Clean labels, normalize Pickleball titles, remove exact dupes per room+window+who+what
-  future = future.map(s => {
-    const clean = normalizePickleball(s.title, s.subtitle);
-    return {
-      ...s,
-      who: clean.who,
-      what: clean.what,
-      startLabel: minutesToLabel(s.startMin ?? 0),
-      endLabel: minutesToLabel(s.endMin ?? 0),
-    };
-  });
-
-  // De-duplicate exact repeats within a room and same time range and same text
-  const dedupedByRoom = {};
-  for (const slot of future) {
-    const room = String(slot.roomId);
-    if (!dedupedByRoom[room]) dedupedByRoom[room] = [];
-    dedupedByRoom[room].push(slot);
-  }
-  Object.keys(dedupedByRoom).forEach(room => {
-    dedupedByRoom[room] = uniqueByKey(
-      dedupedByRoom[room].sort((a,b)=> (a.startMin-b.startMin) || (a.endMin-b.endMin) || a.who.localeCompare(b.who)),
-      s => `${s.startMin}-${s.endMin}-${s.who}-${s.what}`
-    );
-  });
-
-  // Render per room
-  const rooms = (data.rooms || []).map(r => String(r.id));
-  rooms.forEach(id => {
-    const listEl = document.getElementById(`ev-${id}`);
-    const countEl = document.getElementById(`count-${id}`);
-    if (!listEl) return;
-    const items = dedupedByRoom[id] || [];
-    listEl.innerHTML = '';
-    if (countEl) countEl.textContent = items.length ? `${items.length} event${items.length>1?'s':''}` : '';
-    for (const ev of items) {
-      const who = ev.who || '';
-      const what = ev.what || '';
-      const when = `${ev.startLabel} – ${ev.endLabel}`;
-      const card = document.createElement('div');
-      card.className = 'event';
-      card.innerHTML = `
-        <div class="who">${who}</div>
-        ${what ? `<div class="what">${what}</div>` : ``}
-        <div class="when">${when}</div>
-      `;
-      listEl.appendChild(card);
-    }
-  });
-}
-
-/** Init **/
-async function init(){
+// ---------- init ----------
+async function init() {
+  renderHeader();
   try {
-    renderClock();
-    setInterval(renderClock, 1000 * 30); // refresh clock every 30s
-
-    const data = await loadData();
-    render(data);
-
-    // Optionally refresh events every few minutes
-    setInterval(async () => {
-      try {
-        const fresh = await loadData();
-        render(fresh);
-      } catch (e) { console.warn('Refresh failed:', e); }
-    }, 1000 * 60 * 5);
-  } catch (e) {
-    console.error(e);
+    latestData = await loadData();
+    renderGrid(latestData);
+  } catch (err) {
+    console.error(err);
   }
 }
-
 document.addEventListener('DOMContentLoaded', init);
