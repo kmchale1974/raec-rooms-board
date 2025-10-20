@@ -55,45 +55,136 @@
   ],
   "slots": [
     {
-      "roomId": "10A",
-      "startMin": 570,
-      "endMin": 750,
-      "title": "RAEC Front Desk, Rentals - On Hold",
-      "subtitle": "Open Pickleball Internal Hold per NM"
+      "roomId": "1",
+      "startMin": 1080,
+      "endMin": 1170,
+      "title": "Belusa United Volleyball, Nicole Diamond",
+      "subtitle": "Volleyball"
     },
     {
-      "roomId": "10",
-      "startMin": 570,
-      "endMin": 750,
-      "title": "RAEC Front Desk, Rentals - On Hold",
-      "subtitle": "Open Pickleball Internal Hold per NM"
+      "roomId": "1",
+      "startMin": 1080,
+      "endMin": 1170,
+      "title": "Illinois Flight, Brandon Brown",
+      "subtitle": "Basketball"
     },
     {
-      "roomId": "10B",
-      "startMin": 570,
-      "endMin": 750,
-      "title": "RAEC Front Desk, Rentals - On Hold",
-      "subtitle": "Open Pickleball Internal Hold per NM"
+      "roomId": "1",
+      "startMin": 1260,
+      "endMin": 1380,
+      "title": "Chicago Sport and Social Club",
+      "subtitle": "Volleyball (Grab A Game)"
     },
     {
-      "roomId": "9A",
-      "startMin": 570,
-      "endMin": 750,
+      "roomId": "2",
+      "startMin": 1080,
+      "endMin": 1170,
+      "title": "Belusa United Volleyball, Nicole Diamond",
+      "subtitle": "Volleyball"
+    },
+    {
+      "roomId": "2",
+      "startMin": 1080,
+      "endMin": 1170,
+      "title": "Illinois Flight, Brandon Brown",
+      "subtitle": "Basketball"
+    },
+    {
+      "roomId": "2",
+      "startMin": 1260,
+      "endMin": 1380,
+      "title": "Chicago Sport and Social Club",
+      "subtitle": "Volleyball (Grab A Game)"
+    },
+    {
+      "roomId": "3",
+      "startMin": 540,
+      "endMin": 1320,
       "title": "RAEC Front Desk, Rentals - On Hold",
-      "subtitle": "Open Pickleball Internal Hold per NM"
+      "subtitle": "Fieldhouse Installed per NM"
+    },
+    {
+      "roomId": "3",
+      "startMin": 1140,
+      "endMin": 1260,
+      "title": "Pink Elite Basketball",
+      "subtitle": "2025 Q4 Pattern"
+    },
+    {
+      "roomId": "4",
+      "startMin": 540,
+      "endMin": 1320,
+      "title": "RAEC Front Desk, Rentals - On Hold",
+      "subtitle": "Fieldhouse Installed per NM"
+    },
+    {
+      "roomId": "4",
+      "startMin": 1140,
+      "endMin": 1260,
+      "title": "Pink Elite Basketball",
+      "subtitle": "2025 Q4 Pattern"
+    },
+    {
+      "roomId": "5",
+      "startMin": 540,
+      "endMin": 1320,
+      "title": "RAEC Front Desk, Rentals - On Hold",
+      "subtitle": "Fieldhouse Installed per NM"
+    },
+    {
+      "roomId": "5",
+      "startMin": 1140,
+      "endMin": 1260,
+      "title": "Pink Elite Basketball",
+      "subtitle": "Basketball"
+    },
+    {
+      "roomId": "6",
+      "startMin": 540,
+      "endMin": 1320,
+      "title": "RAEC Front Desk, Rentals - On Hold",
+      "subtitle": "Fieldhouse Installed per NM"
+    },
+    {
+      "roomId": "6",
+      "startMin": 1170,
+      "endMin": 1260,
+      "title": "Illinois Flight, Brandon Brown",
+      "subtitle": "Basketball"
+    },
+    {
+      "roomId": "7",
+      "startMin": 540,
+      "endMin": 1320,
+      "title": "RAEC Front Desk, Rentals - On Hold",
+      "subtitle": "Fieldhouse Installed per NM"
+    },
+    {
+      "roomId": "7",
+      "startMin": 1080,
+      "endMin": 1260,
+      "title": "Illinois Flight, Brandon Brown",
+      "subtitle": "Basketball"
+    },
+    {
+      "roomId": "8",
+      "startMin": 540,
+      "endMin": 1320,
+      "title": "RAEC Front Desk, Rentals - On Hold",
+      "subtitle": "Fieldhouse Installed per NM"
+    },
+    {
+      "roomId": "8",
+      "startMin": 1080,
+      "endMin": 1260,
+      "title": "Illinois Flight, Brandon Brown",
+      "subtitle": "Basketball"
     },
     {
       "roomId": "9",
       "startMin": 570,
       "endMin": 750,
-      "title": "RAEC Front Desk, Rentals - On Hold",
-      "subtitle": "Open Pickleball Internal Hold per NM"
-    },
-    {
-      "roomId": "9B",
-      "startMin": 570,
-      "endMin": 750,
-      "title": "RAEC Front Desk, Rentals - On Hold",
+      "title": "Open Pickleball",
       "subtitle": "Open Pickleball Internal Hold per NM"
     },
     {
@@ -104,11 +195,11 @@
       "subtitle": "2025 Q4 Pattern"
     },
     {
-      "roomId": "9B",
-      "startMin": 960,
-      "endMin": 1140,
-      "title": "Sam Franklin Training, Sam Franklin",
-      "subtitle": "2025 Q4 Pattern"
+      "roomId": "10",
+      "startMin": 570,
+      "endMin": 750,
+      "title": "Open Pickleball",
+      "subtitle": "Open Pickleball Internal Hold per NM"
     },
     {
       "roomId": "10",
@@ -116,265 +207,6 @@
       "endMin": 1140,
       "title": "Sam Franklin Training, Sam Franklin",
       "subtitle": "2025 Q4 Pattern"
-    },
-    {
-      "roomId": "1",
-      "startMin": 1080,
-      "endMin": 1170,
-      "title": "Belusa United Volleyball, Nicole Diamond",
-      "subtitle": "Volleyball"
-    },
-    {
-      "roomId": "2",
-      "startMin": 1080,
-      "endMin": 1170,
-      "title": "Belusa United Volleyball, Nicole Diamond",
-      "subtitle": "Volleyball"
-    },
-    {
-      "roomId": "3",
-      "startMin": 1080,
-      "endMin": 1260,
-      "title": "Illinois Flight, Brandon Brown",
-      "subtitle": "Basketball"
-    },
-    {
-      "roomId": "4",
-      "startMin": 1080,
-      "endMin": 1260,
-      "title": "Illinois Flight, Brandon Brown",
-      "subtitle": "Basketball"
-    },
-    {
-      "roomId": "5",
-      "startMin": 1080,
-      "endMin": 1260,
-      "title": "Illinois Flight, Brandon Brown",
-      "subtitle": "Basketball"
-    },
-    {
-      "roomId": "6",
-      "startMin": 1080,
-      "endMin": 1260,
-      "title": "Illinois Flight, Brandon Brown",
-      "subtitle": "Basketball"
-    },
-    {
-      "roomId": "7",
-      "startMin": 1080,
-      "endMin": 1260,
-      "title": "Illinois Flight, Brandon Brown",
-      "subtitle": "Basketball"
-    },
-    {
-      "roomId": "8",
-      "startMin": 1080,
-      "endMin": 1260,
-      "title": "Illinois Flight, Brandon Brown",
-      "subtitle": "Basketball"
-    },
-    {
-      "roomId": "1A",
-      "startMin": 1080,
-      "endMin": 1170,
-      "title": "Illinois Flight, Brandon Brown",
-      "subtitle": "Basketball"
-    },
-    {
-      "roomId": "1",
-      "startMin": 1080,
-      "endMin": 1170,
-      "title": "Illinois Flight, Brandon Brown",
-      "subtitle": "Basketball"
-    },
-    {
-      "roomId": "2A",
-      "startMin": 1080,
-      "endMin": 1170,
-      "title": "Belusa United Volleyball, Nicole Diamond",
-      "subtitle": "Volleyball"
-    },
-    {
-      "roomId": "2B",
-      "startMin": 1080,
-      "endMin": 1170,
-      "title": "Belusa United Volleyball, Nicole Diamond",
-      "subtitle": "Volleyball"
-    },
-    {
-      "roomId": "2",
-      "startMin": 1080,
-      "endMin": 1170,
-      "title": "Illinois Flight, Brandon Brown",
-      "subtitle": "Basketball"
-    },
-    {
-      "roomId": "3",
-      "startMin": 1140,
-      "endMin": 1260,
-      "title": "Pink Elite Basketball",
-      "subtitle": "Basketball"
-    },
-    {
-      "roomId": "4",
-      "startMin": 1140,
-      "endMin": 1260,
-      "title": "Pink Elite Basketball",
-      "subtitle": "Basketball"
-    },
-    {
-      "roomId": "5",
-      "startMin": 1140,
-      "endMin": 1260,
-      "title": "Pink Elite Basketball",
-      "subtitle": "Basketball"
-    },
-    {
-      "roomId": "6",
-      "startMin": 1140,
-      "endMin": 1260,
-      "title": "Pink Elite Basketball",
-      "subtitle": "Basketball"
-    },
-    {
-      "roomId": "7",
-      "startMin": 1140,
-      "endMin": 1260,
-      "title": "Pink Elite Basketball",
-      "subtitle": "Basketball"
-    },
-    {
-      "roomId": "8",
-      "startMin": 1140,
-      "endMin": 1260,
-      "title": "Pink Elite Basketball",
-      "subtitle": "Basketball"
-    },
-    {
-      "roomId": "3",
-      "startMin": 1140,
-      "endMin": 1260,
-      "title": "Pink Elite Basketball",
-      "subtitle": "2025 Q4 Pattern"
-    },
-    {
-      "roomId": "4",
-      "startMin": 1140,
-      "endMin": 1260,
-      "title": "Pink Elite Basketball",
-      "subtitle": "2025 Q4 Pattern"
-    },
-    {
-      "roomId": "5",
-      "startMin": 1140,
-      "endMin": 1260,
-      "title": "Pink Elite Basketball",
-      "subtitle": "2025 Q4 Pattern"
-    },
-    {
-      "roomId": "6",
-      "startMin": 1140,
-      "endMin": 1260,
-      "title": "Pink Elite Basketball",
-      "subtitle": "2025 Q4 Pattern"
-    },
-    {
-      "roomId": "7",
-      "startMin": 1140,
-      "endMin": 1260,
-      "title": "Pink Elite Basketball",
-      "subtitle": "2025 Q4 Pattern"
-    },
-    {
-      "roomId": "8",
-      "startMin": 1140,
-      "endMin": 1260,
-      "title": "Pink Elite Basketball",
-      "subtitle": "2025 Q4 Pattern"
-    },
-    {
-      "roomId": "3",
-      "startMin": 1170,
-      "endMin": 1260,
-      "title": "Illinois Flight, Brandon Brown",
-      "subtitle": "Basketball"
-    },
-    {
-      "roomId": "4",
-      "startMin": 1170,
-      "endMin": 1260,
-      "title": "Illinois Flight, Brandon Brown",
-      "subtitle": "Basketball"
-    },
-    {
-      "roomId": "5",
-      "startMin": 1170,
-      "endMin": 1260,
-      "title": "Illinois Flight, Brandon Brown",
-      "subtitle": "Basketball"
-    },
-    {
-      "roomId": "6",
-      "startMin": 1170,
-      "endMin": 1260,
-      "title": "Illinois Flight, Brandon Brown",
-      "subtitle": "Basketball"
-    },
-    {
-      "roomId": "7",
-      "startMin": 1170,
-      "endMin": 1260,
-      "title": "Illinois Flight, Brandon Brown",
-      "subtitle": "Basketball"
-    },
-    {
-      "roomId": "8",
-      "startMin": 1170,
-      "endMin": 1260,
-      "title": "Illinois Flight, Brandon Brown",
-      "subtitle": "Basketball"
-    },
-    {
-      "roomId": "1",
-      "startMin": 1260,
-      "endMin": 1380,
-      "title": "Chicago Sport and Social Club",
-      "subtitle": "Volleyball (Grab A Game)"
-    },
-    {
-      "roomId": "2",
-      "startMin": 1260,
-      "endMin": 1380,
-      "title": "Chicago Sport and Social Club",
-      "subtitle": "Volleyball (Grab A Game)"
-    },
-    {
-      "roomId": "1A",
-      "startMin": 1260,
-      "endMin": 1380,
-      "title": "Chicago Sport and Social Club",
-      "subtitle": "Volleyball (Grab A Game)"
-    },
-    {
-      "roomId": "1B",
-      "startMin": 1260,
-      "endMin": 1380,
-      "title": "Chicago Sport and Social Club",
-      "subtitle": "Volleyball (Grab A Game)"
-    },
-    {
-      "roomId": "2A",
-      "startMin": 1260,
-      "endMin": 1380,
-      "title": "Chicago Sport and Social Club",
-      "subtitle": "Volleyball (Grab A Game)"
-    },
-    {
-      "roomId": "2B",
-      "startMin": 1260,
-      "endMin": 1380,
-      "title": "Chicago Sport and Social Club",
-      "subtitle": "Volleyball (Grab A Game)"
     }
   ]
 }
