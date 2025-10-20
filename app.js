@@ -1,147 +1,186 @@
-// app.js
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <title>RAEC Rooms Board</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <link rel="icon" href="data:,">
 
-const WIFI_SSID = 'RAEC Public';
-const WIFI_PASS = 'Publ!c00';
-
-// cache-busted fetch so Yodeck / browsers don’t reuse stale JSON
-async function loadData() {
-  const url = `./events.json?ts=${Date.now()}`;
-  const resp = await fetch(url, { cache: 'no-store' });
-  const data = await resp.json();
-  console.log('Loaded events.json', data);
-  return data;
-}
-
-function nowMinutes() {
-  const d = new Date();
-  return d.getHours() * 60 + d.getMinutes();
-}
-function formatTime(min) {
-  let h = Math.floor(min / 60);
-  let m = min % 60;
-  const ampm = h >= 12 ? 'pm' : 'am';
-  if (h === 0) h = 12;
-  else if (h > 12) h -= 12;
-  return `${h}:${String(m).padStart(2, '0')}${ampm}`;
-}
-
-function groupClass(id) {
-  const n = parseInt(id, 10);
-  if (n <= 2) return 'south';
-  if (n >= 3 && n <= 8) return 'fieldhouse';
-  return 'north';
-}
-
-// Render header (logo + centered date/clock + wifi)
-function renderHeader() {
-  const dateEl = document.getElementById('headerDate');
-  const clockEl = document.getElementById('headerClock');
-  const wifiEl = document.getElementById('wifi');
-
-  function update() {
-    const now = new Date();
-    const dateStr = now.toLocaleDateString(undefined, { weekday: 'long', month: 'long', day: 'numeric' });
-    const timeStr = now.toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' });
-    dateEl.textContent = dateStr;
-    clockEl.textContent = timeStr;
-    wifiEl.innerHTML = `<strong>Wi-Fi:</strong> ${WIFI_SSID} &nbsp;•&nbsp; <strong>Pass:</strong> ${WIFI_PASS}`;
-  }
-  update();
-  setInterval(update, 1000);
-}
-
-function buildRoomCell(room, events) {
-  const cell = document.createElement('div');
-  cell.className = `cell ${groupClass(room.id)}`;
-
-  // Header row: large room number
-  const head = document.createElement('div');
-  head.className = 'roomtag';
-  head.innerHTML = `<span>${room.label}</span>`;
-  cell.appendChild(head);
-
-  const wrap = document.createElement('div');
-  wrap.className = 'events';
-
-  if (!events.length) {
-    const empty = document.createElement('div');
-    empty.className = 'empty';
-    empty.textContent = '';
-    wrap.appendChild(empty);
-  } else {
-    for (const ev of events) {
-      const evt = document.createElement('div');
-      evt.className = 'evt';
-
-      // Title with optional [A]/[B] lane badge
-      const t = document.createElement('div');
-      t.className = 'title';
-      t.textContent = ev.lane ? `[${ev.lane}] ${ev.title}` : ev.title;
-
-      const s = document.createElement('div');
-      s.className = 'sub';
-      s.textContent = ev.subtitle
-        ? `${formatTime(ev.startMin)}–${formatTime(ev.endMin)} • ${ev.subtitle}`
-        : `${formatTime(ev.startMin)}–${formatTime(ev.endMin)}`;
-
-      evt.appendChild(t);
-      evt.appendChild(s);
-      wrap.appendChild(evt);
+  <style>
+    :root{
+      --bg:#0f1115;
+      --panel:#12151c;
+      --ink:#e7eaf1;
+      --muted:#9aa3b2;
+      --accent:#2b87ff;
+      --grid:#1b202a;
+      --chip:#263043;
+      --chip-text:#e7eaf1;
+      --ok:#1f9d6a;
     }
-  }
+    html,body{ margin:0; height:100%; background:var(--bg); color:var(--ink); font-family: Inter, "SF Pro Text", Segoe UI, Roboto, Arial, sans-serif; }
 
-  cell.appendChild(wrap);
-  return cell;
-}
-
-function renderGrid(data) {
-  const stage = document.getElementById('gridRoot');
-  stage.innerHTML = '';
-
-  // Build fixed groups: south(1,2), fieldhouse(3..8), north(9,10)
-  const groups = [
-    { id: 'south', label: 'South Gym', rooms: data.rooms.filter(r => r.group === 'south') },
-    { id: 'fieldhouse', label: 'Fieldhouse', rooms: data.rooms.filter(r => r.group === 'fieldhouse') },
-    { id: 'north', label: 'North Gym', rooms: data.rooms.filter(r => r.group === 'north') }
-  ];
-
-  for (const g of groups) {
-    const col = document.createElement('div');
-    col.className = 'col';
-
-    const ghead = document.createElement('div');
-    ghead.className = 'grouphead';
-    ghead.textContent = g.label;
-    col.appendChild(ghead);
-
-    const grid = document.createElement('div');
-    grid.className = 'gridcol';
-
-    // room order already correct (1..10)
-    for (const room of g.rooms) {
-      const events = data.slots.filter(s => s.roomId === room.id);
-      grid.appendChild(buildRoomCell(room, events));
+    /* Fixed canvas; we auto-scale this (see script at bottom) */
+    .stage{
+      width:1920px; height:1080px; padding:32px; box-sizing:border-box;
+      display:grid; grid-template-rows: 120px 1fr; gap:24px;
     }
 
-    col.appendChild(grid);
-    stage.appendChild(col);
-  }
-}
+    /* Header row */
+    .header{
+      display:grid; grid-template-columns: 360px 1fr 360px; align-items:center;
+    }
+    .brand{
+      display:flex; align-items:center; gap:16px;
+    }
+    .brand img{ height:80px; width:auto; object-fit:contain; }
+    .dateclock{
+      justify-self:center; text-align:center;
+    }
+    #headerDate{ font-size:44px; font-weight:800; letter-spacing:.02em; }
+    #headerClock{ font-size:28px; color:var(--muted); margin-top:6px; font-weight:600; }
 
-async function init() {
-  renderHeader();
+    .wifi{
+      justify-self:end; background:var(--panel); border:1px solid var(--grid);
+      border-radius:14px; padding:14px 16px; min-width:320px;
+    }
+    .wifi .title{ font-size:16px; color:var(--muted); letter-spacing:.08em; text-transform:uppercase; }
+    .wifi .row{ display:flex; justify-content:space-between; gap:12px; margin-top:6px; }
+    .wifi .row span:first-child{ color:var(--muted); }
+    .wifi .row span:last-child{ font-weight:700; }
 
-  const data = await loadData();
+    /* Grid container: South | Fieldhouse | North */
+    .grid{
+      display:grid; grid-template-columns: 1fr 1.5fr 1fr; gap:24px;
+      height:100%;
+    }
 
-  // Filter out past events (endMin <= now)
-  const now = nowMinutes();
-  const filtered = {
-    ...data,
-    slots: (data.slots || []).filter(s => s.endMin > now)
-  };
-  console.log(`Slots filtered by time: ${(data.slots || []).length} -> ${filtered.slots.length} (now=${now})`);
+    .group{
+      background:var(--panel); border:1px solid var(--grid); border-radius:18px;
+      padding:16px; display:grid; grid-template-rows: 44px 1fr; gap:12px;
+      overflow:hidden;
+    }
+    .group .title{
+      font-size:18px; color:var(--muted); letter-spacing:.1em; text-transform:uppercase;
+      border-bottom:1px solid var(--grid); display:flex; align-items:center; padding-bottom:6px;
+    }
 
-  renderGrid(filtered);
-}
+    /* South/North: 2 rows (1..2) and (9..10) stacked */
+    .rooms-stack{
+      display:grid; grid-template-rows: 1fr 1fr; gap:12px; min-height:0;
+    }
 
-document.addEventListener('DOMContentLoaded', init);
+    /* Fieldhouse: 2 rows x 3 cols for 3..8 */
+    .rooms-fieldhouse{
+      display:grid; grid-template-columns: repeat(3, 1fr); grid-template-rows: 1fr 1fr;
+      gap:12px; min-height:0;
+    }
+
+    /* Individual room card */
+    .room{
+      border:1px solid var(--grid); border-radius:14px; padding:14px;
+      display:flex; flex-direction:column; gap:10px; min-height:0; overflow:hidden;
+      background:linear-gradient(180deg, rgba(255,255,255,0.02), rgba(0,0,0,0)) ;
+    }
+    .roomHeader{
+      display:flex; align-items:center; justify-content:space-between; gap:12px;
+      border-bottom:1px dashed var(--grid); padding-bottom:8px;
+    }
+    .roomHeader .id{
+      font-size:28px; font-weight:800; letter-spacing:.04em;
+    }
+    .roomHeader .count{
+      font-size:13px; color:var(--muted);
+    }
+
+    /* Events list within a room */
+    .events{
+      display:flex; flex-direction:column; gap:10px; overflow:auto;
+    }
+    .event{
+      background:var(--chip); border:1px solid var(--grid); border-radius:12px;
+      padding:10px 12px; display:flex; flex-direction:column; gap:6px;
+    }
+    .event .who{ font-size:18px; font-weight:800; line-height:1.1; }
+    .event .what{ font-size:15px; color:var(--muted); line-height:1.2; }
+    .event .when{ font-size:14px; color:#b7c0cf; font-weight:600; }
+
+    /* Clip long text gracefully (no ellipses since you want full details; we wrap) */
+    .who, .what{ word-wrap:break-word; overflow-wrap:anywhere; }
+
+    /* Subtle footer legend (optional) */
+    .legend{
+      position:absolute; right:24px; bottom:18px; color:var(--muted); font-size:12px;
+    }
+  </style>
+</head>
+<body>
+  <div class="stage">
+    <div class="header">
+      <div class="brand">
+        <!-- Put your file in the repo root as logo.png -->
+        <img src="./logo.png" alt="Romeoville Athletic & Event Center">
+      </div>
+
+      <div class="dateclock">
+        <div id="headerDate">—</div>
+        <div id="headerClock">—</div>
+      </div>
+
+      <div class="wifi">
+        <div class="title">Guest Wi-Fi</div>
+        <div class="row"><span>Network</span><span id="wifiSsid">RAEC-Public</span></div>
+        <div class="row"><span>Password</span><span id="wifiPass">Publ!c00</span></div>
+      </div>
+    </div>
+
+    <div class="grid">
+      <!-- South Gym (1,2) -->
+      <section class="group" id="group-south">
+        <div class="title">South Gym</div>
+        <div class="rooms-stack" id="southRooms"></div>
+      </section>
+
+      <!-- Fieldhouse (3..8) -->
+      <section class="group" id="group-fieldhouse">
+        <div class="title">Fieldhouse</div>
+        <div class="rooms-fieldhouse" id="fieldhouseRooms"></div>
+      </section>
+
+      <!-- North Gym (9,10) -->
+      <section class="group" id="group-north">
+        <div class="title">North Gym</div>
+        <div class="rooms-stack" id="northRooms"></div>
+      </section>
+    </div>
+  </div>
+
+  <!-- Your application code -->
+  <script type="module" src="./app.js"></script>
+
+  <!-- Auto-scale helper (fit 1920x1080 to any screen without scrollbars) -->
+  <script>
+    (function fitStageSetup(){
+      const STAGE_W = 1920, STAGE_H = 1080;
+      function fit() {
+        const sx = window.innerWidth  / STAGE_W;
+        const sy = window.innerHeight / STAGE_H;
+        const s  = Math.min(sx, sy);
+        const stage = document.querySelector('.stage');
+        if (!stage) return;
+        stage.style.transform = `scale(${s})`;
+        stage.style.transformOrigin = 'top left';
+        document.body.style.minHeight = (STAGE_H * s) + 'px';
+        // center horizontally, pin to top
+        if (!stage.parentElement) return;
+        stage.parentElement.style.display = 'flex';
+        stage.parentElement.style.justifyContent = 'center';
+        stage.parentElement.style.alignItems = 'flex-start';
+      }
+      window.addEventListener('resize', fit);
+      window.addEventListener('orientationchange', fit);
+      document.addEventListener('DOMContentLoaded', fit);
+    })();
+  </script>
+</body>
+</html>
