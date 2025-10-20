@@ -1,388 +1,360 @@
 // scripts/transform.mjs
+// Node 18+/ESM
 import fs from 'fs';
 import path from 'path';
-import readline from 'readline';
+import { fileURLToPath } from 'url';
 
-const CSV_PATH = process.env.CSV_PATH || 'data/inbox/latest.csv';
+// ---------- helpers ----------
+const __filename = fileURLToPath(import.meta.url);
+const __dirname  = path.dirname(__filename);
+
+const CSV_IN  = process.env.CSV_PATH || 'data/inbox/latest.csv';
 const JSON_OUT = process.env.JSON_OUT || 'events.json';
 
-// ---------------- Time helpers ----------------
-function parseTimeRange(raw) {
-  if (!raw) return null;
-  const t = raw.replace(/\s+/g, ' ').trim();
-  const m = t.match(/^(\d{1,2}:\d{2}\s*[ap]m)\s*-\s*(\d{1,2}:\d{2}\s*[ap]m)$/i);
-  if (!m) return null;
-  return { startMin: toMin(m[1]), endMin: toMin(m[2]) };
-}
-function toMin(hm) {
-  const s = hm.toLowerCase().replace(/\s+/g, '');
-  const mm = s.match(/^(\d{1,2}):(\d{2})(am|pm)$/);
-  if (!mm) return 0;
-  let h = parseInt(mm[1], 10);
-  const min = parseInt(mm[2], 10);
-  const ampm = mm[3];
-  if (ampm === 'pm' && h !== 12) h += 12;
-  if (ampm === 'am' && h === 12) h = 0;
-  return h * 60 + min;
-}
-function clampDay(startMin, endMin, dayStartMin = 360, dayEndMin = 1380) {
-  const s = Math.max(startMin, dayStartMin);
-  const e = Math.min(endMin, dayEndMin);
-  return e > s ? { startMin: s, endMin: e } : null;
-}
+// RAEC daily window (6:00–23:00 local, minutes)
+const DAY_START_MIN = 6 * 60;
+const DAY_END_MIN   = 23 * 60;
 
-// ---------------- CSV helpers ----------------
-function csvSplit(line, delim = ',') {
-  const out = [];
-  let cur = '';
-  let inQ = false;
-  for (let i = 0; i < line.length; i++) {
-    const ch = line[i];
-    if (ch === '"') {
-      if (inQ && line[i + 1] === '"') { cur += '"'; i++; }
-      else { inQ = !inQ; }
-    } else if (ch === delim && !inQ) {
-      out.push(cur); cur = '';
-    } else {
-      cur += ch;
-    }
-  }
-  out.push(cur);
-  return out.map(s => s.trim());
-}
-const norm = s => (s || '').trim();
-const includes = (s, sub) => (s || '').toLowerCase().includes(sub.toLowerCase());
-const anyIncludes = (s, arr) => arr.some(k => includes(s, k));
-
-// ---------------- Season logic: turf vs courts ----------------
-// Turf season: 2nd Monday in Nov  -> 3rd Monday in Mar (next year)
-function nthMonday(year, monthIndex, n) {
+// Fieldhouse mode by calendar (courts vs turf)
+// Courts down: 3rd Monday in March → 2nd Monday in November (inclusive of those days)
+// Turf down: otherwise
+function nthMondayOfMonth(year, monthIndex, n) {
+  // monthIndex: 0..11
   const d = new Date(Date.UTC(year, monthIndex, 1));
-  const day = d.getUTCDay();
-  const firstMon = 1 + ((8 - day) % 7);
-  const date = firstMon + 7 * (n - 1);
-  return new Date(Date.UTC(year, monthIndex, date));
+  const firstDay = d.getUTCDay(); // 0 Sun .. 6 Sat
+  const offset = (1 - firstDay + 7) % 7; // days to first Monday
+  const day = 1 + offset + (n - 1) * 7;
+  return new Date(Date.UTC(year, monthIndex, day));
 }
-function isTurfSeason(dateUtc) {
-  const y = dateUtc.getUTCFullYear();
-  const nov2 = nthMonday(y, 10, 2);
-  const mar3 = nthMonday(y + 1, 2, 3);
-  return dateUtc >= nov2 && dateUtc <= mar3;
-}
-
-// ---------------- Mapping & normalization ----------------
-function cleanReservee(reservee) {
-  const t = norm(reservee);
-  if (!t) return t;
-  // collapse "Extreme Volleyball, Extreme Volleyball" -> "Extreme Volleyball"
-  const parts = t.split(',').map(s => s.trim()).filter(Boolean);
-  const uniq = [];
-  for (const p of parts) if (!uniq.includes(p)) uniq.push(p);
-  return uniq.join(', ');
+function isCourtsSeason(dtUtc) {
+  const y = dtUtc.getUTCFullYear();
+  const start = nthMondayOfMonth(y, 2, 3); // March, 3rd Monday
+  const end   = nthMondayOfMonth(y, 10, 2); // November, 2nd Monday
+  return dtUtc >= start && dtUtc < end;
 }
 
-function isPickleballRow(row) {
-  const purpose = (row['reservation purpose'] || row['reservationpurpose'] || '').toLowerCase();
-  return purpose.includes('pickleball');
-}
-
-function cleanPurposeForPublic(purpose, isPickleball) {
-  let p = norm(purpose);
-  if (!p) return '';
-  // Hide internal notes
-  p = p.replace(/internal hold.*$/i, '').trim();
-  // For pickleball, don't repeat the word (title already "Open Pickleball")
-  if (isPickleball) {
-    p = p.replace(/open\s*pickleball/ig, '').trim();
-  }
-  return p;
-}
-
-// We tag coverage so we can collapse A/B later
-// coverage: 'A', 'B', 'AB', 'FULL_PAIR' (9&10 or 1&2), or undefined (single full room)
-function mapFacilityToCoverage(facility, turfSeason) {
-  const f = (facility || '').toLowerCase().replace(/\s+/g, ' ').trim();
-
-  // ---- Championship Court => rooms 1 & 2 (pair)
-  if (includes(f, 'championship court')) return { rooms: ['1', '2'], coverage: 'FULL_PAIR' };
-
-  // ---- Full gym pairs
-  if (includes(f, 'full gym 1ab & 2ab')) return { rooms: ['1', '2'], coverage: 'FULL_PAIR' };
-  if (includes(f, 'full gym 9 & 10'))    return { rooms: ['9', '10'], coverage: 'FULL_PAIR' };
-
-  // ---- Court X-AB
-  const courtAB = f.match(/court\s+(1|2|9|10)-ab/);
-  if (courtAB) return { rooms: [courtAB[1]], coverage: 'AB' };
-
-  // ---- Half Court X[A/B]
-  const half = f.match(/half court\s*(1|2|9|10)\s*([ab])/);
-  if (half) return { rooms: [half[1]], coverage: half[2].toUpperCase() }; // 'A' or 'B'
-
-  // ---- Plain Court X (rare in feed)
-  const singleCourt = f.match(/\bac gym - court\s*(1|2|9|10)\b/);
-  if (singleCourt) return { rooms: [singleCourt[1]] };
-
-  // ---- Fieldhouse courts and ranges
-  const fhSingle = f.match(/fieldhouse\s*-\s*court\s*(3|4|5|6|7|8)/);
-  if (fhSingle) return { rooms: [fhSingle[1]] };
-
-  if (includes(f, 'fieldhouse court 3-8')) return { rooms: ['3','4','5','6','7','8'], coverage: 'AB' }; // treat like a general range (multi)
-
-  // ---- Turf labels (only respected in turf season)
-  const isTurf =
-    includes(f, 'full turf') ||
-    includes(f, 'half turf north') ||
-    includes(f, 'half turf south') ||
-    includes(f, 'quarter turf na') ||
-    includes(f, 'quarter turf nb') ||
-    includes(f, 'quarter turf sa') ||
-    includes(f, 'quarter turf sb');
-
-  if (isTurf) {
-    if (!turfSeason) return { rooms: [] };
-    if (includes(f, 'full turf'))        return { rooms: ['3','4','5','6','7','8'], coverage: 'AB' };
-    if (includes(f, 'half turf north'))  return { rooms: ['6','7','8'] };
-    if (includes(f, 'half turf south'))  return { rooms: ['3','4','5'] };
-    if (includes(f, 'quarter turf na'))  return { rooms: ['6'] };
-    if (includes(f, 'quarter turf nb'))  return { rooms: ['7'] };
-    if (includes(f, 'quarter turf sa'))  return { rooms: ['3'] };
-    if (includes(f, 'quarter turf sb'))  return { rooms: ['4'] };
-  }
-
-  return { rooms: [] };
-}
-
-// ---------------- Collapse A/B to single room when fully covered ----------------
-// We collect coverage fragments for each logical key and then materialize slots.
-function collapseCoverage(frags) {
-  // key: room|start|end|title -> set of coverages observed
-  const byKey = new Map(); // key -> { roomId, startMin, endMin, title, subtitle?, flags:Set, hasPair:boolean }
-  const keyOf = f => `${f.roomId}|${f.startMin}|${f.endMin}|${f.title}`;
-
-  for (const f of frags) {
-    const k = keyOf(f);
-    if (!byKey.has(k)) {
-      byKey.set(k, {
-        roomId: f.roomId,
-        startMin: f.startMin,
-        endMin: f.endMin,
-        title: f.title,
-        subtitle: f.subtitle || '',
-        flags: new Set(),
-        pairRooms: new Set([f.roomId]) // will be unioned if FULL_PAIR contributed
-      });
-    }
-    const rec = byKey.get(k);
-    if (f.coverage) rec.flags.add(f.coverage); // A, B, AB, FULL_PAIR
-    if (f.pairRooms) f.pairRooms.forEach(r => rec.pairRooms.add(r));
-    // keep the richest subtitle if needed (longer)
-    if ((f.subtitle || '').length > (rec.subtitle || '').length) rec.subtitle = f.subtitle || '';
-  }
-
-  const out = [];
-  for (const rec of byKey.values()) {
-    const flags = rec.flags;
-    const hasAB = flags.has('AB');
-    const hasA = flags.has('A');
-    const hasB = flags.has('B');
-    const hasPair = flags.has('FULL_PAIR');
-
-    // If FULL_PAIR, materialize one slot per room in pair (1&2 or 9&10). No lane.
-    if (hasPair) {
-      for (const r of rec.pairRooms) {
-        out.push({
-          roomId: r, startMin: rec.startMin, endMin: rec.endMin,
-          title: rec.title, subtitle: rec.subtitle
-        });
+// read CSV quickly (no external deps)
+function parseCSV(text) {
+  // very simple CSV splitter that handles quoted fields and commas
+  const rows = [];
+  let i = 0, field = '', row = [], inQuotes = false;
+  while (i < text.length) {
+    const c = text[i];
+    if (inQuotes) {
+      if (c === '"') {
+        if (text[i + 1] === '"') { field += '"'; i += 2; continue; }
+        inQuotes = false; i++; continue;
       }
-      continue;
+      field += c; i++; continue;
     }
-
-    // For single room: if AB present, or A+B both present, collapse to one (no lane)
-    if (hasAB || (hasA && hasB)) {
-      out.push({
-        roomId: rec.roomId, startMin: rec.startMin, endMin: rec.endMin,
-        title: rec.title, subtitle: rec.subtitle
-      });
-    } else if (hasA || hasB) {
-      // Only one half observed -> still show (with lane badge)
-      out.push({
-        roomId: rec.roomId, startMin: rec.startMin, endMin: rec.endMin,
-        title: rec.title, subtitle: rec.subtitle, lane: hasA ? 'A' : 'B'
-      });
-    } else {
-      // No half markers — treat as a plain full-room reservation
-      out.push({
-        roomId: rec.roomId, startMin: rec.startMin, endMin: rec.endMin,
-        title: rec.title, subtitle: rec.subtitle
-      });
-    }
+    if (c === '"') { inQuotes = true; i++; continue; }
+    if (c === ',') { row.push(field); field = ''; i++; continue; }
+    if (c === '\r') { i++; continue; }
+    if (c === '\n') { row.push(field); rows.push(row); field = ''; row = []; i++; continue; }
+    field += c; i++;
   }
-
-  // De-dupe per {room, start, end, title} in case multiple identical records came in
-  const seen = new Set();
-  const deduped = [];
-  for (const s of out) {
-    const k = `${s.roomId}|${s.startMin}|${s.endMin}|${s.title}`;
-    if (seen.has(k)) continue;
-    seen.add(k);
-    deduped.push(s);
-  }
-  return deduped;
+  // last field
+  if (field.length || row.length) { row.push(field); rows.push(row); }
+  return rows;
 }
 
-// ---------------- Fieldhouse de-dup (range vs specific) ----------------
-function dedupeFieldhouse(slots) {
-  const field = new Set(['3','4','5','6','7','8']);
-  // If the exact same {title,start,end} appears across many fieldhouse rooms AND also appears
-  // as a single-court entry, keep one per room but drop duplicates created by the "range" rows.
-  const key = s => `${s.title}|${s.startMin}|${s.endMin}|${s.subtitle || ''}`;
-  const byKeyRoom = new Map(); // `${key}|room` -> count
-  const countsByKey = new Map(); // key -> count across fieldhouse
+function toMinutes12h(s) {
+  // "6:00pm" or "7:30 am" etc -> minutes since 0:00
+  if (!s) return null;
+  const t = s.trim().toLowerCase();
+  const m = t.match(/^(\d{1,2})(?::(\d{2}))?\s*([ap]m)$/);
+  if (!m) return null;
+  let hh = parseInt(m[1],10);
+  const mm = parseInt(m[2]||'0',10);
+  const ap = m[3];
+  if (ap === 'pm' && hh !== 12) hh += 12;
+  if (ap === 'am' && hh === 12) hh = 0;
+  return hh*60 + mm;
+}
 
-  for (const s of slots) {
-    if (!field.has(s.roomId)) continue;
-    const k = key(s);
-    countsByKey.set(k, (countsByKey.get(k) || 0) + 1);
-    const kr = `${k}|${s.roomId}`;
-    byKeyRoom.set(kr, (byKeyRoom.get(kr) || 0) + 1);
+function overlap(aStart, aEnd, bStart, bEnd) {
+  return aStart < bEnd && bStart < aEnd;
+}
+
+function norm(s){ return (s||'').replace(/\s+/g,' ').trim().toLowerCase(); }
+
+// map Facility -> initial target(s)
+const FH_RANGE_RE   = /AC\s*Fieldhouse\s*Court\s*3-8/i;
+const FH_SPEC_RE    = /AC\s*Fieldhouse\s*-\s*Court\s*([3-8])/i;
+const FH_ANY_TURF_RE = /AC\s*Fieldhouse.*turf/i;
+
+const GYM_HALF_RE   = /AC\s*Gym\s*-\s*Half\s*Court\s*(\d{1,2})([AB])/i;
+const GYM_FULL_RE   = /AC\s*Gym\s*-\s*Court\s*(\d{1,2})-AB/i;
+const GYM_BOTH_RE   = /AC\s*Gym\s*-\s*Full\s*Gym\s*(\d{1,2})AB\s*&\s*(\d{1,2})AB/i;
+const CHAMP_RE      = /AC\s*Gym\s*-\s*Championship\s*Court/i;
+
+function facilityToTargets(facility, courtsMode /* 'courts' | 'turf' */) {
+  const f = facility || '';
+
+  // Championship Court == Courts 1 & 2
+  if (CHAMP_RE.test(f)) return [{type:'specific', rooms:['1','2']}];
+
+  // Gym mapping
+  let m;
+  if ((m = GYM_HALF_RE.exec(f))) {
+    const num = m[1];
+    const letter = m[2]; // A or B
+    return [{type:'specific', rooms:[String(num)]}]; // collapse A/B to the number
+  }
+  if ((m = GYM_FULL_RE.exec(f))) {
+    const num = m[1];
+    return [{type:'specific', rooms:[String(num)]}];
+  }
+  if ((m = GYM_BOTH_RE.exec(f))) {
+    const n1 = m[1], n2 = m[2];
+    return [{type:'specific', rooms:[String(n1), String(n2)]}];
   }
 
-  const toDrop = new Set();
-  slots.forEach((s, idx) => {
-    if (!field.has(s.roomId)) return;
-    const k = key(s);
-    // If the key is present many times (range) we only keep one per room.
-    const kr = `${k}|${s.roomId}`;
-    const countInRoom = byKeyRoom.get(kr) || 0;
-    if (countInRoom > 1) {
-      // drop extras beyond 1
-      // The first occurrence wins; the rest are dropped
-      if (byKeyRoom.get(kr) > 1) {
-        byKeyRoom.set(kr, 1); // mark we've kept one
-      } else {
-        toDrop.add(idx);
-      }
+  // Fieldhouse mode
+  if (courtsMode === 'courts') {
+    if (FH_RANGE_RE.test(f)) {
+      return [{type:'range', rooms:['3','4','5','6','7','8']}];
     }
+    if ((m = FH_SPEC_RE.exec(f))) {
+      return [{type:'specific', rooms:[m[1]]}];
+    }
+    // Ignore any turf references while courts are down
+    if (FH_ANY_TURF_RE.test(f)) {
+      return []; // suppressed
+    }
+  } else {
+    // Turf season: keep turf; ignore 3..8 court calls
+    if (FH_ANY_TURF_RE.test(f)) {
+      // You could map full/half/quarters here if you want to render the turf layout.
+      // For the grid, we suppress turf so Fieldhouse cards stay empty (as requested earlier).
+      return [];
+    }
+    if (FH_RANGE_RE.test(f) || FH_SPEC_RE.test(f)) {
+      return []; // suppress courts when turf is down
+    }
+  }
+
+  return [];
+}
+
+function cleanTitles({reservee, purpose}) {
+  // Pickleball clean-up and generic RAEC internal hold removal
+  const r = reservee || '';
+  const p = purpose || '';
+
+  const isPickle = /pickleball/i.test(p) || /pickleball/i.test(r);
+  if (isPickle) {
+    return { title: 'Open Pickleball', subtitle: '' };
+  }
+
+  // Remove internal-only noise
+  const stripList = [
+    /RAEC\s*Front\s*Desk,?\s*Rentals\s*-\s*On\s*Hold/gi,
+    /Internal\s*Hold\s*per\s*NM/gi
+  ];
+  let title = r;
+  let subtitle = p;
+  stripList.forEach(rx => {
+    title = title.replace(rx,'').replace(/\s{2,}/g,' ').trim();
+    subtitle = subtitle.replace(rx,'').replace(/\s{2,}/g,' ').trim();
   });
 
-  return slots.filter((_, i) => !toDrop.has(i));
+  // If title became empty, fall back to purpose
+  if (!title) title = subtitle || 'Reserved';
+
+  // Trim duplicate org names like "Extreme Volleyball, Extreme Volleyball"
+  title = title.replace(/\b(.+?)\s*,\s*\1\b/gi, '$1').trim();
+
+  return { title, subtitle };
 }
 
-// ---------------- Default rooms ----------------
-function defaultRooms() {
-  return [
-    { id: '1',  label: '1',  group: 'south' },
-    { id: '2',  label: '2',  group: 'south' },
-    { id: '3',  label: '3',  group: 'fieldhouse' },
-    { id: '4',  label: '4',  group: 'fieldhouse' },
-    { id: '5',  label: '5',  group: 'fieldhouse' },
-    { id: '6',  label: '6',  group: 'fieldhouse' },
-    { id: '7',  label: '7',  group: 'fieldhouse' },
-    { id: '8',  label: '8',  group: 'fieldhouse' },
-    { id: '9',  label: '9',  group: 'north' },
-    { id: '10', label: '10', group: 'north' }
-  ];
-}
-
-// ---------------- Main ----------------
-async function run() {
-  if (!fs.existsSync(CSV_PATH)) {
-    writeJson({ dayStartMin: 360, dayEndMin: 1380, rooms: defaultRooms(), slots: [] });
+// ---------- main ----------
+async function main() {
+  let csv = '';
+  try {
+    csv = fs.readFileSync(CSV_IN, 'utf8');
+  } catch {
+    console.log('No CSV found; writing empty scaffold.');
+    fs.writeFileSync(JSON_OUT, JSON.stringify({
+      dayStartMin: DAY_START_MIN,
+      dayEndMin: DAY_END_MIN,
+      rooms: [
+        {id:'1',label:'1',group:'south'},
+        {id:'2',label:'2',group:'south'},
+        {id:'3',label:'3',group:'fieldhouse'},
+        {id:'4',label:'4',group:'fieldhouse'},
+        {id:'5',label:'5',group:'fieldhouse'},
+        {id:'6',label:'6',group:'fieldhouse'},
+        {id:'7',label:'7',group:'fieldhouse'},
+        {id:'8',label:'8',group:'fieldhouse'},
+        {id:'9',label:'9',group:'north'},
+        {id:'10',label:'10',group:'north'},
+      ],
+      slots:[]
+    }, null, 2));
     return;
   }
 
-  const rl = readline.createInterface({
-    input: fs.createReadStream(CSV_PATH, 'utf8'),
-    crlfDelay: Infinity
-  });
+  const rows = parseCSV(csv);
+  if (!rows.length) {
+    console.log('Empty CSV; wrote empty scaffold.');
+    fs.writeFileSync(JSON_OUT, JSON.stringify({
+      dayStartMin: DAY_START_MIN, dayEndMin: DAY_END_MIN, rooms:[], slots:[]
+    }, null, 2));
+    return;
+  }
 
-  let headers = [];
-  const rows = [];
-  let lineNo = 0;
-  for await (const line of rl) {
-    lineNo++;
-    if (lineNo === 1) {
-      headers = csvSplit(line).map(h => h.replace(/:$/, '').trim());
+  // header map
+  const header = rows[0].map(h => h.trim().toLowerCase());
+  const ix = {
+    location: header.findIndex(h => h.startsWith('location')),
+    facility: header.findIndex(h => h.startsWith('facility')),
+    reservedtime: header.findIndex(h => h.startsWith('reserved time') || h.includes('reservedtime')),
+    reservee: header.findIndex(h => h.startsWith('reservee')),
+    purpose: header.findIndex(h => h.startsWith('reservation purpose') || h === 'reservationpurpose'),
+    headcount: header.findIndex(h => h.startsWith('headcount')),
+  };
+
+  // figure out today's date in UTC for season calc (assume CSV is "today")
+  const todayUtc = new Date(); // GH runner UTC
+  const courtsMode = isCourtsSeason(todayUtc) ? 'courts' : 'turf';
+
+  // Step 1: parse records + initial mapping
+  const records = [];
+  for (let r = 1; r < rows.length; r++) {
+    const row = rows[r];
+    const location = (ix.location >= 0) ? row[ix.location] : '';
+    if (location && !/athletic\s*&\s*event\s*center/i.test(location)) {
+      // We only show this site; skip others
       continue;
     }
-    if (!line.trim()) continue;
-    const cols = csvSplit(line);
-    const row = {};
-    headers.forEach((h, i) => row[h.toLowerCase()] = cols[i] ?? '');
-    rows.push(row);
-  }
 
-  const today = new Date();
-  const utc = new Date(Date.UTC(today.getFullYear(), today.getMonth(), today.getDate()));
-  const turfSeason = isTurfSeason(utc);
+    const facility = (ix.facility >= 0) ? row[ix.facility] : '';
+    const reserved = (ix.reservedtime >= 0) ? row[ix.reservedtime] : '';
+    const reservee = (ix.reservee >= 0) ? row[ix.reservee] : '';
+    const purpose  = (ix.purpose  >= 0) ? row[ix.purpose]  : '';
 
-  const dayStartMin = 360;
-  const dayEndMin = 1380;
+    // time like "6:00pm - 9:00pm"
+    const tm = reserved.match(/(\d{1,2}(?::\d{2})?\s*[ap]m)\s*-\s*(\d{1,2}(?::\d{2})?\s*[ap]m)/i);
+    if (!tm) continue;
+    const startMin = toMinutes12h(tm[1]);
+    const endMin   = toMinutes12h(tm[2]);
+    if (startMin == null || endMin == null) continue;
 
-  // Collect fragments with coverage tags
-  const frags = [];
+    const targets = facilityToTargets(facility, courtsMode);
+    if (!targets.length) continue;
 
-  for (const r of rows) {
-    const loc = norm(r['location'] || r['Location:']);
-    if (loc && loc !== 'Athletic & Event Center') continue; // ignore other locations
+    const who = reservee || '';
+    const what = purpose || '';
 
-    const fac = norm(r['facility']);
-    const rt  = norm(r['reserved time'] || r['reservedtime']);
-    const tr = parseTimeRange(rt);
-    if (!tr) continue;
-    const clamp = clampDay(tr.startMin, tr.endMin, dayStartMin, dayEndMin);
-    if (!clamp) continue;
-
-    const pickle = isPickleballRow(r);
-    let title = pickle ? 'Open Pickleball' : cleanReservee(r['reservee']);
-    // Special case: “RAEC Front Desk, Rentals - On Hold” => suppress for pickleball
-    if (pickle && includes(title, 'raec front desk')) title = 'Open Pickleball';
-
-    const purpose = r['reservation purpose'] || r['reservationpurpose'] || '';
-    const subtitle = cleanPurposeForPublic(purpose, pickle);
-
-    const mapped = mapFacilityToCoverage(fac, turfSeason);
-    const rooms = mapped.rooms || [];
-    const coverage = mapped.coverage; // 'A'|'B'|'AB'|'FULL_PAIR'|undefined
-
-    if (!rooms.length) continue;
-
-    for (const room of rooms) {
-      const frag = {
-        roomId: room,
-        startMin: clamp.startMin,
-        endMin: clamp.endMin,
-        title,
-        subtitle
-      };
-      if (coverage) frag.coverage = coverage;
-      // If FULL_PAIR, annotate the pair (1&2 or 9&10)
-      if (coverage === 'FULL_PAIR') {
-        frag.pairRooms = new Set(rooms);
+    for (const t of targets) {
+      // Each target may contain multiple rooms
+      for (const room of t.rooms) {
+        records.push({
+          kind: t.type,           // 'specific' | 'range'
+          area: 'fh',             // only used for fieldhouse logic (we also push gyms thru here)
+          room,
+          reservee: who,
+          reserveeNorm: norm(who),
+          purpose: what,
+          startMin, endMin,
+          facilityRaw: facility
+        });
       }
-      frags.push(frag);
     }
   }
 
-  // Collapse A/B -> single, materialize pairs, and de-duplicate per room
-  let slots = collapseCoverage(frags);
+  // Step 2: “specific beats broad” for Fieldhouse ranges per reservee/time
+  // Group by reservee for quick lookups
+  const byReservee = new Map();
+  for (const rec of records) {
+    const key = rec.reserveeNorm;
+    if (!byReservee.has(key)) byReservee.set(key, []);
+    byReservee.get(key).push(rec);
+  }
 
-  // Fieldhouse de-dup (range vs specific per-court)
-  slots = dedupeFieldhouse(slots);
+  const keep = [];
+  for (const [, list] of byReservee) {
+    // Partition list into 'range' and 'specific'
+    const ranges   = list.filter(x => x.kind === 'range');
+    const specifics = list.filter(x => x.kind === 'specific');
 
-  // Sort by time then title
-  slots.sort((a, b) => a.startMin - b.startMin || (a.title || '').localeCompare(b.title || ''));
+    if (ranges.length === 0) {
+      keep.push(...specifics); continue;
+    }
 
-  writeJson({ dayStartMin, dayEndMin, rooms: defaultRooms(), slots });
+    if (specifics.length === 0) {
+      keep.push(...ranges); continue;
+    }
+
+    // Build a mask for which range items should survive
+    // If any specific overlaps a given range, we DROP that range entirely
+    // and rely only on the specifics to express true occupancy.
+    // (This also solves the “Court 6 only 7:30–9:00” case.)
+    const drop = new Set(ranges.map((_, i) => i)); // pessimistically drop all ranges that are overlapped
+    for (let i = 0; i < ranges.length; i++) {
+      const rg = ranges[i];
+      const anySpecOverlap = specifics.some(sp => overlap(rg.startMin, rg.endMin, sp.startMin, sp.endMin));
+      if (!anySpecOverlap) {
+        // no specific overlaps this range: keep it
+        drop.delete(i);
+      }
+    }
+    // push kept ranges
+    ranges.forEach((rg, i) => { if (!drop.has(i)) keep.push(rg); });
+    // always push all specifics
+    keep.push(...specifics);
+  }
+
+  // Step 3: collapse to UI slots, clean titles, dedupe
+  const dedupe = new Set();
+  const slots = [];
+
+  for (const rec of keep) {
+    const { title, subtitle } = cleanTitles({reservee: rec.reservee, purpose: rec.purpose});
+
+    // Ignore fully past items (transform keeps everything; the UI also filters by 'now')
+    if (rec.endMin <= DAY_START_MIN || rec.startMin >= DAY_END_MIN) continue;
+
+    const key = `${rec.room}|${rec.startMin}|${rec.endMin}|${norm(title)}|${norm(subtitle)}`;
+    if (dedupe.has(key)) continue;
+    dedupe.add(key);
+
+    slots.push({
+      roomId: rec.room,
+      startMin: Math.max(DAY_START_MIN, rec.startMin),
+      endMin:   Math.min(DAY_END_MIN,   rec.endMin),
+      title,
+      subtitle
+    });
+  }
+
+  // Final payload with rooms (fixed layout)
+  const rooms = [
+    {id:'1',label:'1',group:'south'},
+    {id:'2',label:'2',group:'south'},
+    {id:'3',label:'3',group:'fieldhouse'},
+    {id:'4',label:'4',group:'fieldhouse'},
+    {id:'5',label:'5',group:'fieldhouse'},
+    {id:'6',label:'6',group:'fieldhouse'},
+    {id:'7',label:'7',group:'fieldhouse'},
+    {id:'8',label:'8',group:'fieldhouse'},
+    {id:'9',label:'9',group:'north'},
+    {id:'10',label:'10',group:'north'},
+  ];
+
+  const out = {
+    dayStartMin: DAY_START_MIN,
+    dayEndMin: DAY_END_MIN,
+    rooms,
+    slots
+  };
+
+  fs.writeFileSync(JSON_OUT, JSON.stringify(out, null, 2));
+  console.log(`Wrote ${JSON_OUT} • rooms=${rooms.length} • slots=${slots.length}`);
 }
 
-function writeJson(obj) {
-  fs.writeFileSync(JSON_OUT, JSON.stringify(obj, null, 2));
-  console.log(`Wrote ${JSON_OUT} • rooms=${Array.isArray(obj.rooms)?obj.rooms.length:0} • slots=${Array.isArray(obj.slots)?obj.slots.length:0}`);
-}
-
-run().catch(err => {
+main().catch(err => {
   console.error(err);
   process.exit(1);
 });
