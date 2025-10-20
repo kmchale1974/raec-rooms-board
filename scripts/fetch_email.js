@@ -1,104 +1,102 @@
-// ESM (Node 18+). Finds the newest email in the IMAP folder,
-// scans its MIME structure for a CSV attachment, and downloads it.
+// scripts/fetch_email.js
+// ESM version: username baked-in; only IMAP_PASS is required as a secret.
 
 import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import { ImapFlow } from 'imapflow';
+import { simpleParser } from 'mailparser';
 
 const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
+const __dirname  = path.dirname(__filename);
 
-const host   = process.env.IMAP_HOST || 'imap.gmail.com';
-const user   = process.env.IMAP_USER;   // set inline in workflow
-const pass   = process.env.IMAP_PASS;   // from secret GMAILIMAP
+// ---- Config (baked username) ----
+const host   = process.env.IMAP_HOST   || 'imap.gmail.com';
+const user   = process.env.IMAP_USER   || 'raecroominfo.board@gmail.com'; // baked-in default
+const pass   = process.env.IMAP_PASS;                                     // <-- set as GitHub Secret
 const folder = process.env.IMAP_FOLDER || 'INBOX';
-const outCsv = process.env.OUT_CSV || path.join(__dirname, '..', 'data', 'inbox', 'latest.csv');
+const outCsv = process.env.OUT_CSV     || path.join(__dirname, '..', 'data', 'inbox', 'latest.csv');
 
-if (!user || !pass) {
-  console.error('Missing IMAP_USER or IMAP_PASS env vars.');
+if (!pass) {
+  console.error('Missing IMAP_PASS (Gmail App Password). Set it as a GitHub Actions secret.');
   process.exit(1);
 }
 
+// Ensure output dir exists
 fs.mkdirSync(path.dirname(outCsv), { recursive: true });
 
 const client = new ImapFlow({
   host,
+  port: 993,
   secure: true,
+  logger: false, // set to console for verbose logs
   auth: { user, pass }
 });
 
-function filenameOf(part = {}) {
-  // Try headers first, then params
-  const disp = part.dispositionParameters || {};
-  const typep = part.parameters || {};
-  return disp.filename || typep.name || '';
-}
-
 try {
+  console.log(`Connecting to ${host} as ${user}…`);
   await client.connect();
-  await client.mailboxOpen(folder);
 
-  // 1) Find newest message UID by INTERNALDATE
-  let newest = null;
-  for await (const msg of client.fetch({ all: true }, { uid: true, internalDate: true })) {
-    if (!newest || msg.internalDate > newest.internalDate) newest = msg;
-  }
-  if (!newest) {
-    console.log('No emails found.');
-    process.exit(0);
-  }
-
-  // 2) Fetch BODYSTRUCTURE to locate CSV attachment part
-  const fetchRes = await client.fetchOne(newest.uid, { bodyStructure: true }, { uid: true });
-  const bs = fetchRes?.bodyStructure;
-  if (!bs) {
-    console.log('No BODYSTRUCTURE available.');
-    process.exit(0);
-  }
-
-  // walk the structure to find first CSV attachment
-  const stack = [bs];
-  let csvPart = null;
-  while (stack.length && !csvPart) {
-    const node = stack.pop();
-
-    if (Array.isArray(node.childNodes)) {
-      for (const child of node.childNodes) stack.push(child);
+  console.log(`Opening mailbox: ${folder}`);
+  const lock = await client.getMailboxLock(folder);
+  try {
+    const status = client.mailbox; // current mailbox status
+    if (!status || typeof status.exists !== 'number' || status.exists === 0) {
+      console.log('Mailbox is empty. Nothing to fetch.');
+      process.exit(0);
     }
 
-    const type = (node.type || '').toLowerCase();        // e.g. "text"
-    const subType = (node.subtype || '').toLowerCase();  // e.g. "csv", "plain"
-    const disp = (node.disposition || '').toLowerCase(); // "attachment" or "inline"
-    const name = filenameOf(node).toLowerCase();
+    // Find the newest message (max UID) quickly
+    // We'll attempt newest first, and parse for a CSV attachment.
+    // If none found, we’ll walk backward up to a few messages.
+    const newestUid = status.uidNext - 1;
+    const TRY_BACK = 8; // how many messages backwards to try
+    let foundCsv = null;
 
-    const isCsvByMime = (type === 'text' && subType === 'csv') ||
-                        (type === 'application' && subType === 'vnd.ms-excel'); // some systems use this
-    const isCsvByName = name.endsWith('.csv');
+    for (let uid = newestUid; uid > 0 && uid >= newestUid - TRY_BACK; uid--) {
+      // Download the full raw message
+      try {
+        const dl = await client.download(uid, '', { uid: true });
+        const chunks = [];
+        for await (const chunk of dl.content) chunks.push(chunk);
+        const raw = Buffer.concat(chunks);
 
-    if ((disp === 'attachment' || name) && (isCsvByMime || isCsvByName)) {
-      csvPart = node;
-      break;
+        const parsed = await simpleParser(raw);
+        const attachments = parsed.attachments || [];
+
+        // Prefer first .csv attachment
+        const csvAtt = attachments.find(a =>
+          (a.filename || '').toLowerCase().endsWith('.csv') ||
+          (a.contentType || '').toLowerCase().includes('/csv')
+        );
+
+        if (csvAtt) {
+          foundCsv = {
+            filename: csvAtt.filename || 'attachment.csv',
+            content: csvAtt.content
+          };
+          console.log(`Found CSV on UID ${uid}: ${foundCsv.filename}`);
+          break;
+        }
+      } catch (err) {
+        // Non-fatal: just try the next older message
+        console.warn(`UID ${uid}: failed to parse or download (${err?.message || err})`);
+      }
     }
+
+    if (!foundCsv) {
+      console.log('No .csv attachment found in the last few messages.');
+      process.exit(0);
+    }
+
+    fs.writeFileSync(outCsv, foundCsv.content);
+    console.log(`Saved CSV to ${outCsv} ( ${foundCsv.filename} )`);
+  } finally {
+    lock.release();
   }
 
-  if (!csvPart) {
-    console.log('No CSV attachment found in newest email.');
-    process.exit(0);
-  }
-
-  const partId = csvPart.part;
-  const filename = filenameOf(csvPart) || 'attachment.csv';
-  console.log(`Downloading CSV part ${partId} (${filename})…`);
-
-  // 3) Download that specific MIME part
-  const { content } = await client.download(newest.uid, partId, { uid: true });
-  const chunks = [];
-  for await (const chunk of content) chunks.push(chunk);
-  const buf = Buffer.concat(chunks);
-
-  fs.writeFileSync(outCsv, buf);
-  console.log('Saved CSV to', outCsv, '(', filename, ')');
-} finally {
-  try { await client.logout(); } catch {}
+  await client.logout();
+} catch (err) {
+  console.error('IMAP error:', err?.message || err);
+  process.exit(1);
 }
