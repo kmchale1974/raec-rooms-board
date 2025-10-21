@@ -1,19 +1,19 @@
 name: build
+
 on:
   push:
     branches: [ main ]
   schedule:
-    - cron: "0 * * * *" # hourly; adjust as you like
+    - cron: "*/30 * * * *"   # every 30 minutes (adjust if you like)
   workflow_dispatch:
 
-# Avoid concurrent runs clobbering each other
-concurrency:
-  group: raec-rooms-board-build
-  cancel-in-progress: true
-
-# Allow this workflow to push back to the repo
+# Needed so the workflow can push events.json back to the repo
 permissions:
   contents: write
+
+concurrency:
+  group: build-${{ github.ref }}
+  cancel-in-progress: true
 
 jobs:
   build:
@@ -21,42 +21,62 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0           # required for pull --rebase
 
       - name: Setup Node
         uses: actions/setup-node@v4
         with:
           node-version: 20
 
-      # Use npm i (not ci) unless your lockfile is clean and in sync
       - name: Install deps
-        run: npm i
+        run: |
+          if [ -f package-lock.json ]; then
+            npm ci
+          else
+            npm i
+          fi
 
-      - name: Create inbox folder
+      - name: Ensure inbox folder
         run: mkdir -p data/inbox
 
-      # Fetch latest CSV from Gmail (App Password in IMAP_PASS)
-      - name: Fetch CSV from email
-        run: node scripts/fetch_email.js
+      # Pull newest CSV attachment from Gmail (non-fatal if nothing found)
+      - name: Fetch latest CSV from Gmail
         env:
-          IMAP_PASS: ${{ secrets.IMAP_PASS }}
+          IMAP_PASS: ${{ secrets.IMAP_PASS }}   # Gmail App Password (16 chars)
           OUT_CSV: data/inbox/latest.csv
+        run: |
+          set -e
+          node scripts/fetch_email.js || echo "fetch_email failed or no CSV; continuing"
 
-      # Turn CSV into events.json
+      # Convert CSV -> events.json according to your business rules
       - name: Transform CSV -> events.json
         run: node scripts/transform.mjs
 
-      # ⬇️ PLACE THE REBASE-SAFE COMMIT STEP RIGHT HERE ⬇️
+      # Rebase-safe commit of events.json
       - name: Commit events.json (rebase-safe)
         run: |
           set -e
           git config user.name  "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
+
+          # Stash any local changes (including untracked) before pulling
+          git add -A
+          git stash push --include-untracked -m "pre-rebase" || true
+
+          # Rebase onto the latest remote main
           git fetch origin main
           git pull --rebase origin main
+
+          # Re-apply stashed changes (if any)
+          git stash pop || true
+
+          # Only stage and commit events.json
           git add events.json
+
           if git diff --cached --quiet; then
             echo "No changes to commit."
           else
             git commit -m "Update events.json [skip ci]"
+            git push origin HEAD:main
           fi
-          git push origin HEAD:main
