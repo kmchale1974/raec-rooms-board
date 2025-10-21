@@ -1,24 +1,19 @@
 name: build
 
 on:
-  workflow_dispatch:
   push:
     branches: [ main ]
-    paths:
-      - scripts/**
-      - .github/workflows/build.yml
-      - index.html
-      - app.js
   schedule:
-    # run hourly 6am–11pm CT (adjust as you like)
-    - cron: "0 * * * *"
-
-permissions:
-  contents: write
+    - cron: "*/30 * * * *"   # every 30 minutes
+  workflow_dispatch:
 
 jobs:
   build:
     runs-on: ubuntu-latest
+
+    permissions:
+      contents: write
+
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -26,52 +21,49 @@ jobs:
       - name: Setup Node
         uses: actions/setup-node@v4
         with:
-          node-version: 20
+          node-version: '20'
 
-      - name: Install (no lockfile)
-        run: npm i
+      - name: Show Node/npm
+        run: |
+          node -v
+          npm -v
 
-      - name: Ensure inbox folder
+      # Install deps (works whether or not you committed a lockfile)
+      - name: Install dependencies
+        run: |
+          if [ -f package-lock.json ]; then
+            npm ci
+          else
+            npm i
+          fi
+
+      # Sanity check that mailparser is actually present
+      - name: Verify deps
+        run: |
+          node -e "console.log('mailparser:', require.resolve('mailparser/package.json'))"
+          node -e "console.log('imapflow:', require.resolve('imapflow/package.json'))"
+          npm ls --depth=0 || true
+
+      - name: Make inbox dir
         run: mkdir -p data/inbox
 
-      - name: Fetch newest CSV from Gmail
+      - name: Fetch latest CSV attachment
         env:
-          IMAP_PASS: ${{ secrets.IMAP_PASS }}
+          IMAP_PASS: ${{ secrets.IMAP_PASS }}   # your Gmail App Password
           OUT_CSV: data/inbox/latest.csv
-        run: |
-          node scripts/fetch_email.js || true
-          echo "--- CSV DEBUG ---"
-          if [ -f data/inbox/latest.csv ]; then
-            ls -l --time-style=iso data/inbox/latest.csv
-            echo "CSV first 8 lines:"
-            head -n 8 data/inbox/latest.csv || true
-            echo "CSV line count:"
-            wc -l data/inbox/latest.csv
-          else
-            echo "No CSV downloaded."
-          fi
-          echo "-----------------"
+        run: node scripts/fetch_email.js
 
       - name: Transform CSV -> events.json
-        env:
-          OUT_CSV: data/inbox/latest.csv
-          JSON_OUT: events.json
-        run: |
-          node scripts/transform.mjs
-          echo "--- EVENTS.JSON DEBUG ---"
-          ls -l --time-style=iso events.json
-          echo "Top of events.json:"
-          head -n 40 events.json
-          echo "-------------------------"
+        run: node scripts/transform.mjs
 
-      - name: Commit updated events.json (if changed)
+      - name: Commit events.json
         run: |
           git config user.name  "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
           git add events.json
-          if git diff --cached --quiet; then
-            echo "No changes to commit."
-          else
-            git commit -m "Update events.json"
+          if ! git diff --cached --quiet; then
+            git commit -m "Update events.json [skip ci]"
             git push
+          else
+            echo "No changes"
           fi
