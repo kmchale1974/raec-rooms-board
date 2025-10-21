@@ -1,24 +1,21 @@
-// app.js (ES module)
+// app.js (ES module, safe fallback + no past filtering)
 
 // ---------- Config ----------
 const DATA_URL = `./events.json?ts=${Date.now()}`;
-const HIDE_PAST = true;           // remove events that already ended
-const ROOM_PAGE_SIZE = 5;         // events per page in a room card
-const ROOM_PAGE_MS   = 8000;      // ms between page flips
-const SLIDE_MS       = 500;       // slide animation duration (ms)
-const CLOCK_TICK_MS  = 1000;      // live clock refresh
+const HIDE_PAST = false;          // TEMP: show everything so the board never looks empty
+const ROOM_PAGE_SIZE = 5;
+const ROOM_PAGE_MS   = 8000;
+const SLIDE_MS       = 500;
+const CLOCK_TICK_MS  = 1000;
 
 // Pager state per room
 const roomPager = Object.create(null);
 
-// ---------- Small style injection for animation ----------
+// ---------- Minimal CSS for sliding pages ----------
 (function injectPagerCSS(){
   const css = `
   .events { position: relative; overflow: hidden; }
-  .events .page {
-    position: absolute; inset: 0;
-    will-change: transform, opacity;
-  }
+  .events .page { position: absolute; inset: 0; will-change: transform, opacity; }
   .events .page.hidden { display: none; }
   `;
   const style = document.createElement('style');
@@ -26,7 +23,7 @@ const roomPager = Object.create(null);
   document.head.appendChild(style);
 })();
 
-// ---------- Utilities ----------
+// ---------- Utils ----------
 function nowMinutesLocal() {
   const d = new Date();
   return d.getHours() * 60 + d.getMinutes();
@@ -45,39 +42,39 @@ function escapeHTML(s='') {
   ));
 }
 
-// --- Org/person parsing helpers ---
+// --- Org/person parsing ---
 const ORG_HINTS = [
   'basketball','volleyball','club','academy','united','elite','sports','athletics',
   'school','city','parks','rec','association','league','fc','sc','inc','llc','foundation'
 ];
 
 function looksLikePersonToken(t) {
-  // Single word that starts with a letter and not obviously an org keyword
   if (!/^[a-zA-Z][a-zA-Z'.-]*$/.test(t)) return false;
   const low = t.toLowerCase();
   if (ORG_HINTS.includes(low)) return false;
   return true;
 }
 function looksLikePersonFull(s) {
-  // "Last, First[ Middle]" OR "First Last" (2–3 tokens), all word-y
+  if (!s) return false;
   if (/,/.test(s)) {
     const [l, r] = s.split(',', 2).map(x => x.trim());
-    return l && r && looksLikePersonToken(l.split(/\s+/)[0]) && looksLikePersonToken(r.split(/\s+/)[0]);
+    return !!(l && r && looksLikePersonToken(l.split(/\s+/)[0]) && looksLikePersonToken(r.split(/\s+/)[0]));
   }
   const parts = s.trim().split(/\s+/);
   if (parts.length < 2 || parts.length > 4) return false;
   return parts.every(looksLikePersonToken);
 }
 function looksLikeOrg(s) {
+  if (!s) return false;
   const low = s.toLowerCase();
   return ORG_HINTS.some(k => low.includes(k));
 }
 function invertLastFirst(name) {
-  // "Doe, John A." -> "John A. Doe"
-  if (!/,/.test(name)) return name;
+  if (!name) return '';
+  if (!/,/.test(name)) return name.trim().replace(/\s+/g,' ');
   const [last, first] = name.split(',', 2).map(s => s.trim()).filter(Boolean);
   if (first && last) return `${first} ${last}`.replace(/\s+/g,' ').trim();
-  return name;
+  return name.trim();
 }
 
 function normalizeOrgAndContact(title = '', subtitle = '') {
@@ -85,13 +82,12 @@ function normalizeOrgAndContact(title = '', subtitle = '') {
   let contact = '';
   let what = subtitle.trim();
 
-  // Special: Pickleball renaming (hide internal verbiage)
   const combined = `${title} ${subtitle}`.toLowerCase();
   if (combined.includes('pickleball')) {
     return { org: 'Open Pickleball', contact: '', what: '' };
   }
 
-  const raw = title.trim();
+  const raw = (title || '').trim();
   if (raw.includes(',')) {
     const [left, right] = raw.split(',', 2).map(s => s.trim());
     const rightIsPerson = looksLikePersonFull(right);
@@ -102,22 +98,16 @@ function normalizeOrgAndContact(title = '', subtitle = '') {
       org = left;
       contact = invertLastFirst(right);
     } else if (leftIsPerson && !rightIsPerson) {
-      // "Brown, Shawnton, Academy"? we’ll treat as person; append right to what
       contact = invertLastFirst(`${left}${right ? ', ' + right : ''}`);
     } else if (leftIsPerson && rightIsPerson) {
-      // two names — pick the more likely contact (right), leave org blank
       contact = invertLastFirst(right);
     } else {
-      // default: treat left as org
       org = left;
       if (right) what = [what, right].filter(Boolean).join(' • ');
     }
   } else {
-    if (looksLikePersonFull(raw)) {
-      contact = invertLastFirst(raw);
-    } else {
-      org = raw;
-    }
+    if (looksLikePersonFull(raw)) contact = invertLastFirst(raw);
+    else org = raw;
   }
 
   return { org, contact, what };
@@ -141,7 +131,7 @@ function dedupeWithinRoom(slots) {
   return out;
 }
 
-// ---------- Rendering ----------
+// ---------- Header clock ----------
 function updateHeaderClock() {
   const d = new Date();
   const dateEl = document.getElementById('headerDate');
@@ -159,6 +149,7 @@ function updateHeaderClock() {
   }
 }
 
+// ---------- DOM builders ----------
 function buildRoomCard(roomId, targetContainer) {
   const card = document.createElement('div');
   card.className = 'room';
@@ -170,31 +161,23 @@ function buildRoomCard(roomId, targetContainer) {
   `;
   const list = document.createElement('div');
   list.className = 'events';
-  // two paging layers
   const pageA = document.createElement('div');
   const pageB = document.createElement('div');
   pageA.className = 'page';
   pageB.className = 'page';
   list.appendChild(pageA);
   list.appendChild(pageB);
-
   card.appendChild(header);
   card.appendChild(list);
   targetContainer.appendChild(card);
-
   return card;
 }
 
 function renderEventHTML(evt) {
   const when = `${minsTo12h(evt.startMin)} – ${minsTo12h(evt.endMin)}`;
   const whoLine = evt.org ? `<div class="who"><strong>${escapeHTML(evt.org)}</strong></div>` : '';
-  // If we only have a person, show them (not muted)
-  const contactLine = evt.contact
-    ? `<div class="what">${escapeHTML(evt.contact)}</div>`
-    : '';
-  const whatLine = (!evt.contact && evt.what)
-    ? `<div class="what">${escapeHTML(evt.what)}</div>`
-    : '';
+  const contactLine = evt.contact ? `<div class="what">${escapeHTML(evt.contact)}</div>` : '';
+  const whatLine = (!evt.contact && evt.what) ? `<div class="what">${escapeHTML(evt.what)}</div>` : '';
   return `
     <div class="event">
       ${whoLine}${contactLine || whatLine || ''}
@@ -203,31 +186,22 @@ function renderEventHTML(evt) {
   `;
 }
 
-// Slide pager: uses two absolutely-positioned .page elements
+// Slide pager
 function renderRoomPaged(roomEl, roomId, eventsForRoom) {
   const list = roomEl.querySelector('.events');
-  const pageEls = list.querySelectorAll('.page');
-  const pageA = pageEls[0];
-  const pageB = pageEls[1];
-  const header = roomEl.querySelector('.roomHeader');
-  const countEl = header?.querySelector('.count');
+  const [pageA, pageB] = list.querySelectorAll('.page');
+  const countEl = roomEl.querySelector('.roomHeader .count');
 
   // clear previous timer
   const prev = roomPager[roomId];
   if (prev?.timer) clearInterval(prev.timer);
 
-  // Split into pages
   const pages = [];
   for (let i = 0; i < eventsForRoom.length; i += ROOM_PAGE_SIZE) {
     pages.push(eventsForRoom.slice(i, i + ROOM_PAGE_SIZE));
   }
+  const setPageHTML = (el, items) => { el.innerHTML = items.map(renderEventHTML).join(''); };
 
-  // Helper to set page HTML
-  const setPageHTML = (el, items) => {
-    el.innerHTML = items.map(renderEventHTML).join('');
-  };
-
-  // No or one page: no animation
   if (pages.length === 0) {
     pageA.innerHTML = '';
     pageB.innerHTML = '';
@@ -249,7 +223,6 @@ function renderRoomPaged(roomEl, roomId, eventsForRoom) {
     return;
   }
 
-  // Many pages: animate A <-> B sliding left
   let cur = 0;
   setPageHTML(pageA, pages[cur]);
   pageA.style.transition = pageB.style.transition = 'none';
@@ -258,37 +231,25 @@ function renderRoomPaged(roomEl, roomId, eventsForRoom) {
   pageA.classList.remove('hidden');
   pageB.classList.remove('hidden');
   if (countEl) countEl.textContent = `Page ${cur + 1} / ${pages.length}`;
-
-  // ensure transitions after first frame
   requestAnimationFrame(() => {
     pageA.style.transition = pageB.style.transition = `transform ${SLIDE_MS}ms ease-in-out`;
   });
 
   const tick = () => {
     const next = (cur + 1) % pages.length;
-    // Prepare the offscreen page with next content
     const curEl  = (cur % 2 === 0) ? pageA : pageB;
     const nextEl = (cur % 2 === 0) ? pageB : pageA;
     setPageHTML(nextEl, pages[next]);
-    // place next page just to the right
     nextEl.style.transform = 'translateX(100%)';
-
-    // Trigger slide
-    // In next frame, slide both left
     requestAnimationFrame(() => {
       curEl.style.transform  = 'translateX(-100%)';
       nextEl.style.transform = 'translateX(0%)';
     });
-
-    // After animation, swap roles
     setTimeout(() => {
-      // make the now-offscreen page ready on the right for the following tick
       curEl.style.transition = 'none';
       curEl.style.transform  = 'translateX(100%)';
-      // re-enable transition
-      void curEl.offsetHeight; // force reflow
+      void curEl.offsetHeight;
       curEl.style.transition = `transform ${SLIDE_MS}ms ease-in-out`;
-
       cur = next;
       if (countEl) countEl.textContent = `Page ${cur + 1} / ${pages.length}`;
     }, SLIDE_MS);
@@ -298,7 +259,7 @@ function renderRoomPaged(roomEl, roomId, eventsForRoom) {
   roomPager[roomId] = { page: cur, pages: pages.length, timer };
 }
 
-// ---------- Main ----------
+// ---------- Data pipeline ----------
 async function loadData() {
   const resp = await fetch(DATA_URL, { cache: 'no-store' });
   if (!resp.ok) throw new Error(`Failed to fetch events.json: ${resp.status}`);
@@ -307,16 +268,35 @@ async function loadData() {
   return json;
 }
 
-function prepareRoomsDOM(rooms) {
+function defaultRooms() {
+  return [
+    { id:'1',  label:'1',  group:'south' },
+    { id:'2',  label:'2',  group:'south' },
+    { id:'3',  label:'3',  group:'fieldhouse' },
+    { id:'4',  label:'4',  group:'fieldhouse' },
+    { id:'5',  label:'5',  group:'fieldhouse' },
+    { id:'6',  label:'6',  group:'fieldhouse' },
+    { id:'7',  label:'7',  group:'fieldhouse' },
+    { id:'8',  label:'8',  group:'fieldhouse' },
+    { id:'9',  label:'9',  group:'north' },
+    { id:'10', label:'10', group:'north' },
+  ];
+}
+
+function prepareRoomsDOM(roomsInput) {
+  const rooms = Array.isArray(roomsInput) && roomsInput.length ? roomsInput : defaultRooms();
   const southWrap = document.getElementById('southRooms');
   const fieldWrap = document.getElementById('fieldhouseRooms');
   const northWrap = document.getElementById('northRooms');
+  if (!southWrap || !fieldWrap || !northWrap) {
+    console.warn('Room containers missing in HTML.');
+    return {};
+  }
   southWrap.innerHTML = '';
   fieldWrap.innerHTML = '';
   northWrap.innerHTML = '';
 
   const cardByRoom = Object.create(null);
-
   const south = rooms.filter(r => r.group === 'south').sort((a,b)=>Number(a.id)-Number(b.id));
   const field = rooms.filter(r => r.group === 'fieldhouse').sort((a,b)=>Number(a.id)-Number(b.id));
   const north = rooms.filter(r => r.group === 'north').sort((a,b)=>Number(a.id)-Number(b.id));
@@ -334,7 +314,6 @@ function normalizeSlots(rawSlots) {
     if (!s) continue;
     const { roomId, startMin, endMin } = s;
     if (roomId == null || startMin == null || endMin == null) continue;
-
     const { org, contact, what } = normalizeOrgAndContact(s.title || '', s.subtitle || '');
     out.push({ roomId: String(roomId), startMin, endMin, org, contact, what });
   }
@@ -356,8 +335,8 @@ function groupSlotsByRoom(slots) {
   return byRoom;
 }
 
+// ---------- Main ----------
 async function init() {
-  // header clock
   updateHeaderClock();
   setInterval(updateHeaderClock, CLOCK_TICK_MS);
 
@@ -371,11 +350,9 @@ async function init() {
   const cardByRoom = prepareRoomsDOM(data.rooms || []);
   const nowMin = nowMinutesLocal();
 
-  // normalize + filter
   let slots = normalizeSlots(data.slots || []);
   slots = filterPast(slots, nowMin);
 
-  // per-room dedupe + render
   const grouped = groupSlotsByRoom(slots);
   for (const [roomId, list] of grouped.entries()) {
     const deduped = dedupeWithinRoom(list);
@@ -383,6 +360,11 @@ async function init() {
     if (!card) continue;
     renderRoomPaged(card, roomId, deduped);
   }
+
+  // Ensure empty rooms still show their cards (even if no events)
+  Object.keys(cardByRoom).forEach(id => {
+    if (!grouped.has(id)) renderRoomPaged(cardByRoom[id], id, []);
+  });
 }
 
 document.addEventListener('DOMContentLoaded', init);
