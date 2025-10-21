@@ -10,11 +10,35 @@ const JSON_OUT = process.env.JSON_OUT || 'events.json';
 const dayStartMin = 6 * 60;   // 06:00
 const dayEndMin   = 23 * 60;  // 23:00
 
-// --- utils ---
+// ---------- Season helpers ----------
+function nthWeekdayOfMonth(year, month /* 0-11 */, weekday /*0=Sun..6=Sat*/, n /*1..5*/) {
+  const d = new Date(year, month, 1);
+  const offset = (weekday - d.getDay() + 7) % 7;
+  const day = 1 + offset + (n - 1) * 7;
+  return new Date(year, month, day);
+}
+function isFloorSeason(date = new Date()) {
+  const y = date.getFullYear();
+  const thirdMondayMarch = nthWeekdayOfMonth(y, 2, 1, 3);   // March (2), Monday(1), 3rd
+  const secondMondayNov  = nthWeekdayOfMonth(y, 10, 1, 2);  // Nov (10), Monday(1), 2nd
+  return date >= thirdMondayMarch && date < secondMondayNov;
+}
+function mapTurfToCourts(facilityLower) {
+  // Return an array of strings (court IDs) OR null if not a turf label
+  if (facilityLower.includes('full turf')) return ['3','4','5','6','7','8'];
+  if (facilityLower.includes('half turf north')) return ['6','7','8'];
+  if (facilityLower.includes('half turf south')) return ['3','4','5'];
+  if (facilityLower.includes('quarter turf na')) return ['3'];
+  if (facilityLower.includes('quarter turf nb')) return ['4'];
+  if (facilityLower.includes('quarter turf sa')) return ['5'];
+  if (facilityLower.includes('quarter turf sb')) return ['6'];
+  return null;
+}
+
+// ---------- CSV utils ----------
 function parseCsv(text) {
   const lines = text.replace(/\r\n/g, '\n').replace(/\r/g, '\n')
     .split('\n')
-    // keep empty fields but drop completely empty trailing lines
     .filter((ln, i, arr) => !(ln.trim() === '' && i === arr.length - 1));
 
   if (!lines.length) return [];
@@ -41,41 +65,52 @@ function parseCsv(text) {
   }
   return rows;
 }
-
 const normKey = (h) => h.toLowerCase().replace(/[^a-z0-9]/g, '');
 
-function mapFacilityToRoom(facility) {
-  if (!facility) return null;
+// ---------- Mapping ----------
+function mapFacilityToRoomOrCourts(facility, floorSeason) {
+  if (!facility) return { courts: null, genericGroup: null };
+
   const f = facility.toLowerCase();
 
   // South gym (1–2)
-  if (f.includes('half court 1a') || f.includes('court 1-ab') || f.includes('full gym 1ab') || f.includes('championship')) return '1';
-  if (f.includes('half court 1b')) return '1';
-  if (f.includes('half court 2a') || f.includes('court 2-ab') || f.includes('full gym 1ab & 2ab')) return '2';
-  if (f.includes('half court 2b')) return '2';
+  if (f.includes('half court 1a') || f.includes('court 1-ab') || f.includes('full gym 1ab') || f.includes('championship')) return { courts: ['1'], genericGroup: null };
+  if (f.includes('half court 1b')) return { courts: ['1'], genericGroup: null };
+  if (f.includes('half court 2a') || f.includes('court 2-ab') || f.includes('full gym 1ab & 2ab')) return { courts: ['2'], genericGroup: null };
+  if (f.includes('half court 2b')) return { courts: ['2'], genericGroup: null };
 
   // North gym (9–10)
-  if (f.includes('half court 9a') || f.includes('court 9-ab') || f.includes('full gym 9 & 10')) return '9';
-  if (f.includes('half court 9b')) return '9';
-  if (f.includes('half court 10a') || f.includes('court 10-ab')) return '10';
-  if (f.includes('half court 10b')) return '10';
+  if (f.includes('half court 9a') || f.includes('court 9-ab') || f.includes('full gym 9 & 10')) return { courts: ['9'], genericGroup: null };
+  if (f.includes('half court 9b')) return { courts: ['9'], genericGroup: null };
+  if (f.includes('half court 10a') || f.includes('court 10-ab')) return { courts: ['10'], genericGroup: null };
+  if (f.includes('half court 10b')) return { courts: ['10'], genericGroup: null };
 
-  // Fieldhouse – basketball floors (ignore turf terms)
-  if (f.includes('fieldhouse - court 3')) return '3';
-  if (f.includes('fieldhouse - court 4')) return '4';
-  if (f.includes('fieldhouse - court 5')) return '5';
-  if (f.includes('fieldhouse - court 6')) return '6';
-  if (f.includes('fieldhouse - court 7')) return '7';
-  if (f.includes('fieldhouse - court 8')) return '8';
+  // Fieldhouse – basketball floors
+  if (f.includes('fieldhouse - court 3')) return { courts: ['3'], genericGroup: null };
+  if (f.includes('fieldhouse - court 4')) return { courts: ['4'], genericGroup: null };
+  if (f.includes('fieldhouse - court 5')) return { courts: ['5'], genericGroup: null };
+  if (f.includes('fieldhouse - court 6')) return { courts: ['6'], genericGroup: null };
+  if (f.includes('fieldhouse - court 7')) return { courts: ['7'], genericGroup: null };
+  if (f.includes('fieldhouse - court 8')) return { courts: ['8'], genericGroup: null };
 
-  if (f.includes('court 3-8') || f.includes('court 3 – 8') || f.includes('fieldhouse court 3-8')) return '3-8';
+  if (f.includes('court 3-8') || f.includes('court 3 – 8') || f.includes('fieldhouse court 3-8')) {
+    return { courts: ['3','4','5','6','7','8'], genericGroup: '3-8' };
+  }
 
-  // Turf rows ignored during floor season
-  if (f.includes('full turf') || f.includes('half turf') || f.includes('quarter turf')) return null;
+  // Fieldhouse – turf labels
+  const turfCourts = mapTurfToCourts(f);
+  if (turfCourts) {
+    if (floorSeason) {
+      // Ignore turf in floor season
+      return { courts: null, genericGroup: null };
+    }
+    return { courts: turfCourts, genericGroup: 'turf' };
+  }
 
-  return null;
+  return { courts: null, genericGroup: null };
 }
 
+// ---------- Time & text ----------
 function parseTimeRange(s) {
   if (!s) return null;
   const m = s.match(/(\d{1,2}:\d{2}\s*[ap]m)\s*-\s*(\d{1,2}:\d{2}\s*[ap]m)/i);
@@ -100,7 +135,9 @@ function cleanTitle(str) {
   if (!str) return '';
   // remove duplicated segment after comma: "X, X" -> "X"
   str = str.replace(/\b([^,]+),\s*\1\b/gi, '$1');
-  return str.replace(/\s{2,}/g, ' ').trim();
+  // trim internal "Internal Hold per NM" noise
+  str = str.replace(/\binternal hold per nm\b/gi, '').replace(/\s{2,}/g, ' ').trim();
+  return str;
 }
 
 function isPickleball(reservee, purpose) {
@@ -117,7 +154,7 @@ function orgKey(s) {
 }
 const rangesOverlap = (a1,a2,b1,b2)=> Math.max(a1,b1) < Math.min(a2,b2);
 
-// scaffold writer
+// ---------- scaffold ----------
 function writeScaffold() {
   const rooms = [
     { id: '1', label: '1', group: 'south' },
@@ -134,14 +171,17 @@ function writeScaffold() {
   fs.writeFileSync(JSON_OUT, JSON.stringify({ dayStartMin, dayEndMin, rooms, slots: [] }, null, 2));
 }
 
+// ---------- main ----------
 function main() {
-  // 1) Missing or empty file → write scaffold and exit
+  const floorSeason = isFloorSeason();
+  console.log('Season:', floorSeason ? 'FLOOR (courts 3–8)' : 'TURF');
+
+  // 1) Missing/empty CSV → scaffold
   if (!fs.existsSync(CSV_PATH)) {
     console.log('CSV missing; writing empty scaffold.');
     writeScaffold();
     return;
   }
-
   const text = fs.readFileSync(CSV_PATH, 'utf8');
   if (!text || !text.trim()) {
     console.log('CSV empty content; writing empty scaffold.');
@@ -156,8 +196,9 @@ function main() {
     return;
   }
 
-  // 2) Normal parsing
+  // 2) Header map + debug
   const header = rows[0].map(normKey);
+  console.log('Detected headers:', header.join(', '));
   const idx = {
     location: header.indexOf('location'),
     facility: header.indexOf('facility'),
@@ -166,6 +207,16 @@ function main() {
     reservationpurpose: header.indexOf('reservationpurpose'),
     headcount: header.indexOf('headcount'),
   };
+
+  // show a couple sample values for quick debugging
+  for (let i = 1; i < Math.min(rows.length, 5); i++) {
+    const r = rows[i];
+    console.log('Sample', i, {
+      location: idx.location >= 0 ? r[idx.location] : undefined,
+      facility: idx.facility >= 0 ? r[idx.facility] : undefined,
+      reservedtime: idx.reservedtime >= 0 ? r[idx.reservedtime] : undefined,
+    });
+  }
 
   const outRooms = [
     { id: '1', label: '1', group: 'south' },
@@ -189,8 +240,8 @@ function main() {
     if (location && !/athletic\s*&?\s*event\s*center/i.test(location)) continue;
 
     const facility = idx.facility >= 0 ? r[idx.facility] : '';
-    const room = mapFacilityToRoom(facility);
-    if (!room) continue;
+    const { courts, genericGroup } = mapFacilityToRoomOrCourts(facility, floorSeason);
+    if (!courts || courts.length === 0) continue;
 
     const tr = idx.reservedtime >= 0 ? r[idx.reservedtime] : '';
     const range = parseTimeRange(tr);
@@ -212,16 +263,12 @@ function main() {
       what = cleanTitle(purpose);
     }
 
-    if (room === '3-8') {
-      for (const n of ['3','4','5','6','7','8']) {
-        raw.push({ roomId: n, startMin, endMin, who, what, org: orgKey(reservee) });
-      }
-    } else {
-      raw.push({ roomId: room, startMin, endMin, who, what, org: orgKey(reservee) });
+    for (const c of courts) {
+      raw.push({ roomId: c, startMin, endMin, who, what, org: orgKey(reservee), generic: genericGroup });
     }
   }
 
-  // 3) Drop generic 3–8 rows when an org also has specific courts overlapping
+  // 3) Prefer specific-court rows over generic 3–8 blocks (and over coarse turf groupings)
   const keep = [];
   for (let i = 0; i < raw.length; i++) {
     const a = raw[i];
@@ -232,7 +279,15 @@ function main() {
       if (a.org !== b.org) continue;
       if (a.roomId !== b.roomId) continue;
       if (!rangesOverlap(a.startMin, a.endMin, b.startMin, b.endMin)) continue;
-      if (b.what && !a.what) { drop = true; break; }
+
+      // If one is generic block (3-8 or turf) and the other is a specific court time for same org,
+      // drop the generic one.
+      const aGeneric = !!a.generic;
+      const bGeneric = !!b.generic;
+      if (aGeneric && !bGeneric) { drop = true; break; }
+      if (!aGeneric && bGeneric) { /* keep a */ continue; }
+
+      // Otherwise dedupe later by ordering
       if (i > j) { drop = true; break; }
     }
     if (!drop) keep.push(a);
