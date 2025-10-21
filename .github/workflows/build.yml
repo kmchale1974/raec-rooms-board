@@ -1,71 +1,77 @@
-name: RAEC Rooms Board
+name: build
 
 on:
   workflow_dispatch:
-  schedule:
-    # every 15 minutes
-    - cron: "*/15 * * * *"
   push:
     branches: [ main ]
-    # only re-run on actual code changes; events.json changes won't retrigger
     paths:
-      - "scripts/**"
-      - "index.html"
-      - "app.js"
-      - "styles.css"
-      - ".github/workflows/rooms.yml"
+      - scripts/**
+      - .github/workflows/build.yml
+      - index.html
+      - app.js
+  schedule:
+    # run hourly 6am–11pm CT (adjust as you like)
+    - cron: "0 * * * *"
 
 permissions:
-  contents: write  # needed to push the updated events.json
-
-concurrency:
-  group: rooms-board
-  cancel-in-progress: false
+  contents: write
 
 jobs:
   build:
     runs-on: ubuntu-latest
-
     steps:
-      - name: Checkout repository
+      - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Setup Node.js
+      - name: Setup Node
         uses: actions/setup-node@v4
         with:
-          node-version: "20"
+          node-version: 20
 
-      - name: Install deps
+      - name: Install (no lockfile)
         run: npm i
 
-      - name: Ensure inbox dir
+      - name: Ensure inbox folder
         run: mkdir -p data/inbox
 
-      - name: Fetch latest CSV from Gmail
+      - name: Fetch newest CSV from Gmail
         env:
-          IMAP_PASS: ${{ secrets.IMAP_PASS }}   # <-- set this in repo Settings > Secrets
+          IMAP_PASS: ${{ secrets.IMAP_PASS }}
           OUT_CSV: data/inbox/latest.csv
-          # optional overrides:
-          # IMAP_HOST: imap.gmail.com
-          # IMAP_FOLDER: INBOX
-        run: node scripts/fetch_email.js
+        run: |
+          node scripts/fetch_email.js || true
+          echo "--- CSV DEBUG ---"
+          if [ -f data/inbox/latest.csv ]; then
+            ls -l --time-style=iso data/inbox/latest.csv
+            echo "CSV first 8 lines:"
+            head -n 8 data/inbox/latest.csv || true
+            echo "CSV line count:"
+            wc -l data/inbox/latest.csv
+          else
+            echo "No CSV downloaded."
+          fi
+          echo "-----------------"
 
       - name: Transform CSV -> events.json
-        run: node scripts/transform.mjs
-
-      - name: Show summary
+        env:
+          OUT_CSV: data/inbox/latest.csv
+          JSON_OUT: events.json
         run: |
+          node scripts/transform.mjs
+          echo "--- EVENTS.JSON DEBUG ---"
+          ls -l --time-style=iso events.json
           echo "Top of events.json:"
-          head -n 60 events.json || true
+          head -n 40 events.json
+          echo "-------------------------"
 
-      - name: Commit events.json (if changed)
+      - name: Commit updated events.json (if changed)
         run: |
-          if [ -n "$(git status --porcelain events.json)" ]; then
-            git config user.name  "github-actions[bot]"
-            git config user.email "github-actions[bot]@users.noreply.github.com"
-            git add events.json
-            git commit -m "Update events.json [skip ci]"
-            git push
+          git config user.name  "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add events.json
+          if git diff --cached --quiet; then
+            echo "No changes to commit."
           else
-            echo "No changes to events.json"
+            git commit -m "Update events.json"
+            git push
           fi
