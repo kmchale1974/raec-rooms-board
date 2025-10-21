@@ -1,15 +1,21 @@
 // scripts/fetch_email.js
-// Robust Gmail IMAP CSV fetcher (ESM). No mailparser needed.
+// Robust Gmail CSV fetcher: looks back through recent messages,
+// downloads raw MIME, parses attachments with mailparser.
 
 import fs from 'fs';
 import path from 'path';
 import { ImapFlow } from 'imapflow';
+import { simpleParser } from 'mailparser';
 
+// ---- Config via env ----
 const IMAP_HOST = process.env.IMAP_HOST || 'imap.gmail.com';
-const IMAP_USER = 'raecroominfo.board@gmail.com'; // baked-in
-const IMAP_PASS = process.env.IMAP_PASS;           // Actions secret
-const INBOX     = process.env.IMAP_FOLDER || 'INBOX';
-const OUT_CSV   = process.env.OUT_CSV || 'data/inbox/latest.csv';
+const IMAP_USER = process.env.IMAP_USER || 'raecroominfo.board@gmail.com'; // baked-in per your setup
+const IMAP_PASS = process.env.IMAP_PASS; // REQUIRED (Gmail App Password)
+const IMAP_FOLDER = process.env.IMAP_FOLDER || 'INBOX';
+const OUT_CSV = process.env.OUT_CSV || 'data/inbox/latest.csv';
+
+// How many recent emails to scan if the newest doesn't have a CSV:
+const LOOKBACK = Number(process.env.LOOKBACK || 10);
 
 if (!IMAP_PASS) {
   console.error('Missing IMAP_PASS env var (Gmail App Password).');
@@ -18,126 +24,90 @@ if (!IMAP_PASS) {
 
 fs.mkdirSync(path.dirname(OUT_CSV), { recursive: true });
 
-function* walkParts(node) {
-  if (!node) return;
-  // imapflow gives multipart nodes with childNodes[]
-  if (Array.isArray(node.childNodes) && node.childNodes.length) {
-    for (const child of node.childNodes) {
-      yield* walkParts(child);
-    }
-  }
-  yield node;
+// Utility: download a full message (raw RFC822) by UID
+async function downloadRaw(client, uid) {
+  const dl = await client.download(uid, '', { uid: true }); // '' => entire message
+  const chunks = [];
+  for await (const ch of dl.content) chunks.push(ch);
+  return Buffer.concat(chunks);
 }
 
-function pickCsvPart(bodyStructure) {
-  let best = null;
+async function tryParseForCsv(rawBuf) {
+  const parsed = await simpleParser(rawBuf);
+  const atts = parsed.attachments || [];
 
-  for (const part of walkParts(bodyStructure)) {
-    // imapflow sets: part.type, part.subtype, part.encoding, part.disposition, part.parameters, part.dispositionParameters, part.part
-    const disp = (part.disposition || '').toUpperCase();
-    const type = (part.type || '').toUpperCase();
-    const subtype = (part.subtype || '').toUpperCase();
-
-    const params  = part.parameters || {};
-    const dparams = part.dispositionParameters || {};
-    const name = (params.name || dparams.filename || '').toString();
-    const hasCsvName = name.toLowerCase().endsWith('.csv');
-
-    const looksCsvMime =
-      (type === 'TEXT' && subtype === 'CSV') ||
-      (type === 'APPLICATION' && subtype === 'CSV') ||
-      (type === 'TEXT' && subtype === 'PLAIN' && hasCsvName) ||
-      (type === 'APPLICATION' && subtype === 'OCTET-STREAM' && hasCsvName);
-
-    if ((disp === 'ATTACHMENT' || hasCsvName) && (hasCsvName || looksCsvMime)) {
-      if (!best) best = part;
-      else {
-        const bestName = ((best.parameters?.name) || (best.dispositionParameters?.filename) || '').toString();
-        if (disp === 'ATTACHMENT' && (best.disposition || '').toUpperCase() !== 'ATTACHMENT') best = part;
-        else if (name.length > bestName.length) best = part; // heuristic
-      }
-    }
+  if (atts.length) {
+    console.log('Attachments:', atts.map(a => `${a.filename || '(no name)'} [${a.contentType}]`).join(' | '));
   }
 
-  return best;
-}
+  // Accept .csv (case-insensitive)
+  let csv = atts.find(a => (a.filename || '').toLowerCase().endsWith('.csv'));
+  // Fallback: some senders set contentType text/csv but odd filename
+  if (!csv) csv = atts.find(a => (a.contentType || '').toLowerCase() === 'text/csv');
 
-function decodeBody(buffer, encoding) {
-  const enc = (encoding || '').toUpperCase();
-  if (enc === 'BASE64') {
-    const b64 = buffer.toString('ascii').replace(/\s+/g, '');
-    return Buffer.from(b64, 'base64');
-  }
-  if (enc === 'QUOTED-PRINTABLE') {
-    const str = buffer.toString('utf8')
-      .replace(/=\r?\n/g, '')
-      .replace(/=([A-F0-9]{2})/g, (_, h) => String.fromCharCode(parseInt(h, 16)));
-    return Buffer.from(str, 'utf8');
-  }
-  return buffer; // 7BIT/8BIT/BINARY
+  if (!csv) return null;
+
+  return {
+    filename: csv.filename || 'attachment.csv',
+    content: csv.content, // Buffer
+  };
 }
 
 async function main() {
   const client = new ImapFlow({
     host: IMAP_HOST,
-    port: 993,
     secure: true,
     auth: { user: IMAP_USER, pass: IMAP_PASS },
-    logger: false
+    logger: false,
   });
 
   try {
     await client.connect();
-    await client.mailboxOpen(INBOX);
+    await client.mailboxOpen(IMAP_FOLDER);
 
-    // 1) Find newest message by INTERNALDATE
-    let newest = null;
-    for await (const msg of client.fetch({ all: true }, { uid: true, internalDate: true })) {
-      if (!newest || msg.internalDate > newest.internalDate) newest = msg;
+    // Fetch last N UIDs, newest last, so we can iterate from newest → older
+    const uids = [];
+    for await (const msg of client.fetch({ seen: false, all: true }, { uid: true, internalDate: true })) {
+      uids.push({ uid: msg.uid, date: msg.internalDate });
     }
-    if (!newest) {
-      console.log('No emails in INBOX.');
+
+    if (uids.length === 0) {
+      console.log('No emails found.');
       return;
     }
 
-    // 2) Fetch BODYSTRUCTURE for that message (async iterator -> grab first)
-    let bsResp = null;
-    for await (const item of client.fetch(newest.uid, { uid: true, bodyStructure: true })) {
-      bsResp = item;
-      break;
+    // Sort newest → oldest by internalDate
+    uids.sort((a, b) => b.date - a.date);
+
+    const sample = uids.slice(0, LOOKBACK);
+    console.log(`Scanning ${sample.length} most recent message(s) for a CSV…`);
+
+    let saved = false;
+
+    for (const { uid, date } of sample) {
+      try {
+        // Download raw, parse attachments. This sidesteps BODYSTRUCTURE issues entirely.
+        const raw = await downloadRaw(client, uid);
+        const hit = await tryParseForCsv(raw);
+
+        if (hit) {
+          fs.writeFileSync(OUT_CSV, hit.content);
+          console.log(`Saved CSV to ${OUT_CSV} (${hit.filename}) from UID ${uid} @ ${date.toISOString()}`);
+          saved = true;
+          break;
+        } else {
+          console.log(`UID ${uid}: no CSV attachment found, checking older message…`);
+        }
+      } catch (e) {
+        console.log(`UID ${uid}: failed to parse (${e.message}), checking older message…`);
+      }
     }
-    const bodyStructure = bsResp?.bodyStructure;
-    if (!bodyStructure) {
-      console.log('No BODYSTRUCTURE on newest message.');
-      return;
+
+    if (!saved) {
+      console.log('No CSV found in the recent messages scanned.');
     }
-
-    // 3) Find the actual CSV attachment part
-    const csvPart = pickCsvPart(bodyStructure);
-    if (!csvPart || !csvPart.part) {
-      console.log('No CSV attachment found in newest email.');
-      return;
-    }
-
-    const filename =
-      csvPart.parameters?.name ||
-      csvPart.dispositionParameters?.filename ||
-      'attachment.csv';
-
-    console.log(`Found CSV part ${csvPart.part} (${filename}) — encoding=${csvPart.encoding || '7BIT'}`);
-
-    // 4) Download that part
-    const dl = await client.download(newest.uid, csvPart.part, { uid: true });
-    const chunks = [];
-    for await (const ch of dl.content) chunks.push(ch);
-    const raw = Buffer.concat(chunks);
-
-    // 5) Decode if needed and write to disk
-    const decoded = decodeBody(raw, csvPart.encoding);
-    fs.writeFileSync(OUT_CSV, decoded);
-    console.log(`Saved CSV to ${OUT_CSV} (${filename})`);
   } catch (err) {
-    console.error('fetch_email failed:', err?.message || err);
+    console.error('fetch_email failed:', err.message || err);
     process.exit(1);
   } finally {
     try { await client.logout(); } catch {}
