@@ -1,175 +1,268 @@
-// app.js
-const STAGE_W = 1920, STAGE_H = 1080;
+// app.js (ES module)
 
-// --------- helpers
-const pad = n => (n < 10 ? "0" + n : "" + n);
-function minsTo12h(mm) {
-  let h = Math.floor(mm / 60);
-  const m = mm % 60;
-  const ampm = h >= 12 ? "pm" : "am";
-  h = h % 12;
-  if (h === 0) h = 12;
-  return `${h}:${pad(m)}${ampm}`;
+// ---------- Config ----------
+const DATA_URL = `./events.json?ts=${Date.now()}`;
+const HIDE_PAST = true;          // remove events that already ended
+const ROOM_PAGE_SIZE = 5;        // events per page in a room card
+const ROOM_PAGE_MS   = 8000;     // ms between page flips
+const CLOCK_TICK_MS  = 1000;     // live clock refresh
+
+// Pager state per room
+const roomPager = Object.create(null);
+
+// ---------- Utilities ----------
+function nowMinutesLocal() {
+  const d = new Date();
+  return d.getHours() * 60 + d.getMinutes();
 }
-function formatRange(s, e) {
-  return `${minsTo12h(s)} - ${minsTo12h(e)}`;
+function pad2(n) { return String(n).padStart(2,'0'); }
+function minsTo12h(mins) {
+  const h24 = Math.floor(mins / 60);
+  const m = mins % 60;
+  const h12 = ((h24 + 11) % 12) + 1;
+  const ampm = h24 >= 12 ? 'pm' : 'am';
+  return `${h12}:${pad2(m)}${ampm}`;
 }
-
-// --------- auto-fit 1920×1080 with safe margins (prevents right/bottom clipping)
-(function fitStageSetup() {
-  const MARGIN = 16; // safe outer margin so content never kisses edges
-  function fit() {
-    const availW = window.innerWidth - MARGIN * 2;
-    const availH = window.innerHeight - MARGIN * 2;
-    const sx = availW / STAGE_W;
-    const sy = availH / STAGE_H;
-    const s = Math.min(sx, sy);
-
-    const stage = document.querySelector(".stage");
-    const wrap = document.querySelector(".wrap");
-    if (!stage || !wrap) return;
-
-    stage.style.transform = `scale(${s})`;
-    stage.style.transformOrigin = "top left";
-    wrap.style.padding = `${MARGIN}px`;
-    wrap.style.display = "flex";
-    wrap.style.justifyContent = "center";
-    wrap.style.alignItems = "flex-start";
-    wrap.style.height = "100vh";
-    wrap.style.boxSizing = "border-box";
-  }
-  window.addEventListener("resize", fit);
-  window.addEventListener("orientationchange", fit);
-  document.addEventListener("DOMContentLoaded", fit);
-})();
-
-// --------- renderers
-function setHeader() {
-  const now = new Date();
-  const dateEl = document.getElementById("headerDate");
-  const clockEl = document.getElementById("headerClock");
-  const opts = { weekday: "long", month: "long", day: "numeric", year: "numeric" };
-  dateEl.textContent = now.toLocaleDateString(undefined, opts);
-  const tick = () => {
-    const t = new Date();
-    let hh = t.getHours(), mm = pad(t.getMinutes());
-    const ampm = hh >= 12 ? "pm" : "am";
-    hh = hh % 12; if (hh === 0) hh = 12;
-    clockEl.textContent = `${hh}:${mm}${ampm}`;
-  };
-  tick();
-  setInterval(tick, 1000 * 15);
+function escapeHTML(s='') {
+  return String(s).replace(/[&<>"']/g, c => (
+    { '&':'&amp;', '<':'&lt;', '>':'&gt;', '"':'&quot;', "'":'&#39;' }[c]
+  ));
 }
-
-function roomCard(roomId, events) {
-  const card = document.createElement("div");
-  card.className = "room";
-
-  const hdr = document.createElement("div");
-  hdr.className = "roomHeader";
-  const id = document.createElement("div");
-  id.className = "id";
-  id.textContent = roomId;
-  hdr.appendChild(id);
-  card.appendChild(hdr);
-
-  const list = document.createElement("div");
-  list.className = "events";
-
-  if (!events.length) {
-    const empty = document.createElement("div");
-    empty.className = "event event--empty";
-    empty.textContent = "—";
-    list.appendChild(empty);
-  } else {
-    for (const ev of events) {
-      const it = document.createElement("div");
-      it.className = "event";
-
-      const who = document.createElement("div");
-      who.className = "who";
-      who.innerHTML = ev.org
-        ? `<strong>${ev.org}</strong>${ev.contact ? `<div class="contact">${ev.contact}</div>` : ""}`
-        : `<strong>${ev.title}</strong>`;
-
-      const what = document.createElement("div");
-      what.className = "what";
-      what.textContent = ev.subtitle || "";
-
-      const when = document.createElement("div");
-      when.className = "when";
-      when.textContent = formatRange(ev.startMin, ev.endMin);
-
-      it.appendChild(who);
-      if (ev.subtitle) it.appendChild(what);
-      it.appendChild(when);
-      list.appendChild(it);
+function isLikelyPerson(name) {
+  // crude heuristic: “Last, First” or two words with a comma
+  return /,/.test(name) || /^[A-Za-z]+(?:\s+[A-Za-z'.-]+){1,2}$/.test(name);
+}
+function invertLastFirst(name) {
+  // "Doe, John A." -> "John A. Doe"
+  const parts = String(name).split(',').map(s => s.trim()).filter(Boolean);
+  if (parts.length === 2) return `${parts[1]} ${parts[0]}`.replace(/\s+/g,' ').trim();
+  return name;
+}
+function normalizeOrgAndContact(title = '', subtitle = '') {
+  // Split "Org, Contact" if looks like that; otherwise treat whole title as org
+  let org = title.trim();
+  let contact = '';
+  if (/,/.test(org)) {
+    const [left, right] = org.split(',', 2).map(s => s.trim());
+    if (right && isLikelyPerson(right)) {
+      org = left;
+      contact = invertLastFirst(right);
     }
   }
+  // If title is “Brown, Shawnton” (or similar) with no org, display contact only
+  if (!/,/.test(title) && isLikelyPerson(title)) {
+    org = '';
+    contact = invertLastFirst(title);
+  }
 
+  // Special rename for Pickleball: drop internal verbiage
+  const combined = `${title} ${subtitle}`.toLowerCase();
+  if (combined.includes('pickleball')) {
+    org = 'Open Pickleball';
+    contact = ''; // hide internal-hold names
+  }
+
+  return { org, contact };
+}
+
+function dedupeWithinRoom(slots) {
+  // Remove exact duplicates (same [start,end,org,contact,what])
+  const seen = new Set();
+  const out = [];
+  for (const s of slots) {
+    const k = [
+      s.startMin, s.endMin,
+      (s.org || '').toLowerCase(),
+      (s.contact || '').toLowerCase(),
+      (s.what || '').toLowerCase()
+    ].join('||');
+    if (!seen.has(k)) {
+      seen.add(k);
+      out.push(s);
+    }
+  }
+  return out;
+}
+
+// ---------- Rendering ----------
+function updateHeaderClock() {
+  const d = new Date();
+  const dateEl = document.getElementById('headerDate');
+  const clockEl = document.getElementById('headerClock');
+  if (dateEl) {
+    const opts = { weekday:'long', month:'long', day:'numeric' };
+    dateEl.textContent = d.toLocaleDateString(undefined, opts);
+  }
+  if (clockEl) {
+    const hh = d.getHours();
+    const mm = pad2(d.getMinutes());
+    const ampm = hh >= 12 ? 'PM' : 'AM';
+    const h12 = ((hh + 11) % 12) + 1;
+    clockEl.textContent = `${h12}:${mm} ${ampm}`;
+  }
+}
+
+function buildRoomCard(roomId, targetContainer) {
+  const card = document.createElement('div');
+  card.className = 'room';
+  const header = document.createElement('div');
+  header.className = 'roomHeader';
+  header.innerHTML = `
+    <div class="id">${escapeHTML(roomId)}</div>
+    <div class="count"></div>
+  `;
+  const list = document.createElement('div');
+  list.className = 'events';
+  card.appendChild(header);
   card.appendChild(list);
+  targetContainer.appendChild(card);
   return card;
 }
 
-function renderGrid(data) {
-  // data.rooms: [{id:"1", group:"south"|"fieldhouse"|"north"}, ...]
-  // data.slots: [{roomId:"1", startMin, endMin, title, subtitle, org?, contact?}, ...]
-
-  // Filter out past events
-  const nowMin = new Date();
-  const now = nowMin.getHours() * 60 + nowMin.getMinutes();
-  const slots = (data.slots || []).filter(s => s.endMin > now);
-
-  // group slots by room id
-  const byRoom = new Map();
-  for (const r of data.rooms) byRoom.set(r.id, []);
-  for (const s of slots) {
-    if (!byRoom.has(String(s.roomId))) byRoom.set(String(s.roomId), []);
-    byRoom.get(String(s.roomId)).push(s);
-  }
-  // sort inside room by start time
-  for (const arr of byRoom.values()) arr.sort((a, b) => a.startMin - b.startMin);
-
-  // mount
-  const southEl = document.getElementById("southRooms");
-  const fieldEl = document.getElementById("fieldhouseRooms");
-  const northEl = document.getElementById("northRooms");
-  southEl.innerHTML = "";
-  fieldEl.innerHTML = "";
-  northEl.innerHTML = "";
-
-  const south = data.rooms.filter(r => r.group === "south").sort((a,b)=>+a.id - +b.id); // 1,2
-  const field = data.rooms.filter(r => r.group === "fieldhouse").sort((a,b)=>+a.id - +b.id); // 3..8
-  const north = data.rooms.filter(r => r.group === "north").sort((a,b)=>+a.id - +b.id); // 9,10
-
-  for (const r of south) southEl.appendChild(roomCard(r.label, byRoom.get(r.id) || []));
-  for (const r of field) fieldEl.appendChild(roomCard(r.label, byRoom.get(r.id) || []));
-  for (const r of north) northEl.appendChild(roomCard(r.label, byRoom.get(r.id) || []));
+function renderEventHTML(evt) {
+  const when = `${minsTo12h(evt.startMin)} – ${minsTo12h(evt.endMin)}`;
+  const whoLine = evt.org ? `<div class="who"><strong>${escapeHTML(evt.org)}</strong></div>` : '';
+  const contactLine = evt.contact ? `<div class="what">${escapeHTML(evt.contact)}</div>` : '';
+  const whatLine = (!evt.contact && evt.what) ? `<div class="what">${escapeHTML(evt.what)}</div>` : '';
+  return `
+    <div class="event">
+      ${whoLine}${contactLine || whatLine || ''}
+      <div class="when">${when}</div>
+    </div>
+  `;
 }
 
+function renderRoomPaged(roomEl, roomId, eventsForRoom) {
+  // split into pages
+  const pages = [];
+  for (let i = 0; i < eventsForRoom.length; i += ROOM_PAGE_SIZE) {
+    pages.push(eventsForRoom.slice(i, i + ROOM_PAGE_SIZE));
+  }
+
+  const header = roomEl.querySelector('.roomHeader');
+  const list = roomEl.querySelector('.events');
+  const countEl = header?.querySelector('.count');
+
+  // clear existing interval if any
+  const prev = roomPager[roomId];
+  if (prev?.timer) clearInterval(prev.timer);
+
+  if (pages.length <= 1) {
+    list.innerHTML = eventsForRoom.map(renderEventHTML).join('');
+    if (countEl) countEl.textContent = '';
+    roomPager[roomId] = { page: 0, pages: 1, timer: null };
+    return;
+  }
+
+  const state = { page: 0, pages: pages.length, timer: null };
+  roomPager[roomId] = state;
+
+  const renderPage = () => {
+    const cur = pages[state.page];
+    list.innerHTML = cur.map(renderEventHTML).join('');
+    if (countEl) countEl.textContent = `Page ${state.page + 1} / ${state.pages}`;
+  };
+
+  renderPage();
+  state.timer = setInterval(() => {
+    state.page = (state.page + 1) % state.pages;
+    renderPage();
+  }, ROOM_PAGE_MS);
+}
+
+// ---------- Main ----------
 async function loadData() {
-  const url = `./events.json?ts=${Date.now()}`;
-  const resp = await fetch(url, { cache: "no-store" });
-  if (!resp.ok) throw new Error(`fetch ${url}: ${resp.status}`);
-  return resp.json();
+  const resp = await fetch(DATA_URL, { cache: 'no-store' });
+  if (!resp.ok) throw new Error(`Failed to fetch events.json: ${resp.status}`);
+  const json = await resp.json();
+  console.log('Loaded events.json', json);
+  return json;
+}
+
+function prepareRoomsDOM(rooms) {
+  const southWrap = document.getElementById('southRooms');
+  const fieldWrap = document.getElementById('fieldhouseRooms');
+  const northWrap = document.getElementById('northRooms');
+  southWrap.innerHTML = '';
+  fieldWrap.innerHTML = '';
+  northWrap.innerHTML = '';
+
+  const cardByRoom = Object.create(null);
+
+  // Keep order: south(1..2), fieldhouse(3..8), north(9..10)
+  const south = rooms.filter(r => r.group === 'south').sort((a,b)=>Number(a.id)-Number(b.id));
+  const field = rooms.filter(r => r.group === 'fieldhouse').sort((a,b)=>Number(a.id)-Number(b.id));
+  const north = rooms.filter(r => r.group === 'north').sort((a,b)=>Number(a.id)-Number(b.id));
+
+  for (const r of south) cardByRoom[r.id] = buildRoomCard(r.label || r.id, southWrap);
+  for (const r of field) cardByRoom[r.id] = buildRoomCard(r.label || r.id, fieldWrap);
+  for (const r of north) cardByRoom[r.id] = buildRoomCard(r.label || r.id, northWrap);
+
+  return cardByRoom;
+}
+
+function normalizeSlots(rawSlots) {
+  // Map slots -> enriched objects with {roomId,startMin,endMin,org,contact,what}
+  const out = [];
+  for (const s of (rawSlots || [])) {
+    if (s == null) continue;
+    const { roomId, startMin, endMin } = s;
+    if (roomId == null || startMin == null || endMin == null) continue;
+
+    // Title/Subtitles to org/contact/what
+    const { org, contact } = normalizeOrgAndContact(s.title || '', s.subtitle || '');
+    const what = s.subtitle || '';
+
+    out.push({ roomId: String(roomId), startMin, endMin, org, contact, what });
+  }
+  return out;
+}
+
+function filterPast(slots, nowMin) {
+  if (!HIDE_PAST) return slots;
+  return slots.filter(s => s.endMin > nowMin);
+}
+
+function groupSlotsByRoom(slots) {
+  const byRoom = new Map();
+  for (const s of slots) {
+    if (!byRoom.has(s.roomId)) byRoom.set(s.roomId, []);
+    byRoom.get(s.roomId).push(s);
+  }
+  // sort each room by start time
+  for (const arr of byRoom.values()) arr.sort((a,b)=>a.startMin - b.startMin || a.endMin - b.endMin);
+  return byRoom;
 }
 
 async function init() {
-  setHeader();
+  // clock header
+  updateHeaderClock();
+  setInterval(updateHeaderClock, CLOCK_TICK_MS);
+
+  let data = { rooms: [], slots: [], dayStartMin: 360, dayEndMin: 1380 };
   try {
-    const data = await loadData();
-    console.log("Loaded events.json", data);
-    renderGrid(data);
+    data = await loadData();
   } catch (e) {
-    console.error(e);
+    console.error('Failed to load events.json:', e);
   }
-  // refresh grid every 2 minutes so past events fall off naturally
-  setInterval(async () => {
-    try {
-      const data = await loadData();
-      renderGrid(data);
-    } catch {}
-  }, 120000);
+
+  const cardByRoom = prepareRoomsDOM(data.rooms || []);
+  const nowMin = nowMinutesLocal();
+
+  // normalize + filter
+  let slots = normalizeSlots(data.slots || []);
+  slots = filterPast(slots, nowMin);
+
+  // per-room dedupe
+  const grouped = groupSlotsByRoom(slots);
+  for (const [roomId, list] of grouped.entries()) {
+    const deduped = dedupeWithinRoom(list);
+    const card = cardByRoom[roomId];
+    if (!card) continue;
+    renderRoomPaged(card, roomId, deduped);
+  }
+
+  // rooms with no entries still render their empty cards (already built)
 }
 
-document.addEventListener("DOMContentLoaded", init);
+document.addEventListener('DOMContentLoaded', init);
