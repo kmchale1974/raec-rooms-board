@@ -1,19 +1,13 @@
 {
   "name": "raec-rooms-board",
-  "version": "1.0.0",
   "private": true,
   "type": "module",
-  "description": "Signage board for Romeoville Athletic & Event Center",
   "scripts": {
     "fetch": "node scripts/fetch_email.js",
-    "transform": "node scripts/transform.mjs",
-    "build": "npm run fetch && npm run transform"
+    "transform": "node scripts/transform.mjs"
   },
   "dependencies": {
     "imapflow": "^1.0.199",
-    "mailparser": "^3.9.0"
-  },
-  "engines": {
-    "node": ">=18"
+    "mailparser": "3.7.4"
   }
 }
