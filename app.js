@@ -1,189 +1,296 @@
 // app.js
 
-// ---------- config ----------
-const WIFI_SSID = 'RAEC-Public';
-const WIFI_PASS = 'Publ!c00';
-
-// Groups by room id (must match index.html containers)
-const GROUPS = {
-  south:    ['1', '2'],
-  fieldhouse:['3','4','5','6','7','8'],
-  north:    ['9', '10'],
-};
-
-// ---------- time helpers ----------
-function fmt12(min) {
-  let h = Math.floor(min/60), m = min%60;
-  const ap = h >= 12 ? 'pm' : 'am';
-  h = h % 12; if (h === 0) h = 12;
-  return `${h}:${m.toString().padStart(2,'0')}${ap}`;
-}
-function fmtRange(startMin, endMin) {
-  return `${fmt12(startMin)} - ${fmt12(endMin)}`;
-}
-function nowMinutes() {
+// ---------- helpers: time & formatting ----------
+const nowMinutes = () => {
   const d = new Date();
   return d.getHours() * 60 + d.getMinutes();
-}
-function formatHeaderDate(d=new Date()) {
-  const opts = { weekday:'long', month:'long', day:'numeric' };
-  return d.toLocaleDateString(undefined, opts);
-}
-function formatHeaderClock(d=new Date()) {
-  let h = d.getHours();
-  const m = d.getMinutes().toString().padStart(2,'0');
-  const ap = h >= 12 ? 'PM' : 'AM';
-  h = h % 12; if (h === 0) h = 12;
-  return `${h}:${m} ${ap}`;
-}
+};
 
-// ---------- DOM helpers ----------
-function el(tag, cls, text) {
-  const n = document.createElement(tag);
-  if (cls) n.className = cls;
-  if (text != null) n.textContent = text;
-  return n;
-}
+const to12h = (mins) => {
+  let h = Math.floor(mins / 60);
+  const m = mins % 60;
+  const ampm = h >= 12 ? 'pm' : 'am';
+  h = h % 12 || 12;
+  const mm = m.toString().padStart(2, '0');
+  return `${h}:${mm}${ampm}`;
+};
 
-// ---------- rendering ----------
-function renderHeader() {
-  const dateEl  = document.getElementById('headerDate');
-  const clockEl = document.getElementById('headerClock');
-  const ssidEl  = document.getElementById('wifiSsid');
-  const passEl  = document.getElementById('wifiPass');
-  if (ssidEl) ssidEl.textContent = WIFI_SSID;
-  if (passEl) passEl.textContent = WIFI_PASS;
+const range12h = (s, e) => `${to12h(s)} - ${to12h(e)}`;
 
-  function tick() {
-    if (dateEl)  dateEl.textContent  = formatHeaderDate();
-    if (clockEl) clockEl.textContent = formatHeaderClock();
-  }
-  tick();
-  // Update clock once per second (smooth)
-  setInterval(tick, 1000);
-}
+// ---------- DOM refs ----------
+const $ = (q) => document.querySelector(q);
 
-function buildRoomCard(roomId, roomEvents) {
-  // Card
-  const card = el('div', 'room');
+// These containers must exist in index.html
+const elDate  = $('#headerDate');
+const elClock = $('#headerClock');
+const southWrap = $('#southRooms');
+const fieldWrap = $('#fieldhouseRooms');
+const northWrap = $('#northRooms');
 
-  // Header: room id at left; count at right (optional)
-  const header = el('div', 'roomHeader');
-  header.appendChild(el('div', 'id', roomId));
-  if (roomEvents.length > 0) {
-    header.appendChild(el('div', 'count', `${roomEvents.length} event${roomEvents.length>1?'s':''}`));
-  } else {
-    header.appendChild(el('div', 'count', ''));
-  }
-  card.appendChild(header);
-
-  // Events list
-  const list = el('div', 'events');
-  if (roomEvents.length === 0) {
-    // Keep cell empty per your request (no "No reservations")
-  } else {
-    for (const evt of roomEvents) {
-      const chip = el('div', 'event');
-      const who  = el('div', 'who', evt.title || 'Reserved');
-      const what = evt.subtitle ? el('div', 'what', evt.subtitle) : null;
-      const when = el('div', 'when', fmtRange(evt.startMin, evt.endMin));
-
-      chip.appendChild(who);
-      if (what) chip.appendChild(what);
-      chip.appendChild(when);
-      list.appendChild(chip);
-    }
-  }
-  card.appendChild(list);
-  return card;
-}
-
-function renderGrid(data) {
-  // Containers
-  const southEl      = document.getElementById('southRooms');
-  const fieldhouseEl = document.getElementById('fieldhouseRooms');
-  const northEl      = document.getElementById('northRooms');
-
-  if (!southEl || !fieldhouseEl || !northEl) {
-    console.error('Grid containers missing in index.html');
-    return;
-  }
-
-  // Clear existing
-  southEl.innerHTML = '';
-  fieldhouseEl.innerHTML = '';
-  northEl.innerHTML = '';
-
-  const nowMin = nowMinutes();
-  const dayStart = data.dayStartMin ?? 360;
-  const dayEnd   = data.dayEndMin   ?? 1380;
-
-  // Filter to current/future events (hide fully past)
-  const visibleSlots = Array.isArray(data.slots) ? data.slots.filter(s => s && s.endMin > nowMin && s.startMin < dayEnd) : [];
-
-  // Group events by room id
-  const byRoom = new Map();
-  for (const id of [...GROUPS.south, ...GROUPS.fieldhouse, ...GROUPS.north]) {
-    byRoom.set(id, []);
-  }
-  for (const s of visibleSlots) {
-    if (!s.roomId) continue;
-    if (!byRoom.has(s.roomId)) byRoom.set(s.roomId, []);
-    byRoom.get(s.roomId).push(s);
-  }
-
-  // Sort events inside each room by start time
-  for (const [rid, list] of byRoom) {
-    list.sort((a,b) => a.startMin - b.startMin || a.endMin - b.endMin);
-  }
-
-  // Build South (1,2)
-  GROUPS.south.forEach(rid => {
-    const card = buildRoomCard(rid, byRoom.get(rid) || []);
-    southEl.appendChild(card);
-  });
-
-  // Build Fieldhouse (3..8) in a 2x3 grid; index.html CSS already arranges it
-  GROUPS.fieldhouse.forEach(rid => {
-    const card = buildRoomCard(rid, byRoom.get(rid) || []);
-    fieldhouseEl.appendChild(card);
-  });
-
-  // Build North (9,10)
-  GROUPS.north.forEach(rid => {
-    const card = buildRoomCard(rid, byRoom.get(rid) || []);
-    northEl.appendChild(card);
-  });
-}
-
-// ---------- data load ----------
-async function loadData() {
+// ---------- fetch events.json fresh ----------
+async function loadEvents() {
   const url = `./events.json?ts=${Date.now()}`;
   const resp = await fetch(url, { cache: 'no-store' });
-  if (!resp.ok) {
-    throw new Error(`Failed to fetch ${url}: ${resp.status} ${resp.statusText}`);
+  if (!resp.ok) throw new Error(`Failed to load events.json: ${resp.status}`);
+  console.log('Loaded events.json', { 'last-modified': resp.headers.get('last-modified') });
+  return resp.json();
+}
+
+// ---------- cleaning & mapping ----------
+function cleanPickleballText(text) {
+  if (!text) return '';
+  let t = text;
+
+  // If this looks like pickleball, normalize label
+  if (/pickle\s*ball|pickleball/i.test(t)) {
+    t = 'Open Pickleball';
   }
-  const data = await resp.json();
-  console.log('Loaded events.json', data);
-  return data;
+
+  // Strip internal/admin notes
+  t = t.replace(/RAEC\s*Front\s*Desk.*?- On Hold/gi, '')
+       .replace(/Internal Hold per NM/gi, '')
+       .replace(/\s*\|\s*\|\s*/g, ' ')
+       .replace(/\s+\|\s+/g, ' ')
+       .replace(/\s{2,}/g, ' ')
+       .trim();
+
+  return t;
 }
 
-// Re-render frequently so events fall off after they end without reloading the page.
-let latestData = null;
-async function renderLoop() {
-  if (!latestData) return;
-  renderGrid(latestData);
+function cleanOrgDupes(text) {
+  if (!text) return '';
+  // Remove ", Foo, Foo" style trailing duplication
+  // e.g., "Chicago Sport and Social Club, Chicago Sport and Social Club"
+  const parts = text.split(',').map(s => s.trim()).filter(Boolean);
+  const seen = new Set();
+  const deduped = [];
+  for (const p of parts) {
+    const key = p.toLowerCase();
+    if (!seen.has(key)) {
+      seen.add(key);
+      deduped.push(p);
+    }
+  }
+  return deduped.join(', ');
 }
-setInterval(renderLoop, 30 * 1000); // refresh view every 30s
 
-// ---------- init ----------
-async function init() {
-  renderHeader();
+function displayWho(slot) {
+  // Prefer reservee/title, then subtitle/purpose
+  const whoRaw = cleanOrgDupes(slot.title || '');
+  const whatRaw = cleanPickleballText(slot.subtitle || '');
+
+  // If pickleball detected anywhere, force a nice label
+  if (/pickle\s*ball|pickleball/i.test(`${slot.title} ${slot.subtitle}` || '')) {
+    return 'Open Pickleball';
+  }
+
+  // If title exists and looks meaningful, use it; else fall back to subtitle
+  const cleaned = (whoRaw || whatRaw || '').trim();
+  return cleaned || 'Reserved';
+}
+
+function displayWhat(slot) {
+  // Secondary line: purpose (clean), only if it adds info beyond who
+  let what = cleanPickleballText(slot.subtitle || '');
+  const who = displayWho(slot);
+  if (!what || what.toLowerCase() === who.toLowerCase()) return '';
+  return what;
+}
+
+// Expand a slot room target to an array of base numbers: "1A" -> ["1"], "9-AB" -> ["9"],
+// "Full Gym 1AB & 2AB" -> ["1","2"], "9 & 10" -> ["9","10"], "1-2" -> ["1","2"]
+function expandTargets(roomId) {
+  if (!roomId) return [];
+  let s = String(roomId).trim();
+
+  // Normalize separators
+  s = s.replace(/full\s*gym|court|courts/gi, '')
+       .replace(/AB/gi, '')
+       .replace(/-AB/gi, '')
+       .replace(/&/g, ' ')
+       .replace(/,/g, ' ')
+       .replace(/\s{2,}/g, ' ')
+       .trim();
+
+  // Split on spaces or hyphens
+  // Examples that resolve well:
+  // "1", "1A", "10B" => ["1"] / ["10"]
+  // "1 2" => ["1","2"]
+  // "9-10" => ["9","10"]
+  // "1AB 2AB" => ["1","2"]
+  const tokens = s.split(/[\s-]+/).filter(Boolean);
+  const out = [];
+
+  for (let t of tokens) {
+    // Strip trailing letters (A/B)
+    t = t.replace(/[A-Za-z]+$/, '');
+    if (/^\d+$/.test(t)) out.push(String(parseInt(t, 10)));
+  }
+
+  // Common special-cases from CSV mapping:
+  // If nothing parsed but roomId had “1-AB” or similar, map it now
+  if (!out.length) {
+    const m = roomId.match(/(\d+)/g);
+    if (m && m.length) return [...new Set(m.map(n => String(parseInt(n,10))))];
+  }
+
+  return [...new Set(out)];
+}
+
+// Return true if two slots are the “same” for dedupe purposes in the same room
+function sameKey(a, b) {
+  return a.room === b.room &&
+         a.startMin === b.startMin &&
+         a.endMin === b.endMin &&
+         displayWho(a) === displayWho(b) &&
+         displayWhat(a) === displayWhat(b);
+}
+
+// ---------- render ----------
+function renderHeader() {
+  const d = new Date();
+  const dateStr = d.toLocaleDateString(undefined, { weekday: 'long', month: 'long', day: 'numeric' });
+  let hh = d.getHours();
+  const mm = d.getMinutes().toString().padStart(2, '0');
+  const ampm = hh >= 12 ? 'PM' : 'AM';
+  hh = hh % 12 || 12;
+  const timeStr = `${hh}:${mm} ${ampm}`;
+
+  if (elDate)  elDate.textContent  = dateStr;
+  if (elClock) elClock.textContent = timeStr;
+}
+
+function buildRoomCard(roomId) {
+  const wrap = document.createElement('div');
+  wrap.className = 'room';
+
+  const header = document.createElement('div');
+  header.className = 'roomHeader';
+
+  const id = document.createElement('div');
+  id.className = 'id';
+  id.textContent = roomId;
+
+  const count = document.createElement('div');
+  count.className = 'count';
+  count.textContent = ''; // we'll fill later
+
+  header.appendChild(id);
+  header.appendChild(count);
+
+  const list = document.createElement('div');
+  list.className = 'events';
+
+  wrap.appendChild(header);
+  wrap.appendChild(list);
+
+  return { wrap, list, count };
+}
+
+function renderBoard(data) {
+  // Clear containers
+  southWrap.innerHTML = '';
+  fieldWrap.innerHTML = '';
+  northWrap.innerHTML = '';
+
+  // Build static room cards in fixed order
+  const southIds = ['1', '2'];
+  const fieldIds = ['3', '4', '5', '6', '7', '8'];
+  const northIds = ['9', '10'];
+
+  const cardRefs = new Map(); // roomId -> {list,count}
+  const addCards = (ids, parent) => {
+    ids.forEach(rid => {
+      const { wrap, list, count } = buildRoomCard(rid);
+      parent.appendChild(wrap);
+      cardRefs.set(rid, { list, count });
+    });
+  };
+  addCards(southIds, southWrap);
+  addCards(fieldIds, fieldWrap);
+  addCards(northIds, northWrap);
+
+  const now = nowMinutes();
+
+  // Expand slots to room-scoped entries & filter out past events
+  const expanded = [];
+  for (const s of (data.slots || [])) {
+    const targets = expandTargets(s.roomId || s.room || s.room_id || '');
+    for (const room of targets) {
+      if (s.endMin <= now) continue; // past -> hide
+      expanded.push({ ...s, room });
+    }
+  }
+
+  // Per-room dedupe & sort
+  const perRoom = new Map();
+  for (const e of expanded) {
+    if (!perRoom.has(e.room)) perRoom.set(e.room, []);
+    const arr = perRoom.get(e.room);
+    // dedupe
+    if (!arr.some(x => sameKey(x, e))) arr.push(e);
+  }
+  for (const [room, arr] of perRoom) {
+    arr.sort((a,b) => a.startMin - b.startMin || a.endMin - b.endMin);
+  }
+
+  // Render events into each room
+  for (const [room, arr] of perRoom) {
+    const ref = cardRefs.get(room);
+    if (!ref) continue;
+    const { list, count } = ref;
+    list.innerHTML = '';
+
+    for (const ev of arr) {
+      const who = displayWho(ev);
+      const what = displayWhat(ev);
+      const when = range12h(ev.startMin, ev.endMin);
+
+      const item = document.createElement('div');
+      item.className = 'event';
+
+      const whoEl = document.createElement('div');
+      whoEl.className = 'who';
+      whoEl.textContent = who;
+
+      const whenEl = document.createElement('div');
+      whenEl.className = 'when';
+      whenEl.textContent = when;
+
+      item.appendChild(whoEl);
+      if (what) {
+        const whatEl = document.createElement('div');
+        whatEl.className = 'what';
+        whatEl.textContent = what;
+        item.appendChild(whatEl);
+      }
+      item.appendChild(whenEl);
+
+      list.appendChild(item);
+    }
+
+    count.textContent = arr.length ? `${arr.length} event${arr.length>1?'s':''}` : 'No events';
+  }
+}
+
+// ---------- boot ----------
+let lastData = null;
+
+async function boot() {
   try {
-    latestData = await loadData();
-    renderGrid(latestData);
-  } catch (err) {
-    console.error(err);
+    lastData = await loadEvents();
+    renderHeader();
+    renderBoard(lastData);
+  } catch (e) {
+    console.error('Init failed:', e);
   }
 }
-document.addEventListener('DOMContentLoaded', init);
+
+// Update clock + drop finished events each minute
+setInterval(() => {
+  renderHeader();
+  if (lastData) renderBoard(lastData);
+}, 60_000);
+
+// Initial kick
+document.addEventListener('DOMContentLoaded', boot);
