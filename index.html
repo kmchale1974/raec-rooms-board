@@ -5,51 +5,31 @@
   <title>RAEC Rooms Board</title>
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <link rel="icon" href="data:,">
-
   <style>
     :root{
       --bg:#0f1115;
       --panel:#12151c;
       --ink:#e7eaf1;
       --muted:#9aa3b2;
-      --accent:#2b87ff;
       --grid:#1b202a;
       --chip:#263043;
       --chip-text:#e7eaf1;
-      --ok:#1f9d6a;
     }
+    html,body{ margin:0; height:100%; background:var(--bg); color:var(--ink); font-family: Inter, "SF Pro Text", Segoe UI, Roboto, Arial, sans-serif; }
 
-    html, body{
-      margin:0;
-      height:100%;
-      background:var(--bg);
-      color:var(--ink);
-      font-family: Inter, "SF Pro Text", Segoe UI, Roboto, Arial, sans-serif;
-      overflow:hidden; /* no scrollbars */
-    }
+    /* wrapper adds padding and centers scaled stage */
+    .wrap{ width:100%; height:100%; }
 
-    /* Viewport wrapper that we center/scale within */
-    .fitRoot{
-      position:fixed; inset:0;
-      display:flex; align-items:center; justify-content:center;
-      overflow:hidden;
-      /* guard against device pixel rounding */
-      padding:0.5px;
-    }
-
-    /* Fixed 1920x1080 canvas; we scale this element */
+    /* Fixed canvas (scaled by JS) */
     .stage{
-      width:1920px; height:1080px;
-      padding:32px; box-sizing:border-box;
-      display:grid; grid-template-rows: 120px 1fr; gap:24px;
+      width:1920px; height:1080px; box-sizing:border-box;
+      display:grid; grid-template-rows: 120px 1fr; gap:20px;
       background:transparent;
-      transform-origin:50% 50%;
-      will-change: transform;
     }
 
     /* Header row */
     .header{
-      display:grid; grid-template-columns: 360px 1fr 360px; align-items:center;
+      display:grid; grid-template-columns: 360px 1fr 360px; align-items:center; padding:0 20px;
     }
     .brand{ display:flex; align-items:center; gap:16px; }
     .brand img{ height:80px; width:auto; object-fit:contain; }
@@ -59,79 +39,76 @@
 
     .wifi{
       justify-self:end; background:var(--panel); border:1px solid var(--grid);
-      border-radius:14px; padding:14px 16px; min-width:320px;
+      border-radius:14px; padding:12px 14px; min-width:300px;
     }
-    .wifi .title{ font-size:16px; color:var(--muted); letter-spacing:.08em; text-transform:uppercase; }
-    .wifi .row{ display:flex; justify-content:space-between; gap:12px; margin-top:6px; }
+    .wifi .title{ font-size:14px; color:var(--muted); letter-spacing:.08em; text-transform:uppercase; }
+    .wifi .row{ display:flex; justify-content:space-between; gap:12px; margin-top:4px; }
     .wifi .row span:first-child{ color:var(--muted); }
     .wifi .row span:last-child{ font-weight:700; }
 
     /* Grid container: South | Fieldhouse | North */
     .grid{
-      display:grid; grid-template-columns: 1fr 1.5fr 1fr; gap:24px;
-      height:100%;
+      display:grid; grid-template-columns: 1fr 1.6fr 1fr; gap:20px;
+      height:100%; padding:0 20px 20px 20px; box-sizing:border-box;
     }
 
     .group{
       background:var(--panel); border:1px solid var(--grid); border-radius:18px;
-      padding:16px; display:grid; grid-template-rows: 44px 1fr; gap:12px;
-      overflow:hidden;
+      padding:14px; display:grid; grid-template-rows: 40px 1fr; gap:10px;
+      overflow:hidden; min-height:0;
     }
     .group .title{
-      font-size:18px; color:var(--muted); letter-spacing:.1em; text-transform:uppercase;
+      font-size:16px; color:var(--muted); letter-spacing:.12em; text-transform:uppercase;
       border-bottom:1px solid var(--grid); display:flex; align-items:center; padding-bottom:6px;
     }
 
     /* South/North: 2 rows (1..2) and (9..10) stacked */
     .rooms-stack{
-      display:grid; grid-template-rows: 1fr 1fr; gap:12px; min-height:0;
+      display:grid; grid-template-rows: 1fr 1fr; gap:10px; min-height:0;
     }
 
     /* Fieldhouse: 2 rows x 3 cols for 3..8 */
     .rooms-fieldhouse{
-      display:grid; grid-template-columns: repeat(3, 1fr); grid-template-rows: 1fr 1fr;
-      gap:12px; min-height:0;
+      display:grid; grid-template-columns: repeat(3, 1fr); grid-template-rows: repeat(2, 1fr);
+      gap:10px; min-height:0;
     }
 
-    /* Individual room card */
+    /* Room card */
     .room{
-      border:1px solid var(--grid); border-radius:14px; padding:14px;
-      display:flex; flex-direction:column; gap:10px; min-height:0; overflow:hidden;
-      background:linear-gradient(180deg, rgba(255,255,255,0.02), rgba(0,0,0,0));
+      border:1px solid var(--grid); border-radius:14px; padding:12px;
+      display:flex; flex-direction:column; gap:8px; min-height:0; overflow:hidden;
+      background:linear-gradient(180deg, rgba(255,255,255,0.02), rgba(0,0,0,0)) ;
     }
     .roomHeader{
       display:flex; align-items:center; justify-content:space-between; gap:12px;
-      border-bottom:1px dashed var(--grid); padding-bottom:8px;
+      border-bottom:1px dashed var(--grid); padding-bottom:6px;
     }
     .roomHeader .id{ font-size:28px; font-weight:800; letter-spacing:.04em; }
-    .roomHeader .count{ font-size:13px; color:var(--muted); }
 
-    /* Events in a room */
-    .events{ display:flex; flex-direction:column; gap:10px; overflow:auto; }
+    .events{ display:flex; flex-direction:column; gap:8px; overflow:hidden; }
     .event{
       background:var(--chip); border:1px solid var(--grid); border-radius:12px;
       padding:10px 12px; display:flex; flex-direction:column; gap:6px;
+      overflow:hidden;
     }
-    .event .who{ font-size:18px; font-weight:800; line-height:1.1; }
+    .events { display:grid; grid-auto-rows: minmax(0, 1fr); }
+    .event .who{ font-size:18px; font-weight:800; line-height:1.15; }
+    .event .contact{ font-size:16px; font-weight:600; color:#cbd4e1; line-height:1.15; }
     .event .what{ font-size:15px; color:var(--muted); line-height:1.2; }
     .event .when{ font-size:14px; color:#b7c0cf; font-weight:600; }
 
-    .who, .what{ word-wrap:break-word; overflow-wrap:anywhere; }
+    .event--empty{ opacity:.4; text-align:center; }
   </style>
 </head>
 <body>
-  <div class="fitRoot">
+  <div class="wrap">
     <div class="stage">
       <div class="header">
-        <div class="brand">
-          <img src="./logo.png" alt="Romeoville Athletic & Event Center">
-        </div>
-
+        <div class="brand"><img src="./logo.png" alt="Romeoville Athletic & Event Center"></div>
         <div class="dateclock">
           <div id="headerDate">—</div>
           <div id="headerClock">—</div>
         </div>
-
         <div class="wifi">
           <div class="title">Guest Wi-Fi</div>
           <div class="row"><span>Network</span><span id="wifiSsid">RAEC-Public</span></div>
@@ -140,19 +117,16 @@
       </div>
 
       <div class="grid">
-        <!-- South Gym (1,2) -->
         <section class="group" id="group-south">
           <div class="title">South Gym</div>
           <div class="rooms-stack" id="southRooms"></div>
         </section>
 
-        <!-- Fieldhouse (3..8) -->
         <section class="group" id="group-fieldhouse">
           <div class="title">Fieldhouse</div>
           <div class="rooms-fieldhouse" id="fieldhouseRooms"></div>
         </section>
 
-        <!-- North Gym (9,10) -->
         <section class="group" id="group-north">
           <div class="title">North Gym</div>
           <div class="rooms-stack" id="northRooms"></div>
@@ -160,33 +134,6 @@
       </div>
     </div>
   </div>
-
-  <!-- App logic -->
-  <script type="module" src="./app.js?v=autoscale-fix-2"></script>
-
-  <!-- Anti-clipping autoscale (centered scale + larger safety factor) -->
-  <script>
-    (function fitStageSetup(){
-      const STAGE_W = 1920, STAGE_H = 1080;
-
-      function fit() {
-        const vw = Math.max(document.documentElement.clientWidth,  window.innerWidth  || 0);
-        const vh = Math.max(document.documentElement.clientHeight, window.innerHeight || 0);
-
-        // Extra safety margin to avoid right/bottom clipping on odd DPR screens
-        const SAFETY = 0.9925; // ~0.75% margin
-        const s = Math.min(vw / STAGE_W, vh / STAGE_H) * SAFETY;
-
-        const stage = document.querySelector('.stage');
-        if (!stage) return;
-
-        stage.style.transform = `scale(${s})`;
-      }
-
-      window.addEventListener('resize', fit);
-      window.addEventListener('orientationchange', fit);
-      document.addEventListener('DOMContentLoaded', fit);
-    })();
-  </script>
+  <script type="module" src="./app.js"></script>
 </body>
 </html>
