@@ -1,13 +1,11 @@
-// app.js — renders cards even if events.json has zero slots
+// app.js — height-aware paging so the last card never clips
 
 const DATA_URL = `./events.json?ts=${Date.now()}`;
-// Keep false until we confirm data freshness so the board never empties
-const HIDE_PAST = false;
+const HIDE_PAST = false; // keep false until you’re ready
 
-// Pager config (used only when a room has many events)
-const ROOM_PAGE_SIZE = 5;
-const ROOM_PAGE_MS   = 8000;
-const SLIDE_MS       = 500;
+// Animation timings
+const SLIDE_MS = 500;
+const PAGE_MS  = 8000;
 
 const roomPager = Object.create(null);
 
@@ -134,6 +132,54 @@ function renderEventHTML(evt){
   const what = (!evt.contact && evt.what) ? `<div class="what">${escapeHTML(evt.what)}</div>` : '';
   return `<div class="event">${who}${contact || what || ''}<div class="when">${when}</div></div>`;
 }
+
+// Build pages that FIT the visible height of the room (no clipping)
+function paginateByHeight(roomEl, events){
+  const list = roomEl.querySelector('.events');
+  const maxH = list.clientHeight; // available height
+  if (!events.length) return [[]];
+
+  // Use a hidden measurer inside the list to test fit
+  const measurer = document.createElement('div');
+  measurer.style.position = 'absolute';
+  measurer.style.inset = '0';
+  measurer.style.visibility = 'hidden';
+  measurer.style.overflow = 'auto';
+  list.appendChild(measurer);
+
+  const pages = [];
+  let page = [];
+  measurer.innerHTML = '';
+
+  for (let i=0;i<events.length;i++){
+    const html = renderEventHTML(events[i]);
+    const probe = document.createElement('div');
+    probe.innerHTML = html;
+    measurer.appendChild(probe);
+
+    if (measurer.scrollHeight <= maxH){
+      page.push(events[i]);
+    } else {
+      // commit previous page
+      if (page.length === 0){
+        // Single item is too tall: force it anyway to avoid infinite loop
+        page.push(events[i]);
+        pages.push(page);
+        page = [];
+        measurer.innerHTML = '';
+      } else {
+        pages.push(page);
+        page = [events[i]];
+        measurer.innerHTML = renderEventHTML(events[i]);
+      }
+    }
+  }
+  if (page.length) pages.push(page);
+
+  list.removeChild(measurer);
+  return pages;
+}
+
 function renderRoomPaged(roomEl, roomId, events){
   const list = roomEl.querySelector('.events');
   const [pageA, pageB] = list.querySelectorAll('.page');
@@ -141,12 +187,12 @@ function renderRoomPaged(roomEl, roomId, events){
 
   if (roomPager[roomId]?.timer) clearInterval(roomPager[roomId].timer);
 
-  const pages=[];
-  for (let i=0;i<events.length;i+=ROOM_PAGE_SIZE) pages.push(events.slice(i,i+ROOM_PAGE_SIZE));
+  // Build height-aware pages for THIS room
+  const pages = paginateByHeight(roomEl, events);
 
   const setHTML=(el,items)=>{ el.innerHTML=items.map(renderEventHTML).join(''); };
 
-  if (pages.length===0){
+  if (!pages.length || (pages.length===1 && pages[0].length===0)){
     pageA.innerHTML=''; pageB.innerHTML='';
     pageA.classList.remove('hidden'); pageB.classList.add('hidden');
     if (countEl) countEl.textContent='';
@@ -192,7 +238,7 @@ function renderRoomPaged(roomEl, roomId, events){
       if (countEl) countEl.textContent=`Page ${cur+1} / ${pages.length}`;
     }, SLIDE_MS);
   };
-  const timer=setInterval(tick, ROOM_PAGE_MS);
+  const timer=setInterval(tick, PAGE_MS);
   roomPager[roomId]={page:cur,pages:pages.length,timer};
 }
 
@@ -224,12 +270,6 @@ function prepareRoomsDOM(roomsInput){
   const southWrap = document.getElementById('southRooms');
   const fieldWrap = document.getElementById('fieldhouseRooms');
   const northWrap = document.getElementById('northRooms');
-
-  // If these don’t exist, nothing can render
-  if (!southWrap || !fieldWrap || !northWrap){
-    console.error('Missing grid containers in index.html');
-    return {};
-  }
 
   southWrap.innerHTML=''; fieldWrap.innerHTML=''; northWrap.innerHTML='';
 
@@ -279,7 +319,7 @@ function dedupeWithinRoom(slots){
 
 // ---------- main ----------
 async function init(){
-  // clock
+  // header clock
   updateHeaderClock();
   setInterval(updateHeaderClock, 1000);
 
@@ -298,7 +338,7 @@ async function init(){
     if (!card) continue;
     renderRoomPaged(card, roomId, deduped);
   }
-  // Make sure empty rooms still render
+  // Ensure empty rooms still have a rendered page
   Object.keys(cards).forEach(id=>{
     if (!grouped.has(id)) renderRoomPaged(cards[id], id, []);
   });
