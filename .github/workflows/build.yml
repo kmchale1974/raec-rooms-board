@@ -1,19 +1,23 @@
 name: build
-
 on:
   push:
     branches: [ main ]
-  workflow_dispatch:
   schedule:
-    - cron: "0 * * * *"  # hourly
+    - cron: "0 * * * *" # hourly; adjust as you like
+  workflow_dispatch:
 
+# Avoid concurrent runs clobbering each other
+concurrency:
+  group: raec-rooms-board-build
+  cancel-in-progress: true
+
+# Allow this workflow to push back to the repo
 permissions:
-  contents: write   # needed to push updated events.json
+  contents: write
 
 jobs:
   build:
     runs-on: ubuntu-latest
-
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -21,40 +25,38 @@ jobs:
       - name: Setup Node
         uses: actions/setup-node@v4
         with:
-          node-version: "20"
-          cache: "npm"
+          node-version: 20
 
-      - name: Install deps with lockfile
-        run: npm ci --no-audit --no-fund
+      # Use npm i (not ci) unless your lockfile is clean and in sync
+      - name: Install deps
+        run: npm i
 
-      - name: Ensure data/inbox exists
+      - name: Create inbox folder
         run: mkdir -p data/inbox
 
-      # Fetch newest CSV attachment from Gmail
-      - name: Fetch latest CSV from Gmail
+      # Fetch latest CSV from Gmail (App Password in IMAP_PASS)
+      - name: Fetch CSV from email
+        run: node scripts/fetch_email.js
         env:
-          IMAP_PASS: ${{ secrets.IMAP_PASS }}   # your Gmail App Password (16 chars, no spaces)
+          IMAP_PASS: ${{ secrets.IMAP_PASS }}
           OUT_CSV: data/inbox/latest.csv
-        run: npm run fetch
 
-      # Transform CSV -> events.json (uses your existing transform.mjs)
-      - name: Transform CSV to events.json
-        run: npm run transform
+      # Turn CSV into events.json
+      - name: Transform CSV -> events.json
+        run: node scripts/transform.mjs
 
-      - name: Show events.json header (debug)
+      # ⬇️ PLACE THE REBASE-SAFE COMMIT STEP RIGHT HERE ⬇️
+      - name: Commit events.json (rebase-safe)
         run: |
-          echo "Top of events.json:"
-          head -n 80 events.json || true
-
-      # Commit/push events.json if changed
-      - name: Commit events.json if changed
-        run: |
+          set -e
           git config user.name  "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          if ! git diff --quiet -- events.json; then
-            git add events.json
-            git commit -m "Update events.json [skip ci]"
-            git push
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git fetch origin main
+          git pull --rebase origin main
+          git add events.json
+          if git diff --cached --quiet; then
+            echo "No changes to commit."
           else
-            echo "No changes to events.json"
+            git commit -m "Update events.json [skip ci]"
           fi
+          git push origin HEAD:main
