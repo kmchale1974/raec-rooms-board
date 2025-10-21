@@ -3,16 +3,16 @@ name: build
 on:
   push:
     branches: [ main ]
-  schedule:
-    - cron: "*/30 * * * *"   # every 30 minutes
   workflow_dispatch:
+  schedule:
+    - cron: "0 * * * *"  # hourly
+
+permissions:
+  contents: write   # needed to push updated events.json
 
 jobs:
   build:
     runs-on: ubuntu-latest
-
-    permissions:
-      contents: write
 
     steps:
       - name: Checkout
@@ -21,49 +21,40 @@ jobs:
       - name: Setup Node
         uses: actions/setup-node@v4
         with:
-          node-version: '20'
+          node-version: "20"
+          cache: "npm"
 
-      - name: Show Node/npm
-        run: |
-          node -v
-          npm -v
+      - name: Install deps with lockfile
+        run: npm ci --no-audit --no-fund
 
-      # Install deps (works whether or not you committed a lockfile)
-      - name: Install dependencies
-        run: |
-          if [ -f package-lock.json ]; then
-            npm ci
-          else
-            npm i
-          fi
-
-      # Sanity check that mailparser is actually present
-      - name: Verify deps
-        run: |
-          node -e "console.log('mailparser:', require.resolve('mailparser/package.json'))"
-          node -e "console.log('imapflow:', require.resolve('imapflow/package.json'))"
-          npm ls --depth=0 || true
-
-      - name: Make inbox dir
+      - name: Ensure data/inbox exists
         run: mkdir -p data/inbox
 
-      - name: Fetch latest CSV attachment
+      # Fetch newest CSV attachment from Gmail
+      - name: Fetch latest CSV from Gmail
         env:
-          IMAP_PASS: ${{ secrets.IMAP_PASS }}   # your Gmail App Password
+          IMAP_PASS: ${{ secrets.IMAP_PASS }}   # your Gmail App Password (16 chars, no spaces)
           OUT_CSV: data/inbox/latest.csv
-        run: node scripts/fetch_email.js
+        run: npm run fetch
 
-      - name: Transform CSV -> events.json
-        run: node scripts/transform.mjs
+      # Transform CSV -> events.json (uses your existing transform.mjs)
+      - name: Transform CSV to events.json
+        run: npm run transform
 
-      - name: Commit events.json
+      - name: Show events.json header (debug)
+        run: |
+          echo "Top of events.json:"
+          head -n 80 events.json || true
+
+      # Commit/push events.json if changed
+      - name: Commit events.json if changed
         run: |
           git config user.name  "github-actions[bot]"
-          git config user.email "github-actions[bot]@users.noreply.github.com"
-          git add events.json
-          if ! git diff --cached --quiet; then
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          if ! git diff --quiet -- events.json; then
+            git add events.json
             git commit -m "Update events.json [skip ci]"
             git push
           else
-            echo "No changes"
+            echo "No changes to events.json"
           fi
