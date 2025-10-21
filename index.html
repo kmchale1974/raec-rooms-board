@@ -8,75 +8,70 @@
 
   <style>
     :root{
-      --bg:#0f1115; --panel:#12151c; --ink:#e7eaf1; --muted:#9aa3b2;
-      --accent:#2b87ff; --grid:#1b202a; --chip:#263043; --chip-text:#e7eaf1; --ok:#1f9d6a;
+      --bg:#0f1115;
+      --panel:#12151c;
+      --ink:#e7eaf1;
+      --muted:#9aa3b2;
+      --grid:#1b202a;
+      --chip:#263043;
     }
+    html,body{ margin:0; height:100%; background:var(--bg); color:var(--ink); font-family: Inter, "SF Pro Text", Segoe UI, Roboto, Arial, sans-serif; }
 
-    /* Fullscreen wrapper that centers the stage and prevents scrollbars */
-    html, body { height:100%; }
-    body{
-      margin:0; background:var(--bg); color:var(--ink);
-      font-family: Inter, "SF Pro Text", Segoe UI, Roboto, Arial, sans-serif;
-    }
-    .viewport{
-      width:100vw; height:100vh; overflow:hidden;
-      display:flex; align-items:flex-start; justify-content:center;
-      /* slight padding to keep content visually away from screen edge */
-      padding:0; box-sizing:border-box;
-    }
-
-    /* Fixed canvas (we scale this down only) */
+    /* Fixed canvas we scale to the viewport */
     .stage{
       width:1920px; height:1080px; padding:32px; box-sizing:border-box;
       display:grid; grid-template-rows: 120px 1fr; gap:24px;
-      will-change: transform;
     }
 
-    /* Header row */
+    /* Header: logo | date/clock | wifi */
     .header{
       display:grid; grid-template-columns: 360px 1fr 360px; align-items:center;
     }
     .brand{ display:flex; align-items:center; gap:16px; }
-    .brand img{ height:80px; width:auto; object-fit:contain; max-width:100%; }
+    .brand img{ height:80px; width:auto; object-fit:contain; }
 
-    .dateclock{ justify-self:center; text-align:center; }
+    .dateclock{ text-align:center; }
     #headerDate{ font-size:44px; font-weight:800; letter-spacing:.02em; }
     #headerClock{ font-size:28px; color:var(--muted); margin-top:6px; font-weight:600; }
 
     .wifi{
       justify-self:end; background:var(--panel); border:1px solid var(--grid);
-      border-radius:14px; padding:14px 16px; min-width:320px; max-width:100%;
+      border-radius:14px; padding:14px 16px; min-width:320px;
     }
     .wifi .title{ font-size:16px; color:var(--muted); letter-spacing:.08em; text-transform:uppercase; }
     .wifi .row{ display:flex; justify-content:space-between; gap:12px; margin-top:6px; }
     .wifi .row span:first-child{ color:var(--muted); }
     .wifi .row span:last-child{ font-weight:700; }
 
-    /* Grid container: South | Fieldhouse | North */
+    /* Three groups: South | Fieldhouse | North */
     .grid{
       display:grid; grid-template-columns: 1fr 1.5fr 1fr; gap:24px;
-      height:100%; min-height:0; /* allow internal scrolling if needed */
+      height:100%;
     }
-
     .group{
       background:var(--panel); border:1px solid var(--grid); border-radius:18px;
       padding:16px; display:grid; grid-template-rows: 44px 1fr; gap:12px;
-      overflow:hidden; min-width:0; /* prevents column overflow pushing width */
+      overflow:hidden;
     }
     .group .title{
       font-size:18px; color:var(--muted); letter-spacing:.1em; text-transform:uppercase;
       border-bottom:1px solid var(--grid); display:flex; align-items:center; padding-bottom:6px;
-      white-space:nowrap; overflow:hidden; text-overflow:ellipsis;
     }
 
-    .rooms-stack{ display:grid; grid-template-rows: 1fr 1fr; gap:12px; min-height:0; }
-    .rooms-fieldhouse{ display:grid; grid-template-columns: repeat(3, 1fr); grid-template-rows: 1fr 1fr; gap:12px; min-height:0; }
+    /* South/North stacks (1..2 and 9..10) */
+    .rooms-stack{
+      display:grid; grid-template-rows: 1fr 1fr; gap:12px; min-height:0;
+    }
+    /* Fieldhouse (3..8) 2 rows × 3 cols */
+    .rooms-fieldhouse{
+      display:grid; grid-template-columns: repeat(3, 1fr); grid-template-rows: 1fr 1fr;
+      gap:12px; min-height:0;
+    }
 
     .room{
       border:1px solid var(--grid); border-radius:14px; padding:14px;
       display:flex; flex-direction:column; gap:10px; min-height:0; overflow:hidden;
       background:linear-gradient(180deg, rgba(255,255,255,0.02), rgba(0,0,0,0));
-      min-width:0; /* important to avoid horizontal overflow */
     }
     .roomHeader{
       display:flex; align-items:center; justify-content:space-between; gap:12px;
@@ -85,22 +80,26 @@
     .roomHeader .id{ font-size:28px; font-weight:800; letter-spacing:.04em; }
     .roomHeader .count{ font-size:13px; color:var(--muted); }
 
-    .events{ display:flex; flex-direction:column; gap:10px; overflow:auto; }
+    /* Events area + pager pages */
+    .events{ position:relative; overflow:hidden; display:block; min-height:0; flex:1; }
+    .events .page{ position:absolute; inset:0; will-change:transform, opacity; }
+    .events .page.hidden{ display:none; }
     .event{
       background:var(--chip); border:1px solid var(--grid); border-radius:12px;
-      padding:10px 12px; display:flex; flex-direction:column; gap:6px;
+      padding:10px 12px; display:flex; flex-direction:column; gap:6px; margin-bottom:10px;
     }
-    .event .who{ font-size:18px; font-weight:800; line-height:1.1; }
-    .event .what{ font-size:15px; color:var(--muted); line-height:1.2; }
-    .event .when{ font-size:14px; color:#b7c0cf; font-weight:600; }
-    .who, .what{ word-wrap:break-word; overflow-wrap:anywhere; }
+    .who{ font-size:18px; font-weight:800; line-height:1.1; }
+    .what{ font-size:15px; color:var(--muted); line-height:1.2; }
+    .when{ font-size:14px; color:#b7c0cf; font-weight:600; }
+    .who,.what{ word-wrap:break-word; overflow-wrap:anywhere; }
   </style>
 </head>
 <body>
-  <div class="viewport">
+  <div id="stageWrap" style="display:flex; justify-content:center; align-items:flex-start;">
     <div class="stage">
       <div class="header">
         <div class="brand">
+          <!-- Put your logo as ./logo.png in the repo root -->
           <img src="./logo.png" alt="Romeoville Athletic & Event Center">
         </div>
         <div class="dateclock">
@@ -119,10 +118,12 @@
           <div class="title">South Gym</div>
           <div class="rooms-stack" id="southRooms"></div>
         </section>
+
         <section class="group" id="group-fieldhouse">
           <div class="title">Fieldhouse</div>
           <div class="rooms-fieldhouse" id="fieldhouseRooms"></div>
         </section>
+
         <section class="group" id="group-north">
           <div class="title">North Gym</div>
           <div class="rooms-stack" id="northRooms"></div>
@@ -133,27 +134,22 @@
 
   <script type="module" src="./app.js"></script>
 
-  <!-- Downscale-only autosizer; centers stage and never grows beyond 1920×1080 -->
+  <!-- Auto-scale the fixed 1920×1080 stage so nothing clips -->
   <script>
-    (function autosize(){
-      const STAGE_W = 1920, STAGE_H = 1080;
-      const stage = document.querySelector('.stage');
-      const viewport = document.querySelector('.viewport');
-
-      function fit() {
-        if (!stage || !viewport) return;
-        const sx = viewport.clientWidth  / STAGE_W;
-        const sy = viewport.clientHeight / STAGE_H;
-        const s  = Math.min(sx, sy, 1); // ⟵ cap at 1 (no upscaling)
+    (function fitStage(){
+      const STAGE_W=1920, STAGE_H=1080;
+      function fit(){
+        const sx = window.innerWidth  / STAGE_W;
+        const sy = window.innerHeight / STAGE_H;
+        const s  = Math.min(sx, sy);
+        const stage = document.querySelector('.stage');
         stage.style.transform = `scale(${s})`;
-        stage.style.transformOrigin = 'top center';
+        stage.style.transformOrigin = 'top left';
+        document.getElementById('stageWrap').style.minHeight = (STAGE_H * s) + 'px';
       }
-
-      window.addEventListener('resize', fit, { passive:true });
-      window.addEventListener('orientationchange', fit, { passive:true });
+      window.addEventListener('resize', fit);
+      window.addEventListener('orientationchange', fit);
       document.addEventListener('DOMContentLoaded', fit);
-      // extra: refit after fonts/images load to avoid late shifts
-      window.addEventListener('load', fit);
     })();
   </script>
 </body>
