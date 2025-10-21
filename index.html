@@ -5,32 +5,38 @@
   <title>RAEC Rooms Board</title>
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <link rel="icon" href="data:,">
-
   <style>
     :root{
       --bg:#0f1115;
       --panel:#12151c;
       --ink:#e7eaf1;
       --muted:#9aa3b2;
+      --accent:#2b87ff;
       --grid:#1b202a;
       --chip:#263043;
+      --chip-text:#e7eaf1;
+      --ok:#1f9d6a;
     }
-    html,body{ margin:0; height:100%; background:var(--bg); color:var(--ink); font-family: Inter, "SF Pro Text", Segoe UI, Roboto, Arial, sans-serif; }
+    html,body{
+      margin:0; height:100%; background:var(--bg); color:var(--ink);
+      font-family: Inter, "SF Pro Text", Segoe UI, Roboto, Arial, sans-serif;
+      overflow:hidden; /* no scrollbars on signage */
+    }
 
-    /* Fixed canvas we scale to the viewport */
+    /* Fixed canvas; we auto-scale this (see script at bottom) */
     .stage{
       width:1920px; height:1080px; padding:32px; box-sizing:border-box;
       display:grid; grid-template-rows: 120px 1fr; gap:24px;
+      transform-origin: top left;
     }
 
-    /* Header: logo | date/clock | wifi */
+    /* Header row */
     .header{
       display:grid; grid-template-columns: 360px 1fr 360px; align-items:center;
     }
     .brand{ display:flex; align-items:center; gap:16px; }
     .brand img{ height:80px; width:auto; object-fit:contain; }
-
-    .dateclock{ text-align:center; }
+    .dateclock{ justify-self:center; text-align:center; }
     #headerDate{ font-size:44px; font-weight:800; letter-spacing:.02em; }
     #headerClock{ font-size:28px; color:var(--muted); margin-top:6px; font-weight:600; }
 
@@ -43,11 +49,11 @@
     .wifi .row span:first-child{ color:var(--muted); }
     .wifi .row span:last-child{ font-weight:700; }
 
-    /* Three groups: South | Fieldhouse | North */
+    /* Grid container: South | Fieldhouse | North */
     .grid{
-      display:grid; grid-template-columns: 1fr 1.5fr 1fr; gap:24px;
-      height:100%;
+      display:grid; grid-template-columns: 1fr 1.5fr 1fr; gap:24px; height:100%;
     }
+
     .group{
       background:var(--panel); border:1px solid var(--grid); border-radius:18px;
       padding:16px; display:grid; grid-template-rows: 44px 1fr; gap:12px;
@@ -58,20 +64,21 @@
       border-bottom:1px solid var(--grid); display:flex; align-items:center; padding-bottom:6px;
     }
 
-    /* South/North stacks (1..2 and 9..10) */
-    .rooms-stack{
-      display:grid; grid-template-rows: 1fr 1fr; gap:12px; min-height:0;
-    }
-    /* Fieldhouse (3..8) 2 rows × 3 cols */
+    /* South/North: 2 rows (1..2) and (9..10) stacked */
+    .rooms-stack{ display:grid; grid-template-rows: 1fr 1fr; gap:12px; min-height:0; }
+
+    /* Fieldhouse: 2 rows x 3 cols for 3..8 */
     .rooms-fieldhouse{
       display:grid; grid-template-columns: repeat(3, 1fr); grid-template-rows: 1fr 1fr;
       gap:12px; min-height:0;
     }
 
+    /* Individual room card */
     .room{
       border:1px solid var(--grid); border-radius:14px; padding:14px;
       display:flex; flex-direction:column; gap:10px; min-height:0; overflow:hidden;
       background:linear-gradient(180deg, rgba(255,255,255,0.02), rgba(0,0,0,0));
+      position:relative;
     }
     .roomHeader{
       display:flex; align-items:center; justify-content:space-between; gap:12px;
@@ -80,76 +87,101 @@
     .roomHeader .id{ font-size:28px; font-weight:800; letter-spacing:.04em; }
     .roomHeader .count{ font-size:13px; color:var(--muted); }
 
-    /* Events area + pager pages */
-    .events{
-      position:relative; overflow:hidden; display:block; min-height:0; flex:1;
-      padding-bottom:10px; /* buffer so last card never clips */
+    /* Paged events container (relative so inner pages can be absolute) */
+    .pages{
+      position:relative; flex:1 1 auto; min-height:0; overflow:hidden;
     }
-    .events .page{ position:absolute; inset:0; will-change:transform, opacity; }
-    .events .page.hidden{ display:none; }
+    .page{
+      position:absolute; inset:0; padding-top:8px;
+      display:flex; flex-direction:column; gap:10px;
+      /* start hidden; JS toggles classes below */
+      opacity:0; pointer-events:none;
+    }
+    .page.is-active{ opacity:1; pointer-events:auto; }
 
+    /* Events */
     .event{
       background:var(--chip); border:1px solid var(--grid); border-radius:12px;
-      padding:10px 12px; display:flex; flex-direction:column; gap:6px; margin:8px 0;
+      padding:10px 12px; display:flex; flex-direction:column; gap:6px;
     }
-    .who{ font-size:18px; font-weight:800; line-height:1.1; }
-    .what{ font-size:15px; color:var(--muted); line-height:1.2; }
-    .when{ font-size:14px; color:#b7c0cf; font-weight:600; }
-    .who,.what{ word-wrap:break-word; overflow-wrap:anywhere; }
+    .event .who{ font-size:20px; font-weight:800; line-height:1.2; }
+    .event .what{ font-size:16px; color:var(--muted); line-height:1.25; }
+    .event .when{ font-size:16px; color:#b7c0cf; font-weight:700; }
+
+    .who, .what{ overflow-wrap:anywhere; }
+
+    /* --- Page transition animations (cycle: slide-left → appear → slide-in) --- */
+    .anim-slide-left{ animation: slideLeft 520ms ease-out both; }
+    .anim-appear    { animation: appear    220ms ease-out both; }
+    .anim-slide-in  { animation: slideIn   520ms ease-out both; }
+
+    @keyframes slideLeft{
+      from{ transform:translateX(0);    opacity:1; }
+      to  { transform:translateX(-30%); opacity:0; }
+    }
+    @keyframes appear{
+      from{ opacity:0; } to{ opacity:1; }
+    }
+    @keyframes slideIn{
+      from{ transform:translateX(30%); opacity:0; }
+      to  { transform:translateX(0);   opacity:1; }
+    }
   </style>
 </head>
 <body>
-  <div id="stageWrap" style="display:flex; justify-content:center; align-items:flex-start;">
-    <div class="stage">
-      <div class="header">
-        <div class="brand">
-          <!-- Put your logo as ./logo.png in the repo root -->
-          <img src="./logo.png" alt="Romeoville Athletic & Event Center">
-        </div>
-        <div class="dateclock">
-          <div id="headerDate">—</div>
-          <div id="headerClock">—</div>
-        </div>
-        <div class="wifi">
-          <div class="title">Guest Wi-Fi</div>
-          <div class="row"><span>Network</span><span id="wifiSsid">RAEC-Public</span></div>
-          <div class="row"><span>Password</span><span id="wifiPass">Publ!c00</span></div>
-        </div>
+  <div id="fitWrap"><div class="stage">
+    <div class="header">
+      <div class="brand">
+        <img src="./logo.png" alt="Romeoville Athletic & Event Center">
       </div>
-
-      <div class="grid">
-        <section class="group" id="group-south">
-          <div class="title">South Gym</div>
-          <div class="rooms-stack" id="southRooms"></div>
-        </section>
-
-        <section class="group" id="group-fieldhouse">
-          <div class="title">Fieldhouse</div>
-          <div class="rooms-fieldhouse" id="fieldhouseRooms"></div>
-        </section>
-
-        <section class="group" id="group-north">
-          <div class="title">North Gym</div>
-          <div class="rooms-stack" id="northRooms"></div>
-        </section>
+      <div class="dateclock">
+        <div id="headerDate">—</div>
+        <div id="headerClock">—</div>
+      </div>
+      <div class="wifi">
+        <div class="title">Guest Wi-Fi</div>
+        <div class="row"><span>Network</span><span id="wifiSsid">RAEC-Public</span></div>
+        <div class="row"><span>Password</span><span id="wifiPass">Publ!c00</span></div>
       </div>
     </div>
-  </div>
+
+    <div class="grid">
+      <!-- South Gym (1,2) -->
+      <section class="group" id="group-south">
+        <div class="title">South Gym</div>
+        <div class="rooms-stack" id="southRooms"></div>
+      </section>
+
+      <!-- Fieldhouse (3..8) -->
+      <section class="group" id="group-fieldhouse">
+        <div class="title">Fieldhouse</div>
+        <div class="rooms-fieldhouse" id="fieldhouseRooms"></div>
+      </section>
+
+      <!-- North Gym (9,10) -->
+      <section class="group" id="group-north">
+        <div class="title">North Gym</div>
+        <div class="rooms-stack" id="northRooms"></div>
+      </section>
+    </div>
+  </div></div>
 
   <script type="module" src="./app.js"></script>
 
-  <!-- Auto-scale the fixed 1920×1080 stage so nothing clips -->
+  <!-- Auto-scale to fit any display without clipping -->
   <script>
     (function fitStage(){
-      const STAGE_W=1920, STAGE_H=1080;
+      const STAGE_W = 1920, STAGE_H = 1080, PADDING = 0;
+      const wrap = document.getElementById('fitWrap');
+      const stage = document.querySelector('.stage');
       function fit(){
-        const sx = window.innerWidth  / STAGE_W;
-        const sy = window.innerHeight / STAGE_H;
+        const sx = (window.innerWidth  - PADDING) / STAGE_W;
+        const sy = (window.innerHeight - PADDING) / STAGE_H;
         const s  = Math.min(sx, sy);
-        const stage = document.querySelector('.stage');
+        wrap.style.display = 'flex';
+        wrap.style.justifyContent = 'center';
+        wrap.style.alignItems = 'flex-start';
         stage.style.transform = `scale(${s})`;
-        stage.style.transformOrigin = 'top left';
-        document.getElementById('stageWrap').style.minHeight = (STAGE_H * s) + 'px';
       }
       window.addEventListener('resize', fit);
       window.addEventListener('orientationchange', fit);
