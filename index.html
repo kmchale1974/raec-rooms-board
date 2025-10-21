@@ -81,12 +81,16 @@
     .roomHeader .count{ font-size:13px; color:var(--muted); }
 
     /* Events area + pager pages */
-    .events{ position:relative; overflow:hidden; display:block; min-height:0; flex:1; }
+    .events{
+      position:relative; overflow:hidden; display:block; min-height:0; flex:1;
+      padding-bottom:10px; /* buffer so last card never clips */
+    }
     .events .page{ position:absolute; inset:0; will-change:transform, opacity; }
     .events .page.hidden{ display:none; }
+
     .event{
       background:var(--chip); border:1px solid var(--grid); border-radius:12px;
-      padding:10px 12px; display:flex; flex-direction:column; gap:6px; margin-bottom:10px;
+      padding:10px 12px; display:flex; flex-direction:column; gap:6px; margin:8px 0;
     }
     .who{ font-size:18px; font-weight:800; line-height:1.1; }
     .what{ font-size:15px; color:var(--muted); line-height:1.2; }
