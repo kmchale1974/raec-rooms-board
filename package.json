@@ -1,7 +1,8 @@
 {
   "name": "raec-rooms-board",
-  "private": true,
+  "version": "1.0.0",
   "type": "module",
+  "private": true,
   "scripts": {
     "fetch": "node scripts/fetch_email.js",
     "transform": "node scripts/transform.mjs"
