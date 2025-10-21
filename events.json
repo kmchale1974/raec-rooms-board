@@ -53,5 +53,300 @@
       "group": "north"
     }
   ],
-  "slots": []
+  "slots": [
+    {
+      "roomId": "10",
+      "startMin": 570,
+      "endMin": 750,
+      "title": "\"RAEC Front Desk",
+      "subtitle": "Rentals - On Hold\""
+    },
+    {
+      "roomId": "9",
+      "startMin": 570,
+      "endMin": 750,
+      "title": "\"RAEC Front Desk",
+      "subtitle": "Rentals - On Hold\""
+    },
+    {
+      "roomId": "3",
+      "startMin": 1020,
+      "endMin": 1260,
+      "title": "\"Pink Elite Basketball\"",
+      "subtitle": "\"2025 Q4 Pattern\""
+    },
+    {
+      "roomId": "4",
+      "startMin": 1020,
+      "endMin": 1260,
+      "title": "\"Pink Elite Basketball\"",
+      "subtitle": "\"2025 Q4 Pattern\""
+    },
+    {
+      "roomId": "5",
+      "startMin": 1020,
+      "endMin": 1260,
+      "title": "\"Pink Elite Basketball\"",
+      "subtitle": "\"2025 Q4 Pattern\""
+    },
+    {
+      "roomId": "6",
+      "startMin": 1020,
+      "endMin": 1260,
+      "title": "\"Pink Elite Basketball\"",
+      "subtitle": "\"2025 Q4 Pattern\""
+    },
+    {
+      "roomId": "7",
+      "startMin": 1020,
+      "endMin": 1260,
+      "title": "\"Pink Elite Basketball\"",
+      "subtitle": "\"2025 Q4 Pattern\""
+    },
+    {
+      "roomId": "8",
+      "startMin": 1020,
+      "endMin": 1260,
+      "title": "\"Pink Elite Basketball\"",
+      "subtitle": "\"2025 Q4 Pattern\""
+    },
+    {
+      "roomId": "10",
+      "startMin": 1050,
+      "endMin": 1230,
+      "title": "\"Empower Volleyball (Rec)",
+      "subtitle": "Dean Baxendale\""
+    },
+    {
+      "roomId": "9",
+      "startMin": 1050,
+      "endMin": 1230,
+      "title": "\"Empower Volleyball (Rec)",
+      "subtitle": "Dean Baxendale\""
+    },
+    {
+      "roomId": "1",
+      "startMin": 1080,
+      "endMin": 1260,
+      "title": "\"Omona Athletics\"",
+      "subtitle": "\"Volleyball\""
+    },
+    {
+      "roomId": "2",
+      "startMin": 1080,
+      "endMin": 1260,
+      "title": "\"Omona Athletics\"",
+      "subtitle": "\"Volleyball\""
+    },
+    {
+      "roomId": "3",
+      "startMin": 1080,
+      "endMin": 1260,
+      "title": "\"Illinois Flight",
+      "subtitle": "Brandon Brown\""
+    },
+    {
+      "roomId": "4",
+      "startMin": 1080,
+      "endMin": 1260,
+      "title": "\"Illinois Flight",
+      "subtitle": "Brandon Brown\""
+    },
+    {
+      "roomId": "5",
+      "startMin": 1080,
+      "endMin": 1260,
+      "title": "\"Illinois Flight",
+      "subtitle": "Brandon Brown\""
+    },
+    {
+      "roomId": "6",
+      "startMin": 1080,
+      "endMin": 1260,
+      "title": "\"Illinois Flight",
+      "subtitle": "Brandon Brown\""
+    },
+    {
+      "roomId": "7",
+      "startMin": 1080,
+      "endMin": 1260,
+      "title": "\"Illinois Flight",
+      "subtitle": "Brandon Brown\""
+    },
+    {
+      "roomId": "8",
+      "startMin": 1080,
+      "endMin": 1260,
+      "title": "\"Illinois Flight",
+      "subtitle": "Brandon Brown\""
+    },
+    {
+      "roomId": "2",
+      "startMin": 1080,
+      "endMin": 1170,
+      "title": "\"Illinois Flight",
+      "subtitle": "Brandon Brown\""
+    },
+    {
+      "roomId": "1",
+      "startMin": 1080,
+      "endMin": 1170,
+      "title": "\"Illinois Flight",
+      "subtitle": "Brandon Brown\""
+    },
+    {
+      "roomId": "3",
+      "startMin": 1140,
+      "endMin": 1200,
+      "title": "\"Sanchez",
+      "subtitle": "Jessica\""
+    },
+    {
+      "roomId": "4",
+      "startMin": 1140,
+      "endMin": 1200,
+      "title": "\"Sanchez",
+      "subtitle": "Jessica\""
+    },
+    {
+      "roomId": "5",
+      "startMin": 1140,
+      "endMin": 1200,
+      "title": "\"Sanchez",
+      "subtitle": "Jessica\""
+    },
+    {
+      "roomId": "6",
+      "startMin": 1140,
+      "endMin": 1200,
+      "title": "\"Sanchez",
+      "subtitle": "Jessica\""
+    },
+    {
+      "roomId": "7",
+      "startMin": 1140,
+      "endMin": 1200,
+      "title": "\"Sanchez",
+      "subtitle": "Jessica\""
+    },
+    {
+      "roomId": "8",
+      "startMin": 1140,
+      "endMin": 1200,
+      "title": "\"Sanchez",
+      "subtitle": "Jessica\""
+    },
+    {
+      "roomId": "1",
+      "startMin": 1140,
+      "endMin": 1260,
+      "title": "\"Extreme Volleyball",
+      "subtitle": "Extreme Volleyball\""
+    },
+    {
+      "roomId": "2",
+      "startMin": 1140,
+      "endMin": 1260,
+      "title": "\"Extreme Volleyball",
+      "subtitle": "Extreme Volleyball\""
+    },
+    {
+      "roomId": "3",
+      "startMin": 1170,
+      "endMin": 1260,
+      "title": "\"Illinois Flight",
+      "subtitle": "Brandon Brown\""
+    },
+    {
+      "roomId": "4",
+      "startMin": 1170,
+      "endMin": 1260,
+      "title": "\"Illinois Flight",
+      "subtitle": "Brandon Brown\""
+    },
+    {
+      "roomId": "5",
+      "startMin": 1170,
+      "endMin": 1260,
+      "title": "\"Illinois Flight",
+      "subtitle": "Brandon Brown\""
+    },
+    {
+      "roomId": "6",
+      "startMin": 1170,
+      "endMin": 1260,
+      "title": "\"Illinois Flight",
+      "subtitle": "Brandon Brown\""
+    },
+    {
+      "roomId": "7",
+      "startMin": 1170,
+      "endMin": 1260,
+      "title": "\"Illinois Flight",
+      "subtitle": "Brandon Brown\""
+    },
+    {
+      "roomId": "8",
+      "startMin": 1170,
+      "endMin": 1260,
+      "title": "\"Illinois Flight",
+      "subtitle": "Brandon Brown\""
+    },
+    {
+      "roomId": "2",
+      "startMin": 1170,
+      "endMin": 1230,
+      "title": "\"Jones",
+      "subtitle": "John\""
+    },
+    {
+      "roomId": "1",
+      "startMin": 1170,
+      "endMin": 1230,
+      "title": "\"Jones",
+      "subtitle": "John\""
+    },
+    {
+      "roomId": "1",
+      "startMin": 1200,
+      "endMin": 1320,
+      "title": "\"Palani",
+      "subtitle": "Mugilan\""
+    },
+    {
+      "roomId": "2",
+      "startMin": 1200,
+      "endMin": 1320,
+      "title": "\"Palani",
+      "subtitle": "Mugilan\""
+    },
+    {
+      "roomId": "2",
+      "startMin": 1230,
+      "endMin": 1350,
+      "title": "\"Nunez",
+      "subtitle": "Favio\""
+    },
+    {
+      "roomId": "1",
+      "startMin": 1230,
+      "endMin": 1350,
+      "title": "\"Nunez",
+      "subtitle": "Favio\""
+    },
+    {
+      "roomId": "1",
+      "startMin": 1260,
+      "endMin": 1380,
+      "title": "\"Klockner",
+      "subtitle": "Matthew\""
+    },
+    {
+      "roomId": "2",
+      "startMin": 1260,
+      "endMin": 1380,
+      "title": "\"Klockner",
+      "subtitle": "Matthew\""
+    }
+  ]
 }
