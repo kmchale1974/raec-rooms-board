@@ -8,16 +8,24 @@
 
   <style>
     :root{
-      --bg:#0f1115; --panel:#12151c; --ink:#e7eaf1; --muted:#9aa3b2;
-      --accent:#2b87ff; --grid:#1b202a; --chip:#263043; --chip-text:#e7eaf1; --ok:#1f9d6a;
+      --bg:#0f1115;
+      --panel:#12151c;
+      --ink:#e7eaf1;
+      --muted:#9aa3b2;
+      --accent:#2b87ff;
+      --grid:#1b202a;
+      --chip:#263043;
+      --chip-text:#e7eaf1;
+      --ok:#1f9d6a;
     }
     html,body{ margin:0; height:100%; background:var(--bg); color:var(--ink);
-      font-family: Inter, "SF Pro Text", Segoe UI, Roboto, Arial, sans-serif; overflow:hidden; }
+      font-family: Inter, "SF Pro Text", Segoe UI, Roboto, Arial, sans-serif; }
 
-    /* Center + scale 1920x1080 stage */
-    .stage-wrap{ position:fixed; inset:0; display:flex; align-items:flex-start; justify-content:center; overflow:hidden; }
-    .stage{ width:1920px; height:1080px; padding:32px; box-sizing:border-box;
-      display:grid; grid-template-rows: 120px 1fr; gap:24px; transform-origin: top left; }
+    /* Fixed 1920x1080 canvas; we auto-scale this below */
+    .stage{
+      width:1920px; height:1080px; padding:32px; box-sizing:border-box;
+      display:grid; grid-template-rows: 120px 1fr; gap:24px;
+    }
 
     /* Header */
     .header{ display:grid; grid-template-columns: 360px 1fr 360px; align-items:center; }
@@ -26,105 +34,149 @@
     .dateclock{ justify-self:center; text-align:center; }
     #headerDate{ font-size:44px; font-weight:800; letter-spacing:.02em; }
     #headerClock{ font-size:28px; color:var(--muted); margin-top:6px; font-weight:600; }
-    .wifi{ justify-self:end; background:var(--panel); border:1px solid var(--grid); border-radius:14px; padding:14px 16px; min-width:320px; }
+
+    .wifi{
+      justify-self:end; background:var(--panel); border:1px solid var(--grid);
+      border-radius:14px; padding:14px 16px; min-width:320px;
+    }
     .wifi .title{ font-size:16px; color:var(--muted); letter-spacing:.08em; text-transform:uppercase; }
     .wifi .row{ display:flex; justify-content:space-between; gap:12px; margin-top:6px; }
     .wifi .row span:first-child{ color:var(--muted); }
     .wifi .row span:last-child{ font-weight:700; }
 
-    /* Grid groups */
-    .grid{ display:grid; grid-template-columns: 1fr 1.5fr 1fr; gap:24px; height:100%; }
-    .group{ background:var(--panel); border:1px solid var(--grid); border-radius:18px;
-      padding:16px; display:grid; grid-template-rows: 44px 1fr; gap:12px; overflow:hidden; }
-    .group .title{ font-size:18px; color:var(--muted); letter-spacing:.1em; text-transform:uppercase;
-      border-bottom:1px solid var(--grid); display:flex; align-items:center; padding-bottom:6px; }
-    .rooms-stack{ display:grid; grid-template-rows: 1fr 1fr; gap:12px; min-height:0; }
-    .rooms-fieldhouse{ display:grid; grid-template-columns: repeat(3, 1fr); grid-template-rows: 1fr 1fr; gap:12px; min-height:0; }
+    /* Grid container: South | Fieldhouse | North */
+    .grid{
+      display:grid; grid-template-columns: 1fr 1.5fr 1fr; gap:24px; height:100%;
+    }
 
-    /* Room + pager */
-    .room{ border:1px solid var(--grid); border-radius:14px; padding:14px;
-      display:flex; flex-direction:column; gap:10px; min-height:0; overflow:hidden;
-      background:linear-gradient(180deg, rgba(255,255,255,.02), rgba(0,0,0,0)); }
-    .roomHeader{ display:flex; align-items:center; justify-content:space-between; gap:12px; border-bottom:1px dashed var(--grid); padding-bottom:8px; }
-    .roomHeader .id{ font-size:30px; font-weight:800; letter-spacing:.04em; }
+    .group{
+      background:var(--panel); border:1px solid var(--grid); border-radius:18px;
+      padding:16px; display:grid; grid-template-rows: 44px 1fr; gap:10px;
+      overflow:hidden;
+    }
+    .group .title{
+      font-size:18px; color:var(--muted); letter-spacing:.1em; text-transform:uppercase;
+      border-bottom:1px solid var(--grid); display:flex; align-items:center; padding-bottom:6px;
+    }
+
+    /* South/North: 2 stacked rooms (1..2) and (9..10) */
+    .rooms-stack{ display:grid; grid-template-rows: 1fr 1fr; gap:12px; min-height:0; }
+
+    /* Fieldhouse: 2 rows x 3 cols for 3..8 */
+    .rooms-fieldhouse{
+      display:grid; grid-template-columns: repeat(3, 1fr); grid-template-rows: 1fr 1fr;
+      gap:12px; min-height:0;
+    }
+
+    /* Individual room card */
+    .room{
+      border:1px solid var(--grid); border-radius:14px; padding:12px;
+      display:flex; flex-direction:column; gap:8px; min-height:0; overflow:hidden;
+      background:linear-gradient(180deg, rgba(255,255,255,0.02), rgba(0,0,0,0));
+    }
+    .roomHeader{
+      display:flex; align-items:center; justify-content:space-between; gap:10px;
+      border-bottom:1px dashed var(--grid); padding-bottom:8px;
+    }
+    .roomHeader .id{ font-size:28px; font-weight:800; letter-spacing:.04em; }
     .roomHeader .count{ font-size:13px; color:var(--muted); }
 
-    .roomPager{ position:relative; overflow:hidden; isolation:isolate; flex:1; min-height:0; }
-    .roomPage{ position:absolute; inset:0; display:flex; flex-direction:column; gap:10px; padding-top:6px; box-sizing:border-box;
-      will-change: transform, opacity; backface-visibility:hidden; transform:translateZ(0); }
-
-    /* Event chip */
-    .event{ background:var(--chip); border:1px solid var(--grid); border-radius:12px; padding:12px 14px; display:flex; flex-direction:column; gap:6px; }
-    .event .who{ font-size:20px; font-weight:800; line-height:1.15; }
-    .event .what{ font-size:16px; color:var(--muted); line-height:1.2; }
-    .event .when{ font-size:15px; color:#b7c0cf; font-weight:600; }
-    .who,.what{ word-wrap:break-word; overflow-wrap:anywhere; }
-
-    /* Smooth slide keyframes (more robust than transitions under scaled parents) */
-    @keyframes slideInLeft   { from { transform:translateX( 8%); opacity:0 } to { transform:translateX(0); opacity:1 } }
-    @keyframes slideOutLeft  { from { transform:translateX(0); opacity:1 } to { transform:translateX(-8%); opacity:0 } }
-    @keyframes slideInRight  { from { transform:translateX(-8%); opacity:0 } to { transform:translateX(0); opacity:1 } }
-    @keyframes slideOutRight { from { transform:translateX(0); opacity:1 } to { transform:translateX( 8%); opacity:0 } }
-
-    .anim-in-left   { animation: slideInLeft  900ms cubic-bezier(0.22,1,0.36,1) forwards; }
-    .anim-out-left  { animation: slideOutLeft 900ms cubic-bezier(0.22,1,0.36,1) forwards; }
-    .anim-in-right  { animation: slideInRight 900ms cubic-bezier(0.22,1,0.36,1) forwards; }
-    .anim-out-right { animation: slideOutRight 900ms cubic-bezier(0.22,1,0.36,1) forwards; }
-
-    @media (prefers-reduced-motion: reduce){
-      .roomPage{ animation:none !important; }
-      .anim-in-left,.anim-out-left,.anim-in-right,.anim-out-right{ animation:none !important; }
+    /* Pager area */
+    .roomPager{ position:relative; flex:1 1 auto; overflow:hidden; }
+    .roomPage{
+      position:absolute; inset:0; display:flex; flex-direction:column; gap:8px;
+      padding-top:6px; padding-bottom:6px;
     }
+
+    /* Event cards */
+    .event{
+      background:var(--chip); border:1px solid var(--grid); border-radius:12px;
+      padding:10px 12px; display:flex; flex-direction:column; gap:4px;
+      min-height:0;
+    }
+    .event .who{ font-size:18px; font-weight:800; line-height:1.15; }
+    .event .what{ font-size:15px; color:var(--muted); line-height:1.2; }
+    .event .when{ font-size:14px; color:#b7c0cf; font-weight:600; }
+
+    .who, .what{ word-wrap:break-word; overflow-wrap:anywhere; }
+
+    /* Slide animation (smoother easing + slightly longer) */
+    @keyframes slideInLeft   { from { transform:translateX(100%); opacity:.6 } to { transform:translateX(0); opacity:1 } }
+    @keyframes slideOutLeft  { from { transform:translateX(0); opacity:1 } to { transform:translateX(-25%); opacity:0 } }
+    @keyframes slideInRight  { from { transform:translateX(-100%); opacity:.6 } to { transform:translateX(0); opacity:1 } }
+    @keyframes slideOutRight { from { transform:translateX(0); opacity:1 } to { transform:translateX(25%); opacity:0 } }
+
+    .anim-in-left  { animation: slideInLeft  700ms cubic-bezier(.22,.61,.36,1) both; }
+    .anim-out-left { animation: slideOutLeft 700ms cubic-bezier(.22,.61,.36,1) both; }
+    .anim-in-right { animation: slideInRight 700ms cubic-bezier(.22,.61,.36,1) both; }
+    .anim-out-right{ animation: slideOutRight700ms cubic-bezier(.22,.61,.36,1) both; }
+
+    /* Make sure words don’t push layout */
+    .event strong{ font-weight:800; }
+
+    /* Legend (optional) */
+    .legend{ position:absolute; right:24px; bottom:18px; color:var(--muted); font-size:12px; }
   </style>
 </head>
 <body>
-  <div class="stage-wrap">
-    <div class="stage">
-      <div class="header">
-        <div class="brand"><img src="./logo.png" alt="Romeoville Athletic & Event Center"></div>
-        <div class="dateclock">
-          <div id="headerDate">—</div>
-          <div id="headerClock">—</div>
-        </div>
-        <div class="wifi">
-          <div class="title">Guest Wi-Fi</div>
-          <div class="row"><span>Network</span><span id="wifiSsid">RAEC-Public</span></div>
-          <div class="row"><span>Password</span><span id="wifiPass">Publ!c00</span></div>
-        </div>
+  <div class="stage">
+    <div class="header">
+      <div class="brand">
+        <img src="./logo.png" alt="Romeoville Athletic & Event Center">
       </div>
-
-      <div class="grid">
-        <section class="group" id="group-south">
-          <div class="title">South Gym</div>
-          <div class="rooms-stack" id="southRooms"></div>
-        </section>
-
-        <section class="group" id="group-fieldhouse">
-          <div class="title">Fieldhouse</div>
-          <div class="rooms-fieldhouse" id="fieldhouseRooms"></div>
-        </section>
-
-        <section class="group" id="group-north">
-          <div class="title">North Gym</div>
-          <div class="rooms-stack" id="northRooms"></div>
-        </section>
+      <div class="dateclock">
+        <div id="headerDate">—</div>
+        <div id="headerClock">—</div>
       </div>
+      <div class="wifi">
+        <div class="title">Guest Wi-Fi</div>
+        <div class="row"><span>Network</span><span id="wifiSsid">RAEC-Public</span></div>
+        <div class="row"><span>Password</span><span id="wifiPass">Publ!c00</span></div>
+      </div>
+    </div>
+
+    <div class="grid">
+      <!-- South Gym (1,2) -->
+      <section class="group" id="group-south">
+        <div class="title">South Gym</div>
+        <div class="rooms-stack" id="southRooms"></div>
+      </section>
+
+      <!-- Fieldhouse (3..8) -->
+      <section class="group" id="group-fieldhouse">
+        <div class="title">Fieldhouse</div>
+        <div class="rooms-fieldhouse" id="fieldhouseRooms"></div>
+      </section>
+
+      <!-- North Gym (9,10) -->
+      <section class="group" id="group-north">
+        <div class="title">North Gym</div>
+        <div class="rooms-stack" id="northRooms"></div>
+      </section>
     </div>
   </div>
 
   <script type="module" src="./app.js"></script>
 
-  <!-- Fit 1920×1080 without clipping -->
+  <!-- Auto-scale: center horizontally, pin top, no right/bottom clip -->
   <script>
     (function fitStageSetup(){
       const STAGE_W = 1920, STAGE_H = 1080;
       function fit() {
-        const wrap = document.querySelector('.stage-wrap');
+        const sx = window.innerWidth  / STAGE_W;
+        const sy = window.innerHeight / STAGE_H;
+        const s  = Math.min(sx, sy);
         const stage = document.querySelector('.stage');
-        if (!wrap || !stage) return;
-        const sx = wrap.clientWidth  / STAGE_W;
-        const sy = wrap.clientHeight / STAGE_H;
-        stage.style.transform = `scale(${Math.min(sx, sy)})`;
+        if (!stage) return;
+        stage.style.transform = `scale(${s})`;
+        stage.style.transformOrigin = 'top center';
+        document.body.style.minHeight = (STAGE_H * s) + 'px';
+
+        // center horizontally, stick to top
+        if (!stage.parentElement) return;
+        stage.parentElement.style.display = 'flex';
+        stage.parentElement.style.justifyContent = 'center';
+        stage.parentElement.style.alignItems = 'flex-start';
       }
       window.addEventListener('resize', fit);
       window.addEventListener('orientationchange', fit);
