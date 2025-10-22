@@ -1,5 +1,6 @@
 // app.js — grid board with always-left slide, paging, pickleball & Catch Corner rules,
-// and proper person-name rendering when events.json includes { org: "...", contact: "..." }.
+// and org/contact rendering that keeps org bold for "Illinois Flight + Brandon Brown"
+// while still showing "Isabel Vazquez" for single-word org/contact pairs.
 
 // -----------------------------
 // Time helpers
@@ -49,43 +50,29 @@ function normalizeContactName(s = '') {
   if (s.includes(',')) return s.split(',', 1)[0].trim();
   return s.trim();
 }
+const singleWordAlpha = s => /^[A-Za-zÀ-ÖØ-öø-ÿ'’\-\.]+$/u.test(s);
 
-// NEW: prefer org/contact fields from events.json to build a person name when appropriate
+// KEY FIX: prefer org bold, unless BOTH org/contact are single words (then treat as person)
 function buildDisplayFromOrgContact(slot) {
   const org = S(slot.org).trim();
   const contact = S(slot.contact).trim();
-
   if (!org && !contact) return null;
 
-  // If contact looks like a first name (one token, no digits) and org one token (likely last name),
-  // render "First Last".
-  const singleWord = s => /^[A-Za-zÀ-ÖØ-öø-ÿ'’\-\.]+$/u.test(s);
-  const hasDigits = s => /\d/.test(s);
+  if (org && contact) {
+    const orgSingle = singleWordAlpha(org);
+    const contactSingle = singleWordAlpha(contact);
 
-  if (contact && org && singleWord(contact) && singleWord(org) && !hasDigits(contact) && !hasDigits(org)) {
-    return { whoBold: `${contact} ${org}`, what: '' };
-  }
-
-  // If contact looks like a full name "Last, First", normalize.
-  if (contact && looksLikePersonLoose(contact)) {
-    return { whoBold: normalizePerson(contact), what: org && !ORG_HINTS.test(org) ? org : '' };
-  }
-
-  // If org looks like "Last, First", normalize (rare).
-  if (org && looksLikePersonLoose(org)) {
-    return { whoBold: normalizePerson(org), what: contact };
-  }
-
-  // If only contact exists and seems like a personal name (no digits, 1–3 tokens)
-  if (contact && !hasDigits(contact)) {
-    const toks = contact.split(/\s+/).filter(Boolean);
-    if (toks.length >= 1 && toks.length <= 3) {
-      return { whoBold: contact, what: org && !ORG_HINTS.test(org) ? org : '' };
+    // Only when BOTH are single words (e.g., "Vazquez" + "Isabel") show "Isabel Vazquez"
+    if (orgSingle && contactSingle) {
+      return { whoBold: `${contact} ${org}`, what: '' };
     }
+
+    // Otherwise: org wins (e.g., "Illinois Flight" + "Brandon Brown")
+    return { whoBold: org, what: contact };
   }
 
-  // Fallback: show org bold, contact as detail
-  if (org) return { whoBold: org, what: contact };
+  // Only one present
+  if (org) return { whoBold: org, what: '' };
   if (contact) return { whoBold: contact, what: '' };
   return null;
 }
@@ -192,7 +179,7 @@ function eventNode(slot) {
     return node;
   }
 
-  // Prefer org/contact fields if present (this fixes "Vazquez / Isabel" → "Isabel Vazquez")
+  // Prefer org/contact fields if present (this keeps org bold for Illinois Flight + Brandon Brown)
   const oc = buildDisplayFromOrgContact(slot);
 
   if (oc) {
@@ -398,7 +385,7 @@ function renderGrid(data) {
     for (const c of roomCards) {
       if (c._pages > 1) slideLeftOnce(c._strip);
     }
-  }, 7000);
+  }, PAGE_INTERVAL_MS);
 }
 
 // -----------------------------
