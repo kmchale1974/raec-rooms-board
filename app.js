@@ -1,4 +1,5 @@
-// app.js — always slide-left paging + pickleball & Catch Corner formatting
+// app.js — paging (always slide-left), pickleball & Catch Corner rules,
+// 12-hour display, auto-refresh, and enhanced person vs org name handling.
 
 /************ constants ************/
 const CLOCK_INTERVAL_MS = 30_000;
@@ -23,23 +24,72 @@ function fmt12h(mins){
 function safeArray(a){ return Array.isArray(a) ? a : []; }
 function isNum(x){ return typeof x === 'number' && Number.isFinite(x); }
 
-/************ names ************/
-function isLikelyOrg(text=""){
+/************ name heuristics ************/
+// light list of org-type hints; adjust as needed
+const ORG_KEYWORDS = [
+  'club','basketball','volleyball','academy','elite','united','athletics','soccer',
+  'football','gym','training','camp','school','league','program','rec'
+];
+const ORG_SUFFIXES = ['llc','inc','co','corp','corporation','foundation','assoc','association','ltd'];
+const NAME_TOKEN_RE = /^[a-zA-Z'\-]+$/; // simple, robust
+
+function hasDigits(s){ return /\d/.test(s); }
+function tokenSplit(s){ return s.trim().split(/\s+/).filter(Boolean); }
+
+function looksLikeOrg(text=''){
   const low = text.toLowerCase();
-  return [
-    'club','basketball','volleyball','academy','elite','united','athletics','soccer',
-    'football','gym','llc','inc','rec','flight','pink','empower','extreme'
-  ].some(k => low.includes(k));
+  if (hasDigits(low)) return true;
+  if (ORG_SUFFIXES.some(suf => low.endsWith(' ' + suf))) return true;
+  if (ORG_KEYWORDS.some(k => low.includes(k))) return true;
+  return false;
 }
-function isPersonName(text){
-  if (!text || !text.includes(',')) return false;
-  const [last, first] = text.split(',',2).map(s=>s.trim());
-  if (!last || !first) return false;
-  if (isLikelyOrg(text)) return false;
-  return /^[a-zA-Z' \-]+$/.test(last) && /^[a-zA-Z' \-]+$/.test(first);
+
+/**
+ * Detect if a string is a single person name in "Last, First [Middle]" form.
+ * - Must contain exactly one comma splitting into [last, first...]
+ * - tokens must be name-like (letters, - '), not too many words
+ * - must NOT look like an org
+ */
+function isStandalonePerson(s=''){
+  if (!s.includes(',')) return false;
+  if (looksLikeOrg(s)) return false;
+
+  const [last, rest] = s.split(',', 2).map(t => t.trim());
+  if (!last || !rest) return false;
+
+  const lastToks = tokenSplit(last);
+  const restToks = tokenSplit(rest);
+
+  if (!lastToks.length || !restToks.length) return false;
+  if (lastToks.some(t => !NAME_TOKEN_RE.test(t))) return false;
+  if (restToks.some(t => !NAME_TOKEN_RE.test(t))) return false;
+
+  // keep it simple: last has 1–2 tokens; rest has 1–3 tokens
+  if (lastToks.length > 2) return false;
+  if (restToks.length > 3) return false;
+
+  return true;
 }
-function toFirstLast(t){
-  return isPersonName(t) ? t.split(',',2).map(s=>s.trim()).reverse().join(' ') : t;
+
+/** Convert "Last, First [Middle]" → "First [Middle] Last" */
+function toFirstLast(s){
+  const [last, rest] = s.split(',',2).map(x=>x.trim());
+  return `${rest} ${last}`.replace(/\s{2,}/g,' ').trim();
+}
+
+/**
+ * Normalize a contact string that might be a person name.
+ * - If "Last, First..." person → return "First Last"
+ * - Else if ambiguous but contains a comma → return just the last name (before the comma), per your preference
+ * - Else return unchanged
+ */
+function normalizeContactName(s=''){
+  if (isStandalonePerson(s)) return toFirstLast(s);
+  if (s.includes(',')) {
+    // ambiguous; fallback to last name only
+    return s.split(',',1)[0].trim();
+  }
+  return s;
 }
 
 /************ domain rules ************/
@@ -182,7 +232,6 @@ function eventNode(slot){
       div.appendChild(who);
 
       const cleaned = cleanSubtitle(slot.subtitle||'');
-      // Only show extra line if it isn't just "open pickleball" again
       if (cleaned && !/open pickleball/i.test(cleaned)){
         const what = document.createElement('div'); what.className='what'; what.textContent = cleaned;
         div.appendChild(what);
@@ -216,36 +265,75 @@ function eventNode(slot){
       return div;
     }
 
-    // --- Default rendering (org + contact or just title) ---
-    const who = document.createElement('div'); who.className='who';
+    // --- Default rendering ---
     const title = slot.title || '';
-    if (title.includes(',')){
-      const [org, contactRaw] = title.split(',',2).map(s=>s.trim());
-      const strong = document.createElement('strong'); strong.textContent = org; who.appendChild(strong);
+
+    // Case A: the entire title is a person “Last, First [Middle]”
+    if (isStandalonePerson(title)){
+      const who = document.createElement('div'); who.className='who';
+      const strong = document.createElement('strong'); strong.textContent = toFirstLast(title);
+      who.appendChild(strong);
       div.appendChild(who);
 
-      const contact = contactRaw ? toFirstLast(contactRaw) : '';
+      const sub = cleanSubtitle(slot.subtitle||'');
+      if (sub){
+        const what = document.createElement('div'); what.className='what'; what.textContent = sub;
+        div.appendChild(what);
+      }
+
+      const when = document.createElement('div'); when.className='when';
+      when.textContent = `${fmt12h(slot.startMin)} – ${fmt12h(slot.endMin)}`;
+      div.appendChild(when);
+      return div;
+    }
+
+    // Case B: “Org, Contact”
+    if (title.includes(',')){
+      const [org, contactRaw] = title.split(',',2).map(s=>s.trim());
+
+      // Org stays as-is (bold)
+      const who = document.createElement('div'); who.className='who';
+      const strong = document.createElement('strong'); strong.textContent = org;
+      who.appendChild(strong);
+      div.appendChild(who);
+
+      // Contact normalized (First Last if name; else last name only if ambiguous)
+      const contact = contactRaw ? normalizeContactName(contactRaw) : '';
       if (contact){
         const c = document.createElement('div'); c.className='what'; c.textContent = contact;
         div.appendChild(c);
       }
-    } else {
+
+      const sub = cleanSubtitle(slot.subtitle||'');
+      if (sub){
+        const what = document.createElement('div'); what.className='what'; what.textContent = sub;
+        div.appendChild(what);
+      }
+
+      const when = document.createElement('div'); when.className='when';
+      when.textContent = `${fmt12h(slot.startMin)} – ${fmt12h(slot.endMin)}`;
+      div.appendChild(when);
+      return div;
+    }
+
+    // Case C: plain org/label (no comma)
+    {
+      const who = document.createElement('div'); who.className='who';
       const strong = document.createElement('strong'); strong.textContent = title;
       who.appendChild(strong);
       div.appendChild(who);
+
+      const sub = cleanSubtitle(slot.subtitle||'');
+      if (sub){
+        const what = document.createElement('div'); what.className='what'; what.textContent = sub;
+        div.appendChild(what);
+      }
+
+      const when = document.createElement('div'); when.className='when';
+      when.textContent = `${fmt12h(slot.startMin)} – ${fmt12h(slot.endMin)}`;
+      div.appendChild(when);
+      return div;
     }
-
-    const sub = cleanSubtitle(slot.subtitle||'');
-    if (sub){
-      const what = document.createElement('div'); what.className='what'; what.textContent = sub;
-      div.appendChild(what);
-    }
-
-    const when = document.createElement('div'); when.className='when';
-    when.textContent = `${fmt12h(slot.startMin)} – ${fmt12h(slot.endMin)}`;
-    div.appendChild(when);
-
-    return div;
   } catch (e){
     console.warn('eventNode error; slot skipped', e, slot);
     const div = document.createElement('div');
