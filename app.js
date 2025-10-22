@@ -1,4 +1,4 @@
-// app.js — always slide-left paging + robust rendering
+// app.js — always slide-left paging + pickleball & Catch Corner formatting
 
 /************ constants ************/
 const CLOCK_INTERVAL_MS = 30_000;
@@ -42,7 +42,8 @@ function toFirstLast(t){
   return isPersonName(t) ? t.split(',',2).map(s=>s.trim()).reverse().join(' ') : t;
 }
 
-/************ pickleball ************/
+/************ domain rules ************/
+// --- Pickleball detection/cleanup ---
 function isPickleball(slot){
   const low = `${slot?.title||''} ${slot?.subtitle||''}`.toLowerCase();
   return low.includes('pickleball');
@@ -54,6 +55,51 @@ function cleanSubtitle(text=''){
     .replace(/\s{2,}/g, ' ')
     .replace(/[|]+/g, '')
     .trim();
+}
+
+// --- Catch Corner detection/cleanup ---
+function isCatchCorner(slot){
+  const t = (slot?.title || '').toLowerCase();
+  const s = (slot?.subtitle || '').toLowerCase();
+  return t.startsWith('catch corner') || s.includes('catchcorner');
+}
+
+/**
+ * Extract a clean secondary line for Catch Corner:
+ * Prefer content inside "CatchCorner (...)" from subtitle.
+ * Otherwise, use subtitle/title with internal-hold noise removed and
+ * strip any leading "Catch Corner" or "CatchCorner".
+ */
+function extractCatchCornerDetail(slot){
+  const rawSub = slot?.subtitle || '';
+  const rawTit = slot?.title    || '';
+
+  // Look for CatchCorner ( ... ) pattern in subtitle
+  const m = rawSub.match(/CatchCorner\s*\(([^)]+)\)/i);
+  if (m && m[1]) {
+    return m[1]
+      .replace(/^\s*[-–:]\s*/,'')
+      .trim();
+  }
+
+  // Fallback: use subtitle (or title) cleaned
+  let candidate = rawSub || rawTit;
+
+  candidate = candidate
+    // Remove the literal word CatchCorner(...) chunks entirely
+    .replace(/CatchCorner\s*\([^)]*\)/ig, '')
+    // Remove "Catch Corner (Internal Holds" junk or any "Catch Corner" prefix
+    .replace(/Catch Corner\s*\(.*?\)/ig, '')
+    .replace(/^Catch Corner\s*,?\s*/i, '')
+    .replace(/^CatchCorner\s*,?\s*/i, '')
+    // Remove internal notes
+    .replace(/internal hold( per nm)?/ig, '')
+    .replace(/raec front desk, rentals - on hold/ig, '')
+    .replace(/[|]+/g, ' ')
+    .replace(/\s{2,}/g, ' ')
+    .trim();
+
+  return candidate;
 }
 
 /************ data ************/
@@ -128,6 +174,7 @@ function eventNode(slot){
     const div = document.createElement('div');
     div.className = 'event';
 
+    // --- Pickleball special display ---
     if (isPickleball(slot)){
       const who = document.createElement('div'); who.className='who';
       const strong = document.createElement('strong'); strong.textContent = 'Open Pickleball';
@@ -135,6 +182,7 @@ function eventNode(slot){
       div.appendChild(who);
 
       const cleaned = cleanSubtitle(slot.subtitle||'');
+      // Only show extra line if it isn't just "open pickleball" again
       if (cleaned && !/open pickleball/i.test(cleaned)){
         const what = document.createElement('div'); what.className='what'; what.textContent = cleaned;
         div.appendChild(what);
@@ -146,6 +194,29 @@ function eventNode(slot){
       return div;
     }
 
+    // --- Catch Corner special display ---
+    if (isCatchCorner(slot)){
+      // Bold brand
+      const who = document.createElement('div'); who.className='who';
+      const strong = document.createElement('strong'); strong.textContent = 'Catch Corner';
+      who.appendChild(strong);
+      div.appendChild(who);
+
+      // Clean secondary line (team/booking)
+      const detail = extractCatchCornerDetail(slot);
+      if (detail){
+        const what = document.createElement('div'); what.className='what'; what.textContent = detail;
+        div.appendChild(what);
+      }
+
+      // Time
+      const when = document.createElement('div'); when.className='when';
+      when.textContent = `${fmt12h(slot.startMin)} – ${fmt12h(slot.endMin)}`;
+      div.appendChild(when);
+      return div;
+    }
+
+    // --- Default rendering (org + contact or just title) ---
     const who = document.createElement('div'); who.className='who';
     const title = slot.title || '';
     if (title.includes(',')){
