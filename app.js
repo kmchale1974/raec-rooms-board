@@ -1,299 +1,285 @@
-// app.js
+// app.js — smooth paged grid with slide animation
 
-/***** CONFIG *****/
-const DATA_URL = `./events.json`;
-const PAGE_DWELL_MS = 7000;        // how long each page shows before flipping
-const HIDE_PAST     = true;        // drop events whose end < now
-const REFRESH_MS    = 60_000;      // recalc every minute so ended events fall off
+const CLOCK_INTERVAL_MS = 1000 * 30;  // refresh header clock twice a minute
+const ROTATE_MS         = 8000;       // per-room page dwell
+const PER_PAGE_SOUTH    = 4;
+const PER_PAGE_NORTH    = 4;
+const PER_PAGE_FIELD    = 3;
 
-/***** TIME UTILS (12-hour display) *****/
-function nowMinutesLocal(){
-  const d = new Date();
-  return d.getHours() * 60 + d.getMinutes();
-}
-function fmt12(min){
-  let h = Math.floor(min/60), m = min % 60;
-  const ampm = h >= 12 ? 'pm' : 'am';
+// -------- utilities --------
+const two = (n) => (n < 10 ? "0" + n : "" + n);
+function fmt12h(mins) {
+  // mins = minutes after midnight
+  let h = Math.floor(mins / 60);
+  const m = mins % 60;
+  const ampm = h >= 12 ? "PM" : "AM";
   h = h % 12; if (h === 0) h = 12;
-  return `${h}:${m.toString().padStart(2,'0')}${ampm}`;
+  return `${h}:${two(m)} ${ampm}`;
 }
 
-/***** NAME / ORG FORMATTING *****/
-function isPersonish(s){
-  // A very light heuristic: "Last, First" → treat as person
-  return /.+,\s*.+/.test(s) && !/\b(Club|Basketball|Volleyball|Athletics|Elite|Flight|United|Academy|Sports?)\b/i.test(s);
+function isPersonName(text) {
+  // Very light heuristic: "Last, First" form and both tokens alphabetic
+  if (!text || !text.includes(',')) return false;
+  const [last, rest] = text.split(',', 2).map(s => s.trim());
+  if (!last || !rest) return false;
+  // common org hints
+  const orgHints = ['club','basketball','volleyball','academy','elite','united','athletics','soccer','football','gym','llc','inc'];
+  const low = text.toLowerCase();
+  if (orgHints.some(k => low.includes(k))) return false;
+  // simple alpha check
+  return /^[a-zA-Z' \-]+$/.test(last) && /^[a-zA-Z' \-]+$/.test(rest);
 }
-function normalizeReservee(title){
-  // Split on comma only if it looks like "Last, First"
-  if (isPersonish(title)){
-    const [last, first] = title.split(',').map(t=>t.trim());
-    return `${first} ${last}`;
-  }
-  return title;
+function toFirstLast(text) {
+  if (!isPersonName(text)) return text;
+  const [last, rest] = text.split(',', 2).map(s => s.trim());
+  return `${rest} ${last}`.replace(/\s+/g,' ').trim();
 }
 
-/***** FETCH & RENDER LOOP *****/
-async function loadData(){
-  const resp = await fetch(`${DATA_URL}?ts=${Date.now()}`, { cache:'no-store' });
-  if (!resp.ok) throw new Error(`Failed to fetch events.json: ${resp.status}`);
+// slide animation swap
+function animatePageSwap(container, newPageEl, { direction = 'left' } = {}) {
+  const h = container.offsetHeight;
+  container.style.minHeight = h + 'px';
+
+  const old = container.querySelector('.roomPage');
+  newPageEl.classList.add('roomPage');
+  const enterClass = direction === 'left' ? 'page-enter-right' : 'page-enter-left';
+  newPageEl.classList.add(enterClass);
+  container.appendChild(newPageEl);
+
+  requestAnimationFrame(() => {
+    if (old) {
+      old.classList.remove('page-enter-active', 'page-enter-left', 'page-enter-right');
+      old.classList.add(direction === 'left' ? 'page-exit-left' : 'page-exit-right');
+    }
+    newPageEl.classList.add('page-enter-active');
+  });
+
+  const done = () => {
+    old && old.remove();
+    container.style.minHeight = '';
+    container.removeEventListener('transitionend', onEnd, true);
+  };
+  const onEnd = (e) => { if (e.target === newPageEl) done(); };
+  container.addEventListener('transitionend', onEnd, true);
+  setTimeout(done, 1200); // safety
+}
+
+// -------- data loading --------
+async function loadEvents() {
+  const url = `./events.json?ts=${Date.now()}`;
+  const resp = await fetch(url, { cache: 'no-store' });
+  if (!resp.ok) throw new Error(`Failed to fetch ${url}: ${resp.status}`);
   const data = await resp.json();
   console.log('Loaded events.json', data);
   return data;
 }
 
-function renderHeaderClock(){
+// Filter out past events: only show ones that have not ended
+function filterFutureSlots(slots, nowMin) {
+  const keep = (slots || []).filter(s => (s.endMin ?? 0) >= nowMin);
+  console.log(`Slots filtered by time: ${(slots||[]).length} -> ${keep.length} (now=${nowMin})`);
+  return keep;
+}
+
+// Group slots by roomId
+function byRoom(slots) {
+  const map = new Map();
+  for (const s of slots) {
+    if (!map.has(s.roomId)) map.set(s.roomId, []);
+    map.get(s.roomId).push(s);
+  }
+  return map;
+}
+
+// -------- rendering --------
+function renderHeader() {
   const d = new Date();
-  const dow = d.toLocaleDateString(undefined,{ weekday:'long' });
-  const mon = d.toLocaleDateString(undefined,{ month:'long' });
-  const day = d.getDate();
-  const yr  = d.getFullYear();
-  const hh = d.getHours();
-  const mm = d.getMinutes().toString().padStart(2,'0');
-  const ampm = hh >= 12 ? 'PM':'AM';
-  const h12 = ((hh%12)||12);
-
-  document.getElementById('headerDate').textContent = `${dow}, ${mon} ${day}, ${yr}`;
-  document.getElementById('headerClock').textContent = `${h12}:${mm} ${ampm}`;
+  const opts = { weekday:'long', month:'long', day:'numeric' };
+  document.getElementById('headerDate').textContent =
+    d.toLocaleDateString(undefined, opts);
+  document.getElementById('headerClock').textContent =
+    d.toLocaleTimeString(undefined, { hour:'numeric', minute:'2-digit' });
 }
 
-/***** FILTER / DEDUPE *****/
-function filterPast(slots, nowMin){
-  if (!HIDE_PAST) return slots;
-  return slots.filter(s => s.endMin > nowMin);
+function buildRoomShell(room) {
+  const el = document.createElement('div');
+  el.className = 'room';
+  el.dataset.roomId = room.id;
+
+  // header
+  const header = document.createElement('div');
+  header.className = 'roomHeader';
+  const id = document.createElement('div'); id.className = 'id'; id.textContent = room.label;
+  const count = document.createElement('div'); count.className = 'count'; count.textContent = '';
+  header.appendChild(id); header.appendChild(count);
+
+  // pager
+  const pager = document.createElement('div');
+  pager.className = 'roomPager';
+  pager.id = `pager-${room.id}`;
+
+  el.appendChild(header);
+  el.appendChild(pager);
+  return el;
 }
 
-// Merge duplicates in the same room/time with the same title (keep the first, and join subtitles if different)
-function dedupeWithinRoom(list){
-  const key = s => `${s.roomId}|${s.startMin}|${s.endMin}|${s.title}`.toLowerCase();
-  const seen = new Map();
-  for (const s of list){
-    const k = key(s);
-    if (!seen.has(k)) {
-      seen.set(k, { ...s });
+function eventNode(slot) {
+  const div = document.createElement('div');
+  div.className = 'event';
+
+  // Who (title) might contain org + person, e.g. "Illinois Flight, Brandon Brown"
+  const who = document.createElement('div');
+  who.className = 'who';
+
+  // Split on first comma to style org + contact
+  const title = slot.title || '';
+  if (title.includes(',')) {
+    const [org, contactRaw] = title.split(',', 2).map(s => s.trim());
+    const strong = document.createElement('strong');
+    strong.textContent = org;
+    who.appendChild(strong);
+
+    const contact = contactRaw ? toFirstLast(contactRaw) : '';
+    if (contact) {
+      const br = document.createElement('div');
+      br.className = 'what';
+      br.textContent = contact;
+      div.appendChild(who);
+      div.appendChild(br);
     } else {
-      const prev = seen.get(k);
-      if (s.subtitle && s.subtitle !== prev.subtitle){
-        prev.subtitle = `${prev.subtitle}; ${s.subtitle}`;
-      }
+      div.appendChild(who);
     }
-  }
-  return Array.from(seen.values());
-}
-
-function groupSlotsByRoom(slots){
-  const m = new Map();
-  for (const s of slots){
-    if (!m.has(s.roomId)) m.set(s.roomId, []);
-    m.get(s.roomId).push(s);
-  }
-  // sort by start time inside each room
-  for (const [rid, list] of m.entries()){
-    list.sort((a,b)=> a.startMin - b.startMin || a.title.localeCompare(b.title));
-  }
-  return m;
-}
-
-/***** DOM BUILDERS *****/
-function buildRoomsShell(rooms){
-  const south = document.getElementById('southRooms');
-  const north = document.getElementById('northRooms');
-  const fh    = document.getElementById('fieldhouseRooms');
-  south.innerHTML = ''; north.innerHTML = ''; fh.innerHTML = '';
-
-  const byGroup = {
-    south: rooms.filter(r=>r.group==='south').sort((a,b)=> Number(a.id)-Number(b.id)),
-    north: rooms.filter(r=>r.group==='north').sort((a,b)=> Number(a.id)-Number(b.id)),
-    fieldhouse: rooms.filter(r=>r.group==='fieldhouse').sort((a,b)=> Number(a.id)-Number(b.id)),
-  };
-
-  const createCard = (r) => {
-    const el = document.createElement('div');
-    el.className = 'room';
-    el.dataset.roomId = r.id;
-
-    el.innerHTML = `
-      <div class="roomHeader">
-        <div class="id">${r.label}</div>
-        <div class="count" id="count-${r.id}">—</div>
-      </div>
-      <div class="pages" id="pages-${r.id}"></div>
-    `;
-    return el;
-  };
-
-  byGroup.south.forEach(r => south.appendChild(createCard(r)));
-  byGroup.north.forEach(r => north.appendChild(createCard(r)));
-  byGroup.fieldhouse.forEach(r => fh.appendChild(createCard(r)));
-}
-
-// Create a single event chip
-function makeEventChip(slot){
-  const whoBold = normalizeReservee(slot.title);
-  const sub = (slot.subtitle || '').trim();
-  const when = `${fmt12(slot.startMin)} – ${fmt12(slot.endMin)}`;
-
-  const wrap = document.createElement('div');
-  wrap.className = 'event';
-  wrap.innerHTML = `
-    <div class="who">${whoBold}</div>
-    ${sub ? `<div class="what">${sub}</div>` : ``}
-    <div class="when">${when}</div>
-  `;
-  return wrap;
-}
-
-/***** PAGINATION PER ROOM *****/
-function paginateEventsIntoPages(roomCard, events){
-  const pagesHost = roomCard.querySelector('.pages');
-  pagesHost.innerHTML = '';
-
-  if (!events.length){
-    const empty = document.createElement('div');
-    empty.className = 'page is-active';
-    empty.style.opacity = 1;
-    empty.innerHTML = `<div class="event"><div class="who" style="font-weight:600;color:var(--muted)">No reservations</div></div>`;
-    pagesHost.appendChild(empty);
-    roomCard.querySelector(`#count-${roomCard.dataset.roomId}`).textContent = '0';
-    return { pages: [empty], idx: 0 };
+  } else {
+    const strong = document.createElement('strong');
+    strong.textContent = title;
+    who.appendChild(strong);
+    div.appendChild(who);
   }
 
-  // Create temp page and add events until overflow, then start a new page.
+  // What (subtitle)
+  const whatText = slot.subtitle || '';
+  if (whatText) {
+    const what = document.createElement('div');
+    what.className = 'what';
+    what.textContent = whatText;
+    div.appendChild(what);
+  }
+
+  // When (inside the chip; we don’t repeat time elsewhere)
+  const when = document.createElement('div');
+  when.className = 'when';
+  when.textContent = `${fmt12h(slot.startMin)} – ${fmt12h(slot.endMin)}`;
+  div.appendChild(when);
+
+  return div;
+}
+
+function paginate(arr, perPage) {
   const pages = [];
-  let pageEl = document.createElement('div');
-  pageEl.className = 'page';
-  pagesHost.appendChild(pageEl);
-
-  const maxHeight = pagesHost.clientHeight || pagesHost.getBoundingClientRect().height;
-
-  for (const ev of events){
-    const chip = makeEventChip(ev);
-    pageEl.appendChild(chip);
-
-    if (pageEl.scrollHeight > maxHeight){
-      // overflowed: move chip to new page
-      pageEl.removeChild(chip);
-      if (!pageEl.childNodes.length){
-        // safety: if a single item is taller than the space, still show it
-        pageEl.appendChild(chip);
-      } else {
-        pageEl = document.createElement('div');
-        pageEl.className = 'page';
-        pagesHost.appendChild(pageEl);
-        pageEl.appendChild(chip);
-      }
-    }
+  for (let i = 0; i < arr.length; i += perPage) {
+    pages.push(arr.slice(i, i + perPage));
   }
-
-  // Update count
-  roomCard.querySelector(`#count-${roomCard.dataset.roomId}`).textContent = `${events.length}`;
-
-  // Mark first page active
-  if (pagesHost.children.length){
-    pagesHost.children[0].classList.add('is-active');
-    pagesHost.children[0].style.opacity = 1;
-  }
-
-  // collect page nodes
-  Array.from(pagesHost.children).forEach(p => pages.push(p));
-  return { pages, idx: 0 };
+  return pages.length ? pages : [[]];
 }
 
-/***** PER-ROOM PAGE CYCLER WITH 3-STEP ANIMATION PATTERN *****/
-const roomCyclers = new Map(); // roomId -> { timer, pages, idx }
+function renderRoomPaged(container, room, events, perPage, rotateMs) {
+  // Show how many items total
+  const headerCount = container.parentElement.querySelector('.count');
+  headerCount.textContent = events.length ? `${events.length} event${events.length>1?'s':''}` : '';
 
-function applyTransitionPattern(outPage, inPage, nextIndex){
-  // clear previous animation classes
-  [outPage, inPage].forEach(el => {
-    if (!el) return;
-    el.classList.remove('anim-slide-left','anim-appear','anim-slide-in');
-  });
+  const pages = paginate(events, perPage);
+  let idx = 0;
 
-  // Pattern cycles over page index: 0→1 uses slide-left, 1→2 uses appear, 2→3 uses slide-in, then repeats.
-  const pattern = ['anim-slide-left','anim-appear','anim-slide-in'];
-  const anim = pattern[nextIndex % pattern.length];
-
-  if (outPage){
-    // Only animate "out" when using slide-left; fade+slide-in focus on "in"
-    if (anim === 'anim-slide-left'){
-      outPage.classList.add('anim-slide-left');
-    } else {
-      outPage.style.opacity = 0;
-    }
-    outPage.classList.remove('is-active');
+  function buildPageEl(items) {
+    const page = document.createElement('div');
+    page.className = 'roomPage';
+    for (const it of items) page.appendChild(eventNode(it));
+    return page;
   }
 
-  if (inPage){
-    // Prepare and animate "in"
-    if (anim === 'anim-appear') inPage.classList.add('anim-appear');
-    if (anim === 'anim-slide-in') inPage.classList.add('anim-slide-in');
-    inPage.classList.add('is-active');
-    inPage.style.opacity = 1;
+  // initial mount
+  container.classList.add('roomPager');
+  container.dataset.lastPageIndex = '0';
+  animatePageSwap(container, buildPageEl(pages[0]), { direction: 'left' });
+
+  if (pages.length <= 1) return; // no rotation needed
+
+  // rotate
+  if (container._rotTimer) clearInterval(container._rotTimer);
+  container._rotTimer = setInterval(() => {
+    const prev = idx;
+    idx = (idx + 1) % pages.length;
+    const dir = idx > prev ? 'left' : 'right';
+    animatePageSwap(container, buildPageEl(pages[idx]), { direction: dir });
+  }, rotateMs);
+}
+
+function mountRooms(rooms) {
+  // build containers in proper groups
+  const southEl = document.getElementById('southRooms');
+  const fieldEl = document.getElementById('fieldhouseRooms');
+  const northEl = document.getElementById('northRooms');
+
+  southEl.innerHTML = ''; fieldEl.innerHTML = ''; northEl.innerHTML = '';
+
+  for (const r of rooms) {
+    const shell = buildRoomShell(r);
+    if (r.group === 'south') southEl.appendChild(shell);
+    else if (r.group === 'fieldhouse') fieldEl.appendChild(shell);
+    else if (r.group === 'north') northEl.appendChild(shell);
   }
 }
 
-function startCycler(roomCard, pagesStruct){
-  const roomId = roomCard.dataset.roomId;
-  // stop previous
-  const prev = roomCyclers.get(roomId);
-  if (prev && prev.timer) clearInterval(prev.timer);
+function renderAll(rooms, slots) {
+  mountRooms(rooms);
 
-  const pages = pagesStruct.pages;
-  if (pages.length <= 1){
-    roomCyclers.set(roomId, { timer:null, pages, idx:0 });
+  const now = new Date();
+  const nowMin = now.getHours()*60 + now.getMinutes();
+  const futureSlots = filterFutureSlots(slots, nowMin);
+  const map = byRoom(futureSlots);
+
+  for (const r of rooms) {
+    const roomSlots = (map.get(r.id) || [])
+      .sort((a,b) => (a.startMin - b.startMin) || ((a.title||'').localeCompare(b.title||'')));
+
+    const pager = document.getElementById(`pager-${r.id}`);
+    const perPage =
+      r.group === 'fieldhouse' ? PER_PAGE_FIELD :
+      r.group === 'south'      ? PER_PAGE_SOUTH :
+                                 PER_PAGE_NORTH;
+
+    renderRoomPaged(pager, r, roomSlots, perPage, ROTATE_MS);
+  }
+}
+
+// -------- boot --------
+async function init() {
+  renderHeader();
+  setInterval(renderHeader, CLOCK_INTERVAL_MS);
+
+  let data;
+  try {
+    data = await loadEvents();
+  } catch (e) {
+    console.error('Failed to load events.json', e);
     return;
   }
 
-  let idx = 0;
-  const timer = setInterval(() => {
-    const out = pages[idx];
-    idx = (idx + 1) % pages.length;
-    const incoming = pages[idx];
-    applyTransitionPattern(out, incoming, idx);
-  }, PAGE_DWELL_MS);
+  // Defensive defaults
+  const rooms = Array.isArray(data.rooms) ? data.rooms : [];
+  const slots = Array.isArray(data.slots) ? data.slots : [];
 
-  roomCyclers.set(roomId, { timer, pages, idx });
-}
+  renderAll(rooms, slots);
 
-/***** RENDER ALL *****/
-function renderAll(data){
-  // header
-  renderHeaderClock();
-
-  // rooms shell
-  buildRoomsShell(data.rooms || []);
-
-  // slots: filter, group, dedupe and render per room
-  const nowMin = nowMinutesLocal();
-  let slots = Array.isArray(data.slots) ? data.slots.slice() : [];
-  slots = filterPast(slots, nowMin);
-
-  const grouped = groupSlotsByRoom(slots);
-  const allRoomIds = (data.rooms || []).map(r=>r.id);
-
-  for (const roomId of allRoomIds){
-    const roomCard = document.querySelector(`.room[data-room-id="${roomId}"]`);
-    const list = grouped.get(roomId) || [];
-    const deduped = dedupeWithinRoom(list);
-    const pagesStruct = paginateEventsIntoPages(roomCard, deduped);
-    startCycler(roomCard, pagesStruct);
-  }
-}
-
-/***** MAIN *****/
-async function init(){
-  const data = await loadData();
-  renderAll(data);
-
-  // live clock
-  setInterval(renderHeaderClock, 1000);
-
-  // refresh events every minute so ended events drop and pages shrink
+  // Optional: refresh board every 5 minutes to pick up new events.json
   setInterval(async () => {
-    try{
-      const fresh = await loadData();
-      renderAll(fresh);
-    }catch(e){ console.error(e); }
-  }, REFRESH_MS);
+    try {
+      const fresh = await loadEvents();
+      const fr = Array.isArray(fresh.rooms) ? fresh.rooms : rooms;
+      const fs = Array.isArray(fresh.slots) ? fresh.slots : [];
+      renderAll(fr, fs);
+    } catch {}
+  }, 5 * 60 * 1000);
 }
 
 document.addEventListener('DOMContentLoaded', init);
