@@ -1,4 +1,5 @@
-// app.js — grid-only board with infinite left slide + robust name handling
+// app.js — grid board with always-left slide, paging, pickleball & Catch Corner rules,
+// and proper person-name rendering when events.json includes { org: "...", contact: "..." }.
 
 // -----------------------------
 // Time helpers
@@ -20,47 +21,73 @@ function nowMinutesLocal() {
 // String + name utilities
 // -----------------------------
 const S = v => (typeof v === 'string' ? v : '');
-
-// NEW: very clear “Last, First” detector (no digits; letters/accents/hyphen/apostrophe/period/spaces)
 const PERSON_RE = /^\s*[A-Za-zÀ-ÖØ-öø-ÿ'’\-\. ]+,\s*[A-Za-zÀ-ÖØ-öø-ÿ'’\-\. ]+\s*$/u;
-// Words that strongly indicate an org (used lightly; won’t block simple “Last, First” matches)
 const ORG_HINTS = /\b(llc|inc|corp|co|foundation|association|academy|club|basketball|volleyball|training|gym|league|program|rec)\b/i;
 
 function looksLikePersonLoose(s = '') {
   s = s.trim();
   if (!s || /\d/.test(s)) return false;
-  // If it matches clean “Last, First”, call it a person
   if (PERSON_RE.test(s)) return true;
-
-  // Fallback: single comma and second half looks like a first-name block, no org hints
   const parts = s.split(',');
   if (parts.length === 2) {
     const left = parts[0].trim();
     const right = parts[1].trim();
     if (left && right && !ORG_HINTS.test(s)) {
-      // Allow 1–3 tokens on right; no digits
       const rtoks = right.split(/\s+/).filter(Boolean);
-      if (rtoks.length >= 1 && rtoks.length <= 3 && !/\d/.test(right)) {
-        return true;
-      }
+      if (rtoks.length >= 1 && rtoks.length <= 3 && !/\d/.test(right)) return true;
     }
   }
   return false;
 }
-
 function normalizePerson(s = '') {
   s = s.trim();
   const [last, rest] = s.split(',', 2).map(x => x.trim());
   return `${rest} ${last}`.replace(/\s{2,}/g, ' ').trim();
 }
-
 function normalizeContactName(s = '') {
   if (looksLikePersonLoose(s)) return normalizePerson(s);
-  if (s.includes(',')) {
-    // Ambiguous “X, Y” → keep left side (often org)
-    return s.split(',', 1)[0].trim();
-  }
+  if (s.includes(',')) return s.split(',', 1)[0].trim();
   return s.trim();
+}
+
+// NEW: prefer org/contact fields from events.json to build a person name when appropriate
+function buildDisplayFromOrgContact(slot) {
+  const org = S(slot.org).trim();
+  const contact = S(slot.contact).trim();
+
+  if (!org && !contact) return null;
+
+  // If contact looks like a first name (one token, no digits) and org one token (likely last name),
+  // render "First Last".
+  const singleWord = s => /^[A-Za-zÀ-ÖØ-öø-ÿ'’\-\.]+$/u.test(s);
+  const hasDigits = s => /\d/.test(s);
+
+  if (contact && org && singleWord(contact) && singleWord(org) && !hasDigits(contact) && !hasDigits(org)) {
+    return { whoBold: `${contact} ${org}`, what: '' };
+  }
+
+  // If contact looks like a full name "Last, First", normalize.
+  if (contact && looksLikePersonLoose(contact)) {
+    return { whoBold: normalizePerson(contact), what: org && !ORG_HINTS.test(org) ? org : '' };
+  }
+
+  // If org looks like "Last, First", normalize (rare).
+  if (org && looksLikePersonLoose(org)) {
+    return { whoBold: normalizePerson(org), what: contact };
+  }
+
+  // If only contact exists and seems like a personal name (no digits, 1–3 tokens)
+  if (contact && !hasDigits(contact)) {
+    const toks = contact.split(/\s+/).filter(Boolean);
+    if (toks.length >= 1 && toks.length <= 3) {
+      return { whoBold: contact, what: org && !ORG_HINTS.test(org) ? org : '' };
+    }
+  }
+
+  // Fallback: show org bold, contact as detail
+  if (org) return { whoBold: org, what: contact };
+  if (contact) return { whoBold: contact, what: '' };
+  return null;
 }
 
 // -----------------------------
@@ -73,7 +100,6 @@ function cleanCatchCornerDetail(s = '') {
   out = out.replace(/internal holds?/i, '').trim();
   return out;
 }
-
 function isPickleball(slot) {
   const t = (slot.title || '').toLowerCase();
   const sub = (slot.subtitle || '').toLowerCase();
@@ -97,7 +123,7 @@ const els = {
 // Infinite-slide state
 let PAGE_TICK = null;
 const PAGE_INTERVAL_MS = 7000; // 7s
-const PER_PAGE = 2;            // # events per page (avoid clipping)
+const PER_PAGE = 2;            // keep cards tall enough so nothing clips
 
 // -----------------------------
 // Header clock
@@ -166,11 +192,35 @@ function eventNode(slot) {
     return node;
   }
 
-  // Person?
+  // Prefer org/contact fields if present (this fixes "Vazquez / Isabel" → "Isabel Vazquez")
+  const oc = buildDisplayFromOrgContact(slot);
+
+  if (oc) {
+    const who = document.createElement('div');
+    who.className = 'who';
+    who.textContent = oc.whoBold || title;
+
+    const when = document.createElement('div');
+    when.className = 'when';
+    when.textContent = `${fmtTime(slot.startMin)} – ${fmtTime(slot.endMin)}`;
+
+    node.appendChild(who);
+    const detail = S(subtitle) || S(oc.what);
+    if (detail) {
+      const what = document.createElement('div');
+      what.className = 'what';
+      what.textContent = detail;
+      node.appendChild(what);
+    }
+    node.appendChild(when);
+    return node;
+  }
+
+  // Otherwise, fall back to heuristic parsing of title/subtitle
   if (looksLikePersonLoose(title)) {
     const who = document.createElement('div');
     who.className = 'who';
-    who.textContent = normalizePerson(title); // First Last
+    who.textContent = normalizePerson(title);
 
     const when = document.createElement('div');
     when.className = 'when';
@@ -187,7 +237,6 @@ function eventNode(slot) {
     return node;
   }
 
-  // Generic org/contact
   let orgBold = title, contact = '';
   if (title.includes(',')) {
     orgBold = title.split(',', 1)[0].trim();
@@ -214,16 +263,13 @@ function eventNode(slot) {
 }
 
 // -----------------------------
-// Paging (infinite slide-left)
+// Paging (always slide left)
 // -----------------------------
-function pageify(list, perPage = PER_PAGE) {
+function pageify(list, perPage = 2) {
   const pages = [];
-  for (let i = 0; i < list.length; i += perPage) {
-    pages.push(list.slice(i, i + perPage));
-  }
+  for (let i = 0; i < list.length; i += perPage) pages.push(list.slice(i, i + perPage));
   return pages.length ? pages : [[]];
 }
-
 function buildRoomCard(room, pages) {
   const card = document.createElement('div');
   card.className = 'room';
@@ -254,7 +300,7 @@ function buildRoomCard(room, pages) {
   strip.style.display = 'flex';
   strip.style.gap = '0';
   strip.style.willChange = 'transform';
-  strip.style.transition = 'transform 600ms ease';
+  strip.style.transition = 'transform 650ms cubic-bezier(.22,.61,.36,1)'; // smooth
   strip.style.transform = 'translateX(0)';
 
   pages.forEach(page => {
@@ -263,24 +309,19 @@ function buildRoomCard(room, pages) {
     pageCol.style.display = 'flex';
     pageCol.style.flexDirection = 'column';
     pageCol.style.gap = '10px';
-
     page.forEach(slot => pageCol.appendChild(eventNode(slot)));
     strip.appendChild(pageCol);
   });
 
   viewport.appendChild(strip);
   card.appendChild(viewport);
-
-  // attach infinite-slide handler state
   card._strip = strip;
   card._pages = pages.length;
-
   return card;
 }
-
 function slideLeftOnce(strip) {
   if (!strip || strip.children.length <= 1) return;
-  strip.style.transition = 'transform 600ms ease';
+  strip.style.transition = 'transform 650ms cubic-bezier(.22,.61,.36,1)';
   strip.style.transform = 'translateX(-100%)';
   const handler = () => {
     strip.removeEventListener('transitionend', handler);
@@ -288,7 +329,7 @@ function slideLeftOnce(strip) {
     if (first) strip.appendChild(first);
     strip.style.transition = 'none';
     strip.style.transform = 'translateX(0)';
-    // force reflow
+    // reflow
     // eslint-disable-next-line no-unused-expressions
     strip.offsetHeight;
   };
@@ -296,7 +337,7 @@ function slideLeftOnce(strip) {
 }
 
 // -----------------------------
-// Data prep
+// Dedupe & render
 // -----------------------------
 function dedupeSlots(slots) {
   const seen = new Set();
@@ -304,7 +345,7 @@ function dedupeSlots(slots) {
   for (const s of slots) {
     const t = S(s.title).replace(/[,\s]+$/, '').trim().toLowerCase();
     const sub = S(s.subtitle).trim().toLowerCase();
-    const key = [s.roomId, s.startMin, s.endMin, t, sub].join('|');
+    const key = [s.roomId, s.startMin, s.endMin, t, sub, S(s.org).toLowerCase(), S(s.contact).toLowerCase()].join('|');
     if (seen.has(key)) continue;
     seen.add(key);
     out.push(s);
@@ -312,18 +353,11 @@ function dedupeSlots(slots) {
   return out;
 }
 
-// -----------------------------
-// Render grid from events
-// -----------------------------
 function renderGrid(data) {
   const now = nowMinutesLocal();
-
   let slots = Array.isArray(data.slots) ? data.slots.slice() : [];
-  // drop past
-  slots = slots.filter(s => s.endMin > now);
-  // pickleball cleanup
-  slots = slots.map(s => (isPickleball(s) ? cleanPickleball(s) : s));
-  // dedupe
+  slots = slots.filter(s => s.endMin > now);                 // drop past
+  slots = slots.map(s => (isPickleball(s) ? cleanPickleball(s) : s)); // pickleball cleanup
   slots = dedupeSlots(slots);
 
   // group by room
@@ -337,22 +371,25 @@ function renderGrid(data) {
   }
 
   // clear columns
-  if (els.south) els.south.innerHTML = '';
-  if (els.fieldhouse) els.fieldhouse.innerHTML = '';
-  if (els.north) els.north.innerHTML = '';
+  const south = document.getElementById('southRooms');
+  const fieldhouse = document.getElementById('fieldhouseRooms');
+  const north = document.getElementById('northRooms');
+  if (south) south.innerHTML = '';
+  if (fieldhouse) fieldhouse.innerHTML = '';
+  if (north) north.innerHTML = '';
 
   const rooms = Array.isArray(data.rooms) ? data.rooms : [];
   const roomCards = [];
 
   rooms.forEach(room => {
     const list = byRoom.get(room.id) || [];
-    const pages = pageify(list, PER_PAGE);
+    const pages = pageify(list, 2); // 2 per page to avoid clipping
     const card = buildRoomCard(room, pages);
     roomCards.push(card);
 
-    if (room.group === 'south' && els.south) els.south.appendChild(card);
-    if (room.group === 'fieldhouse' && els.fieldhouse) els.fieldhouse.appendChild(card);
-    if (room.group === 'north' && els.north) els.north.appendChild(card);
+    if (room.group === 'south' && south) south.appendChild(card);
+    if (room.group === 'fieldhouse' && fieldhouse) fieldhouse.appendChild(card);
+    if (room.group === 'north' && north) north.appendChild(card);
   });
 
   // global ticker: slide every strip left
@@ -361,7 +398,7 @@ function renderGrid(data) {
     for (const c of roomCards) {
       if (c._pages > 1) slideLeftOnce(c._strip);
     }
-  }, PAGE_INTERVAL_MS);
+  }, 7000);
 }
 
 // -----------------------------
@@ -384,6 +421,7 @@ async function init() {
     console.error(e);
   }
 
+  // header clock
   renderClock();
   setInterval(renderClock, 1000);
 
