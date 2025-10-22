@@ -21,30 +21,35 @@ function nowMinutesLocal() {
 // -----------------------------
 const S = v => (typeof v === 'string' ? v : '');
 
+// NEW: very clear “Last, First” detector (no digits; letters/accents/hyphen/apostrophe/period/spaces)
+const PERSON_RE = /^\s*[A-Za-zÀ-ÖØ-öø-ÿ'’\-\. ]+,\s*[A-Za-zÀ-ÖØ-öø-ÿ'’\-\. ]+\s*$/u;
+// Words that strongly indicate an org (used lightly; won’t block simple “Last, First” matches)
+const ORG_HINTS = /\b(llc|inc|corp|co|foundation|association|academy|club|basketball|volleyball|training|gym|league|program|rec)\b/i;
+
 function looksLikePersonLoose(s = '') {
-  // Accepts "Last, First [Middle]" with a single comma, no digits.
-  // We *don’t* require strict A–Z only; we allow hyphens/apostrophes/accents.
-  s = s.replace(/[,\s]+$/, '').trim();
+  s = s.trim();
   if (!s || /\d/.test(s)) return false;
+  // If it matches clean “Last, First”, call it a person
+  if (PERSON_RE.test(s)) return true;
+
+  // Fallback: single comma and second half looks like a first-name block, no org hints
   const parts = s.split(',');
-  if (parts.length !== 2) return false;
-  const left = parts[0].trim();
-  const right = parts[1].trim();
-  if (!left || !right) return false;
-  // Token-count sanity (avoid orgs like "Something, Basketball")
-  const leftToks = left.split(/\s+/).filter(Boolean);
-  const rightToks = right.split(/\s+/).filter(Boolean);
-  if (leftToks.length > 2) return false;   // "Van Der Something" still okay-ish (2)
-  if (rightToks.length > 3) return false;  // allow First Middle Last
-  // Heuristic: common org words → not a person
-  if (/(llc|inc|corp|co|foundation|association|academy|club|basketball|volleyball|training|gym|league|program|rec)\b/i.test(s)) {
-    return false;
+  if (parts.length === 2) {
+    const left = parts[0].trim();
+    const right = parts[1].trim();
+    if (left && right && !ORG_HINTS.test(s)) {
+      // Allow 1–3 tokens on right; no digits
+      const rtoks = right.split(/\s+/).filter(Boolean);
+      if (rtoks.length >= 1 && rtoks.length <= 3 && !/\d/.test(right)) {
+        return true;
+      }
+    }
   }
-  return true;
+  return false;
 }
 
 function normalizePerson(s = '') {
-  s = s.replace(/[,\s]+$/, '').trim();
+  s = s.trim();
   const [last, rest] = s.split(',', 2).map(x => x.trim());
   return `${rest} ${last}`.replace(/\s{2,}/g, ' ').trim();
 }
@@ -52,7 +57,7 @@ function normalizePerson(s = '') {
 function normalizeContactName(s = '') {
   if (looksLikePersonLoose(s)) return normalizePerson(s);
   if (s.includes(',')) {
-    // Ambiguous “X, Y” that isn't clearly a person → keep left side (often org)
+    // Ambiguous “X, Y” → keep left side (often org)
     return s.split(',', 1)[0].trim();
   }
   return s.trim();
@@ -62,7 +67,6 @@ function normalizeContactName(s = '') {
 // Special-case text rules
 // -----------------------------
 function cleanCatchCornerDetail(s = '') {
-  // Remove leading "Catch Corner(...)" wrapper and "(Internal Holds)" etc.
   let out = s.replace(/^Catch\s*Corner\s*\(?/i, '')
              .replace(/^CatchCorner\s*\(?/i, '');
   out = out.replace(/\)?\s*$/,'').trim();
@@ -193,7 +197,7 @@ function eventNode(slot) {
 
   const who = document.createElement('div');
   who.className = 'who';
-  who.textContent = normalizeContactName(orgBold); // keep org clean
+  who.textContent = normalizeContactName(orgBold);
 
   const what = document.createElement('div');
   what.className = 'what';
@@ -276,22 +280,17 @@ function buildRoomCard(room, pages) {
 
 function slideLeftOnce(strip) {
   if (!strip || strip.children.length <= 1) return;
-  // animate left
   strip.style.transition = 'transform 600ms ease';
   strip.style.transform = 'translateX(-100%)';
-
-  // On transition end: move first child to end, snap back to 0 without animation
   const handler = () => {
     strip.removeEventListener('transitionend', handler);
     const first = strip.children[0];
     if (first) strip.appendChild(first);
-    // snap back
     strip.style.transition = 'none';
     strip.style.transform = 'translateX(0)';
-    // force reflow so next tick can animate again
+    // force reflow
     // eslint-disable-next-line no-unused-expressions
-    strip.offsetHeight; 
-    // leave transition disabled; next call will set it again
+    strip.offsetHeight;
   };
   strip.addEventListener('transitionend', handler, { once: true });
 }
