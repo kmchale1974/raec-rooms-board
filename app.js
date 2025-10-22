@@ -1,13 +1,13 @@
-// app.js — paging + smooth slide + robust rendering
+// app.js — always slide-left paging + robust rendering
 
 /************ constants ************/
 const CLOCK_INTERVAL_MS = 30_000;
 const REFRESH_MS        = 5 * 60_000;
 const ROTATE_MS         = 8_000;
 
-// Reduce south rooms to 3 items/page to avoid clipping
+// Per-room items per page (tuned for 1080p so nothing clips)
 const PER_PAGE = {
-  south:      3,   // rooms 1–2 (was 4)
+  south:      3,   // rooms 1–2
   fieldhouse: 3,   // rooms 3–8
   north:      4,   // rooms 9–10
 };
@@ -184,21 +184,24 @@ function eventNode(slot){
   }
 }
 
-/************ pagination + animation ************/
+/************ pagination + ALWAYS slide-left animation ************/
 function paginate(arr, per){
   const out = [];
   for (let i=0;i<arr.length;i+=per) out.push(arr.slice(i,i+per));
   return out.length ? out : [[]];
 }
 
-function swapPage(container, newPage, dir='left'){
-  newPage.classList.add('roomPage', dir==='left' ? 'anim-in-left' : 'anim-in-right');
+// Always slide left: new page animates in from right → left, old page exits to left
+function swapPage(container, newPage){
+  newPage.classList.add('roomPage', 'anim-in-left');
   container.appendChild(newPage);
 
-  const old = Array.from(container.children).find(c => c !== newPage && c.classList.contains('roomPage'));
+  const old = Array.from(container.children).find(
+    c => c !== newPage && c.classList.contains('roomPage')
+  );
   if (old){
     old.classList.remove('anim-in-left','anim-in-right','anim-out-left','anim-out-right');
-    old.classList.add(dir==='left' ? 'anim-out-left' : 'anim-out-right');
+    old.classList.add('anim-out-left');
     const done = () => old.remove();
     old.addEventListener('animationend', done, { once:true });
     setTimeout(done, 1200);
@@ -221,15 +224,14 @@ function renderRoomPaged(pager, room, items, perPage, rotateMs){
 
   // first render
   pager.innerHTML = '';
-  swapPage(pager, build(0), 'left');
+  swapPage(pager, build(0)); // always left
 
   if (pager._rot) clearInterval(pager._rot);
   if (pages.length <= 1) return;
 
   pager._rot = setInterval(() => {
-    const prev = idx;
     idx = (idx + 1) % pages.length;
-    swapPage(pager, build(idx), idx > prev ? 'left' : 'right');
+    swapPage(pager, build(idx)); // always left
   }, rotateMs);
 }
 
