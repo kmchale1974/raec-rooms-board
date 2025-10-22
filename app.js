@@ -1,18 +1,18 @@
-// app.js — robust grid with per-room paging + safe pickleball rule
+// app.js — paging + smooth slide + robust rendering
 
 /************ constants ************/
-const CLOCK_INTERVAL_MS = 30_000;     // header clock refresh
-const REFRESH_MS        = 5 * 60_000; // re-poll events.json
-const ROTATE_MS         = 8_000;      // per-room page rotate
+const CLOCK_INTERVAL_MS = 30_000;
+const REFRESH_MS        = 5 * 60_000;
+const ROTATE_MS         = 8_000;
 
-// per-room items per page (so cards don’t clip)
+// Reduce south rooms to 3 items/page to avoid clipping
 const PER_PAGE = {
-  south:      4,   // rooms 1–2
+  south:      3,   // rooms 1–2 (was 4)
   fieldhouse: 3,   // rooms 3–8
   north:      4,   // rooms 9–10
 };
 
-/************ tiny utils ************/
+/************ utils ************/
 const two = n => (n < 10 ? "0" + n : "" + n);
 function fmt12h(mins){
   let h = Math.floor(mins/60), m = mins%60;
@@ -23,7 +23,7 @@ function fmt12h(mins){
 function safeArray(a){ return Array.isArray(a) ? a : []; }
 function isNum(x){ return typeof x === 'number' && Number.isFinite(x); }
 
-/************ name helpers ************/
+/************ names ************/
 function isLikelyOrg(text=""){
   const low = text.toLowerCase();
   return [
@@ -42,21 +42,21 @@ function toFirstLast(t){
   return isPersonName(t) ? t.split(',',2).map(s=>s.trim()).reverse().join(' ') : t;
 }
 
-/************ pickleball + text cleaning ************/
+/************ pickleball ************/
 function isPickleball(slot){
   const low = `${slot?.title||''} ${slot?.subtitle||''}`.toLowerCase();
   return low.includes('pickleball');
 }
 function cleanSubtitle(text=''){
   return text
-    .replace(/internal hold per nm/ig, '')       // strip internal note
+    .replace(/internal hold per nm/ig, '')
     .replace(/raec front desk, rentals - on hold/ig, '')
     .replace(/\s{2,}/g, ' ')
     .replace(/[|]+/g, '')
     .trim();
 }
 
-/************ data loading ************/
+/************ data ************/
 async function loadEvents(){
   const url = `./events.json?ts=${Date.now()}`;
   const r = await fetch(url, { cache:'no-store' });
@@ -66,15 +66,13 @@ async function loadEvents(){
   return data;
 }
 
-/************ filters & grouping ************/
 function filterFutureSlots(slots, nowMin){
   const input = safeArray(slots);
   const out = [];
   for (const s of input){
-    // validate each slot to avoid runtime errors
     if (!s || !s.roomId) continue;
     if (!isNum(s.startMin) || !isNum(s.endMin)) continue;
-    if (s.endMin < nowMin) continue; // drop past
+    if (s.endMin < nowMin) continue;
     out.push(s);
   }
   console.log(`Slots filtered by time: ${input.length} -> ${out.length} (now=${nowMin})`);
@@ -98,7 +96,7 @@ function renderHeader(){
   if (clockEl) clockEl.textContent = d.toLocaleTimeString(undefined,{ hour:'numeric', minute:'2-digit' });
 }
 
-/************ DOM builders ************/
+/************ DOM ************/
 function buildRoomShell(room){
   const el = document.createElement('div');
   el.className = 'room';
@@ -126,7 +124,6 @@ function buildRoomShell(room){
 }
 
 function eventNode(slot){
-  // ultra defensive: never throw here
   try{
     const div = document.createElement('div');
     div.className = 'event';
@@ -149,7 +146,6 @@ function eventNode(slot){
       return div;
     }
 
-    // Normal rendering
     const who = document.createElement('div'); who.className='who';
     const title = slot.title || '';
     if (title.includes(',')){
@@ -188,13 +184,13 @@ function eventNode(slot){
   }
 }
 
+/************ pagination + animation ************/
 function paginate(arr, per){
   const out = [];
   for (let i=0;i<arr.length;i+=per) out.push(arr.slice(i,i+per));
   return out.length ? out : [[]];
 }
 
-/************ page swap (animation class hooks are in CSS) ************/
 function swapPage(container, newPage, dir='left'){
   newPage.classList.add('roomPage', dir==='left' ? 'anim-in-left' : 'anim-in-right');
   container.appendChild(newPage);
@@ -205,11 +201,10 @@ function swapPage(container, newPage, dir='left'){
     old.classList.add(dir==='left' ? 'anim-out-left' : 'anim-out-right');
     const done = () => old.remove();
     old.addEventListener('animationend', done, { once:true });
-    setTimeout(done, 1500);
+    setTimeout(done, 1200);
   }
 }
 
-/************ per-room paging ************/
 function renderRoomPaged(pager, room, items, perPage, rotateMs){
   const countEl = pager.parentElement.querySelector('.count');
   countEl.textContent = items.length ? `${items.length} event${items.length>1?'s':''}` : '';
@@ -228,7 +223,6 @@ function renderRoomPaged(pager, room, items, perPage, rotateMs){
   pager.innerHTML = '';
   swapPage(pager, build(0), 'left');
 
-  // rotate if more than one page
   if (pager._rot) clearInterval(pager._rot);
   if (pages.length <= 1) return;
 
@@ -239,7 +233,7 @@ function renderRoomPaged(pager, room, items, perPage, rotateMs){
   }, rotateMs);
 }
 
-/************ layout mount + render ************/
+/************ layout ************/
 function mountRooms(rooms){
   const south = document.getElementById('southRooms');
   const field = document.getElementById('fieldhouseRooms');
@@ -277,11 +271,9 @@ function renderAll(rooms, slots){
 
 /************ boot ************/
 function init(){
-  // header clock
   renderHeader();
   setInterval(renderHeader, CLOCK_INTERVAL_MS);
 
-  // first load
   loadEvents()
     .then(data => {
       const rooms = safeArray(data.rooms);
@@ -290,7 +282,6 @@ function init(){
     })
     .catch(err => console.error('Init failed:', err));
 
-  // refresh periodically
   setInterval(async () => {
     try{
       const fresh = await loadEvents();
