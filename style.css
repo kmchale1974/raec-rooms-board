@@ -1,88 +1,182 @@
+/* =========================
+   RAEC Rooms Board – Full CSS
+   ========================= */
+
+/* ---- Theme tokens ---- */
 :root{
-  /* add a safe-area variable so it’s easy to tune later */
-  --safe: 40px;        /* try 32–48px if you want more/less */
-  --bg:#0f1115; --panel:#12151c; --ink:#e7eaf1; --muted:#9aa3b2;
-  --accent:#2b87ff; --grid:#1b202a; --now:#ff6b6b;
-  --chip:#2a3140; --chip-text:#e7eaf1;
+  --bg:#0f1115;
+  --panel:#12151c;
+  --ink:#e7eaf1;
+  --muted:#9aa3b2;
+  --accent:#2b87ff;
+  --grid:#1b202a;
+  --chip:#263043;
+  --chip-text:#e7eaf1;
+  --ok:#1f9d6a;
 }
 
-/* Fixed 1920×1080 stage */
+/* ---- Base ---- */
+html,body{
+  margin:0; height:100%;
+  background:var(--bg); color:var(--ink);
+  font-family: Inter, "SF Pro Text", Segoe UI, Roboto, Arial, sans-serif;
+  -webkit-font-smoothing:antialiased; -moz-osx-font-smoothing:grayscale;
+  cursor: none; /* Hide cursor for kiosk */
+}
+
+/* ---- Fixed canvas (scaled by JS) ---- */
 .stage{
-  width:1920px;
-  height:1080px;
-  margin:0 auto;
-  overflow:hidden;
+  width:1920px; height:1080px;
+  padding:36px;               /* generous edge padding to avoid clipping */
+  box-sizing:border-box;
   display:grid;
-  grid-template-rows: 96px 52px 1fr;
-  gap:20px;                   /* a touch more vertical gap */
-  padding: var(--safe);       /* ⬅️ add inner padding all around */
-  box-sizing: border-box;
-  background: var(--bg);
+  grid-template-rows: 120px 1fr;
+  gap:24px;
 }
 
-/* Tabs */
-.tabs{ gap:12px; padding:0 2px; }
-
-/* Board container (left labels + right grid) */
-.board{
+/* ---- Header ---- */
+.header{
   display:grid;
-  grid-template-columns: 180px 1fr;
-  gap:20px;                   /* more space between the two panels */
+  grid-template-columns: 360px 1fr 360px;
+  align-items:center;
+  gap:24px;
+}
+.brand{
+  display:flex; align-items:center; gap:16px;
+}
+.brand img{ height:80px; width:auto; object-fit:contain; }
+
+.dateclock{ justify-self:center; text-align:center; }
+#headerDate{ font-size:44px; font-weight:800; letter-spacing:.02em; }
+#headerClock{ font-size:28px; color:var(--muted); margin-top:6px; font-weight:600; }
+
+.wifi{
+  justify-self:end;
+  background:var(--panel); border:1px solid var(--grid);
+  border-radius:14px; padding:14px 16px; min-width:340px;
+}
+.wifi .title{
+  font-size:16px; color:var(--muted);
+  letter-spacing:.08em; text-transform:uppercase;
+}
+.wifi .row{
+  display:flex; justify-content:space-between; gap:12px; margin-top:6px;
+}
+.wifi .row span:first-child{ color:var(--muted); }
+.wifi .row span:last-child{ font-weight:700; }
+
+/* ---- Three-column board: South | Fieldhouse | North ---- */
+.grid{
+  display:grid;
+  grid-template-columns: 1fr 1.5fr 1fr;
+  gap:24px;
+  height:100%;
+}
+
+/* Group panels */
+.group{
+  background:var(--panel);
+  border:1px solid var(--grid);
+  border-radius:18px;
+  padding:16px;
+  display:grid;
+  grid-template-rows: 44px 1fr;
+  gap:12px;
+  overflow:hidden;
+}
+.group .title{
+  font-size:18px; color:var(--muted);
+  letter-spacing:.1em; text-transform:uppercase;
+  border-bottom:1px solid var(--grid);
+  display:flex; align-items:center;
+  padding-bottom:6px;
+}
+
+/* South/North stacks (1..2) and (9..10) */
+.rooms-stack{
+  display:grid;
+  grid-template-rows: 1fr 1fr;
+  gap:12px;
+  min-height:0; /* allow children to size */
+}
+
+/* Fieldhouse 3..8 = 2 rows × 3 cols */
+.rooms-fieldhouse{
+  display:grid;
+  grid-template-columns: repeat(3, 1fr);
+  grid-template-rows: 1fr 1fr;
+  gap:12px;
   min-height:0;
 }
 
-/* Left column: rooms */
-.rooms{
-  background:var(--panel);
-  border-radius:16px;
-  padding:14px;               /* a touch more inner padding */
-  overflow:hidden;
-  display:grid;
-  grid-template-rows: 40px repeat(10, 1fr);
+/* ---- Room cards ---- */
+.room{
+  border:1px solid var(--grid);
+  border-radius:14px;
+  padding:14px;
+  display:flex; flex-direction:column;
   gap:10px;
-}
-
-/* Right column: timeline/grid wrapper (even if timeline is hidden) */
-.timeline-wrap{
-  background:var(--panel);
-  border-radius:16px;
-  position:relative;
+  min-height:0;     /* so inner pager can flex */
   overflow:hidden;
-  display:grid;
-  grid-template-rows: 40px 1fr;
-  padding: 6px 6px 10px;      /* small inner breathing room */
+  background:linear-gradient(180deg, rgba(255,255,255,0.02), rgba(0,0,0,0));
+}
+.roomHeader{
+  display:flex; align-items:center; justify-content:space-between; gap:12px;
+  border-bottom:1px dashed var(--grid); padding-bottom:8px;
+}
+.roomHeader .id{ font-size:30px; font-weight:800; letter-spacing:.04em; }
+.roomHeader .count{ font-size:13px; color:var(--muted); }
+
+/* ---- Paged events inside a room ---- */
+.eventsPager{
+  position:relative; flex:1 1 auto; min-height:0;
+  overflow:hidden; /* no scrollbars on signage */
 }
 
-/* Grid-only layout from app.js uses this container */
-#grid{
-  padding: 6px;               /* prevents chips from touching edges */
+.page{
+  position:absolute; inset:0;
+  display:flex; flex-direction:column; gap:10px;
+  padding-bottom:10px;         /* keep last chip from clipping */
 }
 
-/* The 3-column grid inside #grid */
-#grid > div{
-  gap: 18px !important;       /* spread the three blocks a bit */
-}
-
-/* Each room cell */
-#grid .room-cell{
+/* Event chip */
+.event{
+  background:var(--chip);
   border:1px solid var(--grid);
   border-radius:12px;
-  padding:12px;               /* a little more space for content */
-  background:rgba(255,255,255,0.01);
+  padding:12px 14px;
+  display:flex; flex-direction:column; gap:6px;
+}
+.event .who{ font-size:20px; font-weight:800; line-height:1.15; }
+.event .what{ font-size:16px; color:var(--muted); line-height:1.2; }
+.event .when{ font-size:15px; color:#b7c0cf; font-weight:600; }
+
+/* Long text wraps (no ellipses; you wanted full details) */
+.who, .what{ word-wrap:break-word; overflow-wrap:anywhere; }
+
+/* ---- Slide-left animation (always left) ---- */
+.page{ transform:translateX(0); }
+.page.slide-in{
+  animation: slideInLeft 400ms ease-out both;
+}
+.page.slide-out{
+  animation: slideOutLeft 400ms ease-in both;
 }
 
-/* Event chips */
-#grid .chip{
-  border-radius:10px;
-  padding:8px 10px;
-  border:1px solid var(--grid);
+@keyframes slideInLeft{
+  from { transform: translateX(100%); opacity:.9; }
+  to   { transform: translateX(0);    opacity:1;  }
+}
+@keyframes slideOutLeft{
+  from { transform: translateX(0);     opacity:1;  }
+  to   { transform: translateX(-100%); opacity:.9; }
 }
 
-/* Header bar */
-.header{
-  background:var(--panel);
-  border-radius:16px;
-  padding: 0 12px;            /* stops content from kissing edges */
+/* ---- Tiny legend (optional) ---- */
+.legend{
+  position:absolute; right:24px; bottom:18px; color:var(--muted); font-size:12px;
 }
-.brand{ left: calc(24px + 4px); }
-.dateclock{ gap:18px; }
+
+/* ---- Safety: never show scrollbars (kiosk aesthetic) ---- */
+*::-webkit-scrollbar{ display:none; }
+*{ scrollbar-width:none; }
