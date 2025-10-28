@@ -1,5 +1,5 @@
-// app.js — one-reservation-per-page everywhere; smoother always-left slide;
-// name rules (first+last), pickleball & Catch Corner cleanup; safer autoscale.
+// app.js — global in-sync pager; top-aligned pages; always-left slide;
+// name rules, pickleball & Catch Corner cleanup; safer autoscale.
 
 // ---------- Time ----------
 function to12h(mins) {
@@ -17,15 +17,12 @@ const ORG_HINTS = [
   'flight','omona','empower','chicago sport','pink elite','catch corner','training',
   'school','rec','soccer','baseball'
 ];
-
 function looksOrg(s) {
   if (!s) return false;
   const lower = s.toLowerCase();
   return ORG_HINTS.some(h => lower.includes(h));
 }
-
 function isSingleToken(s){ return /^[A-Za-z'.-]+$/.test(s||''); }
-
 function isLikelyPersonName(s) {
   if (!s) return false;
   if (looksOrg(s)) return false;
@@ -74,16 +71,13 @@ function ensureStageFit() {
   const STAGE_W = 1920, STAGE_H = 1080;
   const stage = document.querySelector('.stage');
   const viewport = document.querySelector('.viewport');
-
   function fit(){
     if (!stage || !viewport) return;
     const sx = window.innerWidth  / STAGE_W;
     const sy = window.innerHeight / STAGE_H;
-    const s  = Math.min(sx, sy) * 0.965; // slightly smaller than before
-
+    const s  = Math.min(sx, sy) * 0.965;
     stage.style.transform = `scale(${s})`;
     stage.style.transformOrigin = 'top center';
-
     viewport.style.display = 'flex';
     viewport.style.justifyContent = 'center';
     viewport.style.alignItems = 'flex-start';
@@ -198,115 +192,7 @@ function formatDisplay(slot) {
   };
 }
 
-// ---------- Pager (always slide left, smooth) ----------
-function mountPager(container, pages, { intervalMs=8000, startStaggerMs=0 } = {}) {
-  let pageIdx = 0;
-  let running = false;
-
-  container.classList.add('roomPager');
-  container.innerHTML = '';
-
-  const pageEls = pages.map(evs => {
-    const page = document.createElement('div');
-    page.className = 'roomPage';
-    page.style.transform = 'translateX(100%)';
-    page.style.opacity = '0';
-    page.style.transition = 'transform 700ms cubic-bezier(.22,.61,.36,1), opacity 700ms ease';
-    page.appendChild(renderEventsList(evs));
-    container.appendChild(page);
-    return page;
-  });
-
-  function show(i) {
-    const prev = pageEls[pageIdx];
-    const next = pageEls[i];
-
-    if (prev === next) {
-      next.style.transform = 'translateX(0%)';
-      next.style.opacity = '1';
-      pageIdx = i;
-      return;
-    }
-
-    next.style.transition = 'none';
-    next.style.transform = 'translateX(100%)';
-    next.style.opacity = '0';
-    void next.offsetWidth; // reflow
-
-    prev.style.transition = 'transform 700ms cubic-bezier(.22,.61,.36,1), opacity 700ms ease';
-    next.style.transition = 'transform 700ms cubic-bezier(.22,.61,.36,1), opacity 700ms ease';
-
-    prev.style.transform = 'translateX(-100%)';
-    prev.style.opacity = '0';
-
-    next.style.transform = 'translateX(0%)';
-    next.style.opacity = '1';
-
-    pageIdx = i;
-  }
-
-  function tick() {
-    if (!running || pageEls.length <= 1) return;
-    const nextIdx = (pageIdx + 1) % pageEls.length;
-    show(nextIdx);
-  }
-
-  setTimeout(() => {
-    running = true;
-    show(0);
-    if (pageEls.length > 1) setInterval(tick, intervalMs);
-  }, startStaggerMs);
-}
-
-function renderEventsList(events) {
-  const wrap = document.createElement('div');
-  wrap.className = 'eventsPageStack';
-  wrap.style.display = 'flex';
-  wrap.style.flexDirection = 'column';
-  wrap.style.gap = '6px';
-  wrap.style.height = '100%';
-
-  events.forEach(ev => {
-    const { title, subtitle, when } = formatDisplay(ev);
-
-    const card = document.createElement('div');
-    card.className = 'event';
-    card.style.background = 'var(--chip)';
-    card.style.border = '1px solid var(--grid)';
-    card.style.borderRadius = '10px';
-    card.style.padding = '8px 10px';
-    card.style.display = 'flex';
-    card.style.flexDirection = 'column';
-    card.style.gap = '4px';
-    card.style.minHeight = 0;
-
-    const who = document.createElement('div');
-    who.className = 'who';
-    who.textContent = title;
-
-    const what = document.createElement('div');
-    what.className = 'what';
-    what.textContent = subtitle || '';
-
-    const whenEl = document.createElement('div');
-    whenEl.className = 'when';
-    whenEl.textContent = when;
-
-    card.appendChild(who);
-    if (what.textContent) card.appendChild(what);
-    card.appendChild(whenEl);
-    wrap.appendChild(card);
-  });
-
-  // Spacer to keep card off bottom edge
-  const spacer = document.createElement('div');
-  spacer.style.flex = '1 1 auto';
-  wrap.appendChild(spacer);
-
-  return wrap;
-}
-
-// ---------- Rooms shell ----------
+// ---------- Room shells ----------
 function renderRoomsShell() {
   const south = document.getElementById('southRooms');
   const field = document.getElementById('fieldhouseRooms');
@@ -348,6 +234,10 @@ function roomCard(id) {
 
   const pagerHost = document.createElement('div');
   pagerHost.className = 'events';
+  // Explicit top alignment for every room’s content
+  pagerHost.style.display = 'flex';
+  pagerHost.style.alignItems = 'stretch';
+  pagerHost.style.justifyContent = 'flex-start';
 
   card.appendChild(hdr);
   card.appendChild(pagerHost);
@@ -362,14 +252,139 @@ function findRoomCard(id) {
     .find(r => r.querySelector('.roomHeader .id')?.textContent === id) || null;
 }
 
+// ---------- Pages (top aligned, no spacer) ----------
+function renderEventsPage(events) {
+  const wrap = document.createElement('div');
+  wrap.className = 'eventsPageStack';
+  wrap.style.display = 'flex';
+  wrap.style.flexDirection = 'column';
+  wrap.style.gap = '6px';
+  wrap.style.height = '100%';
+  wrap.style.justifyContent = 'flex-start';
+
+  events.forEach(ev => {
+    const { title, subtitle, when } = formatDisplay(ev);
+
+    const card = document.createElement('div');
+    card.className = 'event';
+    card.style.background = 'var(--chip)';
+    card.style.border = '1px solid var(--grid)';
+    card.style.borderRadius = '10px';
+    card.style.padding = '8px 10px';
+    card.style.display = 'flex';
+    card.style.flexDirection = 'column';
+    card.style.gap = '4px';
+    card.style.minHeight = 0;
+
+    const who = document.createElement('div');
+    who.className = 'who';
+    who.textContent = title;
+
+    const what = document.createElement('div');
+    what.className = 'what';
+    what.textContent = subtitle || '';
+
+    const whenEl = document.createElement('div');
+    whenEl.className = 'when';
+    whenEl.textContent = when;
+
+    card.appendChild(who);
+    if (what.textContent) card.appendChild(what);
+    card.appendChild(whenEl);
+    wrap.appendChild(card);
+  });
+
+  return wrap;
+}
+
+// ---------- Global pager bus (in-sync transitions) ----------
+const GLOBAL_PAGERS = [];
+let GLOBAL_TIMER = null;
+
+function registerPager(p) {
+  GLOBAL_PAGERS.push(p);
+}
+function startGlobalPager(intervalMs=8000) {
+  if (GLOBAL_TIMER) { clearInterval(GLOBAL_TIMER); GLOBAL_TIMER = null; }
+  // Show first pages in all rooms together
+  GLOBAL_PAGERS.forEach(p => p.show(0, true));
+  if (GLOBAL_PAGERS.length > 0) {
+    GLOBAL_TIMER = setInterval(() => {
+      GLOBAL_PAGERS.forEach(p => p.next());
+    }, intervalMs);
+  }
+}
+
+function createPager(container, pages) {
+  container.classList.add('roomPager');
+  container.innerHTML = '';
+
+  const pageEls = pages.map(evs => {
+    const page = document.createElement('div');
+    page.className = 'roomPage';
+    page.style.transform = 'translateX(100%)';
+    page.style.opacity = '0';
+    page.style.transition = 'transform 700ms cubic-bezier(.22,.61,.36,1), opacity 700ms ease';
+    page.appendChild(renderEventsPage(evs));
+    container.appendChild(page);
+    return page;
+  });
+
+  let pageIdx = 0;
+
+  function show(i, immediate=false) {
+    if (pageEls.length === 0) return;
+    const prev = pageEls[pageIdx];
+    const next = pageEls[i];
+
+    if (immediate) {
+      pageEls.forEach(el => { el.style.transition = 'none'; el.style.transform = 'translateX(100%)'; el.style.opacity = '0'; });
+      next.style.transition = 'none';
+      next.style.transform = 'translateX(0%)';
+      next.style.opacity = '1';
+      pageIdx = i;
+      return;
+    }
+
+    if (prev === next) {
+      next.style.transform = 'translateX(0%)';
+      next.style.opacity = '1';
+      pageIdx = i;
+      return;
+    }
+
+    next.style.transition = 'none';
+    next.style.transform = 'translateX(100%)';
+    next.style.opacity = '0';
+    void next.offsetWidth; // reflow
+
+    prev.style.transition = 'transform 700ms cubic-bezier(.22,.61,.36,1), opacity 700ms ease';
+    next.style.transition = 'transform 700ms cubic-bezier(.22,.61,.36,1), opacity 700ms ease';
+
+    prev.style.transform = 'translateX(-100%)';
+    prev.style.opacity = '0';
+
+    next.style.transform = 'translateX(0%)';
+    next.style.opacity = '1';
+
+    pageIdx = i;
+  }
+
+  function next() {
+    if (pageEls.length <= 1) return;
+    const i = (pageIdx + 1) % pageEls.length;
+    show(i, false);
+  }
+
+  return { show, next };
+}
+
 function chunk(arr, size) {
   const out = [];
   for (let i=0;i<arr.length;i+=size) out.push(arr.slice(i, i+size));
   return out;
 }
-
-// Always show 1 per page (more vertical room)
-function perPageForRoom(/*id*/) { return 1; }
+function perPageForRoom(/*id*/) { return 1; } // one reservation at a time
 
 // ---------- Init ----------
 async function init() {
@@ -402,8 +417,8 @@ async function init() {
     }
   });
 
-  // Mount pagers
-  let idx = 0;
+  // Build pagers (register for global sync)
+  GLOBAL_PAGERS.length = 0;
   for (const [roomId, arr] of buckets.entries()) {
     const card = findRoomCard(roomId);
     if (!card) continue;
@@ -411,15 +426,14 @@ async function init() {
     arr.sort((a,b) => (a.startMin||0) - (b.startMin||0));
     card._setCount(arr.length);
 
-    const size = perPageForRoom(roomId); // now always 1
+    const size = perPageForRoom(roomId); // 1
     const pages = chunk(arr, size);
-
-    mountPager(card._pagerHost, pages, {
-      intervalMs: 8000,
-      startStaggerMs: (idx % 6) * 350
-    });
-    idx++;
+    const pager = createPager(card._pagerHost, pages);
+    registerPager(pager);
   }
+
+  // Kick off in-sync transitions
+  startGlobalPager(8000);
 }
 
 document.addEventListener('DOMContentLoaded', init);
