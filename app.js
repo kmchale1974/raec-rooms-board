@@ -1,233 +1,314 @@
 // app.js
 
-// ------------ helpers
-const PAD = n => String(n).padStart(2, '0');
-function fmt12h(mins){
-  let h = Math.floor(mins/60), m = mins%60;
+/**************************
+ *  Clock + date header
+ **************************/
+function updateClock() {
+  const now = new Date();
+  const optsDate = { weekday: 'long', month: 'long', day: 'numeric' };
+  const optsTime = { hour: 'numeric', minute: '2-digit' };
+  document.getElementById('headerDate').textContent =
+    now.toLocaleDateString(undefined, optsDate);
+  document.getElementById('headerClock').textContent =
+    now.toLocaleTimeString(undefined, optsTime).toLowerCase();
+}
+setInterval(updateClock, 1000);
+updateClock();
+
+/**************************
+ *  Fetch events.json
+ **************************/
+async function loadEvents() {
+  const url = `./events.json?ts=${Date.now()}`;
+  const resp = await fetch(url, { cache: 'no-store' });
+  if (!resp.ok) throw new Error(`Failed to fetch ${url}: ${resp.status}`);
+  const data = await resp.json();
+  console.log('Loaded events.json', data);
+  return data;
+}
+
+/**************************
+ *  Time helpers
+ **************************/
+const PAD = (n) => String(n).padStart(2, '0');
+function fmt12h(mins) {
+  let h = Math.floor(mins / 60);
+  const m = mins % 60;
   const ampm = h >= 12 ? 'pm' : 'am';
   h = h % 12; if (h === 0) h = 12;
   return `${h}:${PAD(m)}${ampm}`;
 }
-function timeRange(s,e){ return `${fmt12h(s)} - ${fmt12h(e)}`; }
-
-function isNowBetween(startMin, endMin){
-  const dt = new Date();
-  const nowMin = dt.getHours()*60 + dt.getMinutes();
-  return endMin > nowMin; // hide ended events
+function timeRange(s, e) { return `${fmt12h(s)} - ${fmt12h(e)}`; }
+function notEnded(slot) {
+  const now = new Date();
+  const nowMin = now.getHours() * 60 + now.getMinutes();
+  return slot.endMin > nowMin;
 }
 
-// Name & content cleaners
-function titleCaseName(s){
-  // "Vazquez, Isabel" => "Isabel Vazquez"; leave org-like strings alone
-  if (!s) return s;
-  if (s.includes('@')) return s; // email-ish
-  // quick heuristic: one comma and two tokens -> likely a person
-  const parts = s.split(',').map(t=>t.trim()).filter(Boolean);
-  if (parts.length === 2 && parts[0].split(' ').length <= 2 && parts[1].split(' ').length <= 3){
-    return `${parts[1]} ${parts[0]}`;
+/**************************
+ *  Text cleanup rules
+ **************************/
+function isLikelyPersonName(s) {
+  // "Last, First" => person (no @, not too many commas)
+  if (!s) return false;
+  if (s.includes('@')) return false;
+  const parts = s.split(',').map(t => t.trim()).filter(Boolean);
+  if (parts.length !== 2) return false;
+  // Heuristics: short-ish tokens
+  const [last, first] = parts;
+  const bothAlpha = /^[a-z' -]+$/i.test(last) && /^[a-z' -]+$/i.test(first);
+  return bothAlpha && last.split(' ').length <= 2 && first.split(' ').length <= 3;
+}
+
+function normalizeWho(slot) {
+  // Return {whoBold, whoLine2} to render
+  let title = slot.title || '';
+  let subtitle = slot.subtitle || '';
+
+  // Pickleball: always "Open Pickleball"
+  if (/pickleball/i.test(title) || /pickleball/i.test(subtitle)) {
+    const cleaned = subtitle.replace(/internal hold.*$/i, '').trim();
+    return { whoBold: 'Open Pickleball', whoLine2: cleaned || null };
   }
-  return s;
-}
 
-function cleanupPickleball(slot){
-  // If it's a Pickleball internal hold, show "Open Pickleball" only
-  const t = (slot.title||'').toLowerCase();
-  const u = (slot.subtitle||'').toLowerCase();
-  if (t.includes('pickleball') || u.includes('pickleball')){
-    return {
-      ...slot,
-      title: 'Open Pickleball',
-      subtitle: ''
-    };
+  // Catch Corner: normalize
+  if (/catch\s*corner/i.test(title)) {
+    // Bold "Catch Corner"
+    let detail = subtitle || title;
+    // remove "CatchCorner (" wrapper if present
+    detail = detail.replace(/^catch\s*corner\s*\(?\s*/i, '');
+    detail = detail.replace(/^\(+|\)+$/g, '');
+    return { whoBold: 'Catch Corner', whoLine2: detail.trim() || null };
   }
-  return slot;
-}
 
-function cleanupCatchCorner(slot){
-  // "Catch Corner (Internal Holds, ...)" => title "Catch Corner", subtitle stripped inside
-  const t = slot.title || '';
-  if (/^catch\s*corner/i.test(t)){
-    let sub = slot.subtitle || '';
-    // Remove "CatchCorner (" wrapper if present
-    sub = sub.replace(/^CatchCorner\s*\((.*)\)\s*$/i, '$1');
-    // Also strip leading "Internal Holds," or similar if left in title
-    return { ...slot, title: 'Catch Corner', subtitle: sub };
-  }
-  return slot;
-}
-
-function splitOrgContact(rawTitle){
-  // Try to keep org bold and contact below (e.g., "Illinois Flight, Brandon Brown")
-  if (!rawTitle) return { org: '', contact: '' };
-  const m = rawTitle.split(',').map(s=>s.trim());
-  if (m.length >= 2){
-    const org = m[0];
-    const contact = m.slice(1).join(', ');
-    return { org, contact };
-  }
-  return { org: rawTitle, contact: '' };
-}
-
-// If a slot is unsplit for courts 1/2/9/10 (meaning covers whole court), mirror it into A & B
-function expandABSlots(slots){
-  const BOTH = new Set(['1','2','9','10']); // unsplit means both halves
-  const out = [];
-  for (const s of slots){
-    const rid = String(s.roomId);
-    if (BOTH.has(rid)){
-      out.push({ ...s, roomId: `${rid}A` });
-      out.push({ ...s, roomId: `${rid}B` });
-    }else{
-      out.push(s);
+  // Try "Org, Person" form → bold org, line2 person + (optional purpose)
+  const parts = title.split(',').map(t => t.trim()).filter(Boolean);
+  if (parts.length === 2 && !isLikelyPersonName(title)) {
+    const org = parts[0];
+    const maybePerson = parts[1];
+    // If looks like a person name (has space and alphabetic), separate lines
+    if (/\b[a-z]+\s+[a-z]+\b/i.test(maybePerson)) {
+      const line2 = subtitle ? `${maybePerson} — ${subtitle}` : maybePerson;
+      return { whoBold: org, whoLine2: line2 };
     }
   }
-  return out;
+
+  // "Last, First" → "First Last"
+  if (isLikelyPersonName(title)) {
+    const [last, first] = title.split(',').map(s => s.trim());
+    const person = `${first} ${last}`;
+    return { whoBold: person, whoLine2: subtitle || null };
+  }
+
+  // default: bold title; subtitle as line2 if present
+  return { whoBold: title, whoLine2: subtitle || null };
 }
 
-// Keep only current/future events and apply cleanup rules
-function normalizeSlots(slots){
-  return expandABSlots(slots)
-    .filter(s => isNowBetween(s.startMin, s.endMin))
-    .map(s => cleanupPickleball(s))
-    .map(s => cleanupCatchCorner(s))
-    .map(s => {
-      // Derive org/contact if missing
-      const base = splitOrgContact(s.title || '');
-      let org = s.org || base.org || '';
-      let contact = s.contact || base.contact || '';
+/**************************
+ *  Room layout
+ *  We explicitly render tiles for:
+ *   South: 1A,1B,2A,2B (1 event each)
+ *   Fieldhouse: 3,4,5,6,7,8 (2 events/pager)
+ *   North: 9A,9B,10A,10B (1 event each)
+ **************************/
+const SOUTH_TILES = ['1A','1B','2A','2B'];
+const FIELD_TILES = ['3','4','5','6','7','8'];
+const NORTH_TILES = ['9A','9B','10A','10B'];
 
-      // If org looks like a person ("Last, First"), convert to "First Last"
-      const tcOrg = titleCaseName(org);
-      // If contact exists and is a person "Last, First", convert
-      const tcContact = titleCaseName(contact);
+function numericRoomId(tileId) {
+  // "1A" -> 1 ; "3" -> 3
+  const n = parseInt(tileId, 10);
+  return isNaN(n) ? null : n;
+}
 
-      return { ...s, org: tcOrg, contact: tcContact };
+/**************************
+ *  Slot distribution
+ *  - Data slot.roomId is numeric (1..10) → mirror to A/B where needed
+ *  - Hide ended
+ *  - De-duplicate exact duplicates within same room/time/title/subtitle
+ **************************/
+function distributeSlots(rawSlots) {
+  const active = rawSlots.filter(notEnded);
+
+  // Build per-tile list
+  const perTile = {};
+  const push = (tile, s) => {
+    (perTile[tile] ||= []).push(s);
+  };
+
+  for (const s of active) {
+    const r = String(s.roomId);
+    // South/North mirror into A/B
+    if (['1','2','9','10'].includes(r)) {
+      push(`${r}A`, s);
+      push(`${r}B`, s);
+    } else {
+      // Fieldhouse numeric 3..8
+      push(r, s);
+    }
+  }
+
+  // De-dup within each tile
+  for (const key of Object.keys(perTile)) {
+    const seen = new Set();
+    perTile[key] = perTile[key].filter(sl => {
+      const k = `${sl.startMin}|${sl.endMin}|${(sl.title||'').toLowerCase()}|${(sl.subtitle||'').toLowerCase()}`;
+      if (seen.has(k)) return false;
+      seen.add(k);
+      return true;
     });
-}
-
-// Group rooms for rendering
-const SOUTH_ROOMS = ['1A','1B','2A','2B'];
-const NORTH_ROOMS = ['9A','9B','10A','10B'];
-const FIELD_ROOMS = ['3','4','5','6','7','8'];
-
-function roomGroup(roomId){
-  if (SOUTH_ROOMS.includes(roomId)) return 'south';
-  if (NORTH_ROOMS.includes(roomId)) return 'north';
-  if (FIELD_ROOMS.includes(roomId)) return 'fieldhouse';
-  return 'unknown';
-}
-
-// ------------ rendering
-function el(tag, cls, text){
-  const e = document.createElement(tag);
-  if (cls) e.className = cls;
-  if (text != null) e.textContent = text;
-  return e;
-}
-
-function renderHeaderClock(){
-  const dEl = document.getElementById('headerDate');
-  const cEl = document.getElementById('headerClock');
-  function tick(){
-    const now = new Date();
-    const optsD = { weekday:'long', month:'long', day:'numeric' };
-    dEl.textContent = now.toLocaleDateString(undefined, optsD);
-    const hh = now.getHours(), mm = now.getMinutes();
-    const ampm = hh >= 12 ? 'PM' : 'AM';
-    let h12 = hh % 12; if (h12 === 0) h12 = 12;
-    cEl.textContent = `${h12}:${PAD(mm)} ${ampm}`;
-  }
-  tick();
-  setInterval(tick, 1000*10);
-}
-
-function makeRoomCard(roomId, events){
-  const card = el('div','room');
-  const hdr = el('div','roomHeader');
-  hdr.append(el('div','id', roomId));
-  hdr.append(el('div','count', events.length ? `${events.length} event${events.length>1?'s':''}` : ''));
-  card.append(hdr);
-
-  const list = el('div','events');
-
-  // show up to TWO events per tile
-  const toShow = events.slice(0,2);
-  toShow.forEach(s => {
-    const item = el('div','event');
-    // Bold org (or title fallback), then regular line for contact/purpose, then time
-    const who = el('div','who', s.org || s.title || '—');
-    const whatBits = [];
-    if (s.contact && s.contact !== s.org) whatBits.push(s.contact);
-    if (s.subtitle) whatBits.push(s.subtitle);
-    const what = el('div','what', whatBits.join(' • '));
-    const when = el('div','when', timeRange(s.startMin, s.endMin));
-    item.append(who);
-    if (what.textContent) item.append(what);
-    item.append(when);
-    list.append(item);
-  });
-
-  if (events.length > 2){
-    list.append(el('div','more', `+${events.length-2} more`));
   }
 
-  card.append(list);
-  return card;
+  return perTile;
 }
 
-function renderGrid(data){
-  const southWrap = document.getElementById('southRooms');
-  const northWrap = document.getElementById('northRooms');
-  const fieldWrap = document.getElementById('fieldhouseRooms');
-  southWrap.innerHTML = ''; northWrap.innerHTML = ''; fieldWrap.innerHTML = '';
+/**************************
+ *  DOM builders
+ **************************/
+function el(tag, cls, text) {
+  const n = document.createElement(tag);
+  if (cls) n.className = cls;
+  if (text != null) n.textContent = text;
+  return n;
+}
 
-  const slots = normalizeSlots(Array.isArray(data.slots) ? data.slots : []);
-  const byRoom = new Map();
-  const allRooms = [...SOUTH_ROOMS, ...FIELD_ROOMS, ...NORTH_ROOMS];
-  allRooms.forEach(id => byRoom.set(id, []));
+function renderRoomTile(container, tileId, slots, maxPerPage) {
+  // wrapper
+  const room = el('div', 'room');
+  const header = el('div', 'roomHeader');
+  const id = el('div', 'id', tileId);
+  const count = el('div', 'count');
+  header.append(id, count);
+  room.appendChild(header);
 
-  for (const s of slots){
-    const id = String(s.roomId);
-    if (!byRoom.has(id)) byRoom.set(id, []);
-    byRoom.get(id).push(s);
+  // events pager container
+  const eventsWrap = el('div', 'events');
+  room.appendChild(eventsWrap);
+
+  // sort by start time
+  const sorted = (slots || []).slice().sort((a,b)=>a.startMin - b.startMin);
+
+  // chunk into pages
+  const pages = [];
+  for (let i=0; i<sorted.length; i+=maxPerPage) {
+    pages.push(sorted.slice(i, i+maxPerPage));
+  }
+  if (pages.length === 0) pages.push([]);
+
+  count.textContent = pages[0].length ? `${sorted.length} event${sorted.length>1?'s':''}` : 'No events';
+
+  // build slides
+  const slides = pages.map(pageItems => {
+    const slide = el('div', 'slide');
+    slide.style.minHeight = '0';
+    slide.style.display = 'flex';
+    slide.style.flexDirection = 'column';
+    slide.style.gap = '8px';
+
+    pageItems.forEach(slot => {
+      const { whoBold, whoLine2 } = normalizeWho(slot);
+      const card = el('div', 'event');
+      const who = el('div', 'who', whoBold || '—');
+      const what = el('div', 'what', whoLine2 || '');
+      const when = el('div', 'when', timeRange(slot.startMin, slot.endMin));
+      card.append(who);
+      if (whoLine2) card.append(what);
+      card.append(when);
+      slide.appendChild(card);
+    });
+    return slide;
+  });
+
+  // mount first slide
+  if (slides[0]) eventsWrap.appendChild(slides[0]);
+
+  // paginate with left-slide if more than 1 page
+  if (slides.length > 1) {
+    let ix = 0;
+    const INTERVAL = 7000; // 7s
+    const TRANS = 450;     // 0.45s
+
+    eventsWrap.style.position = 'relative';
+    eventsWrap.style.overflow = 'hidden';
+
+    function show(next) {
+      const currEl = eventsWrap.firstElementChild;
+      const nextEl = slides[next];
+
+      // position next off-screen right
+      nextEl.style.position = 'absolute';
+      nextEl.style.inset = '0';
+      nextEl.style.transform = 'translateX(100%)';
+      nextEl.style.transition = `transform ${TRANS}ms ease`;
+      eventsWrap.appendChild(nextEl);
+
+      // animate: current left, next in
+      requestAnimationFrame(() => {
+        if (currEl) {
+          currEl.style.position = 'absolute';
+          currEl.style.inset = '0';
+          currEl.style.transition = `transform ${TRANS}ms ease`;
+          currEl.style.transform = 'translateX(-100%)';
+        }
+        nextEl.style.transform = 'translateX(0%)';
+      });
+
+      setTimeout(() => {
+        if (currEl) eventsWrap.removeChild(currEl);
+      }, TRANS + 40);
+    }
+
+    setInterval(() => {
+      const curr = ix;
+      const next = (ix + 1) % slides.length;
+      ix = next;
+      show(next);
+    }, INTERVAL);
   }
 
-  // Sort events in each room by start time
-  for (const [id, arr] of byRoom) arr.sort((a,b)=>a.startMin-b.startMin);
-
-  // South
-  SOUTH_ROOMS.forEach(id => {
-    southWrap.append( makeRoomCard(id, byRoom.get(id) || []) );
-  });
-  // Fieldhouse 3..8 laid out 3 columns x 2 rows
-  FIELD_ROOMS.forEach(id => {
-    fieldWrap.append( makeRoomCard(id, byRoom.get(id) || []) );
-  });
-  // North
-  NORTH_ROOMS.forEach(id => {
-    northWrap.append( makeRoomCard(id, byRoom.get(id) || []) );
-  });
+  container.appendChild(room);
 }
 
-// ------------ data load & init
-async function loadData(){
-  const url = `./events.json?ts=${Date.now()}`;
-  const resp = await fetch(url, { cache:'no-store' });
-  if (!resp.ok) throw new Error(`Failed to fetch events.json: ${resp.status}`);
-  return resp.json();
+/**************************
+ *  Render whole board
+ **************************/
+function renderBoard(data) {
+  const south = document.getElementById('southRooms');
+  const fieldhouse = document.getElementById('fieldhouseRooms');
+  const north = document.getElementById('northRooms');
+  south.innerHTML = fieldhouse.innerHTML = north.innerHTML = '';
+
+  // Distribute
+  const perTile = distributeSlots(Array.isArray(data.slots) ? data.slots : []);
+
+  // South (1A,1B,2A,2B) — 1 event per tile
+  for (const t of SOUTH_TILES) {
+    renderRoomTile(south, t, perTile[t] || [], 1);
+  }
+
+  // Fieldhouse (3..8) — 2 events per tile
+  for (const t of FIELD_TILES) {
+    renderRoomTile(fieldhouse, t, perTile[t] || [], 2);
+  }
+
+  // North (9A,9B,10A,10B) — 1 event per tile
+  for (const t of NORTH_TILES) {
+    renderRoomTile(north, t, perTile[t] || [], 1);
+  }
 }
 
-async function init(){
-  renderHeaderClock();
-  try{
-    const data = await loadData();
-    console.log('Loaded events.json', data);
-    renderGrid(data);
-  }catch(err){
-    console.error(err);
+/**************************
+ *  Init + auto-refresh
+ **************************/
+async function init() {
+  try {
+    const data = await loadEvents();
+    renderBoard(data);
+  } catch (e) {
+    console.error('Init failed:', e);
   }
 }
 document.addEventListener('DOMContentLoaded', init);
 
-// Optional: refresh the board every 5 minutes
-setInterval(()=>init(), 5*60*1000);
+// Refresh from disk every 60 seconds so ended events fall off
+setInterval(init, 60_000);
