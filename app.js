@@ -1,387 +1,516 @@
-// app.js
+// app.js — smooth slide-left paging + name formatting + pickleball rule
 
-/*********************
- * Clock + date
- *********************/
-function updateClock() {
-  const now = new Date();
-  const dateFmt = { weekday: 'long', month: 'long', day: 'numeric' };
-  const timeFmt = { hour: 'numeric', minute: '2-digit' };
-  const d = document.getElementById('headerDate');
-  const t = document.getElementById('headerClock');
-  if (d) d.textContent = now.toLocaleDateString(undefined, dateFmt);
-  if (t) t.textContent = now.toLocaleTimeString(undefined, timeFmt).toLowerCase();
+/* =========================
+   0) Utilities
+========================= */
+
+// 12-hour time
+function to12h(mins) {
+  const h = Math.floor(mins / 60);
+  const m = mins % 60;
+  const ampm = h >= 12 ? 'pm' : 'am';
+  let hh = h % 12;
+  if (hh === 0) hh = 12;
+  return `${hh}:${m.toString().padStart(2, '0')}${ampm}`;
 }
-setInterval(updateClock, 1000);
-updateClock();
 
-/*********************
- * Fetch events.json
- *********************/
-async function loadEvents() {
+// Person-name detection & formatting
+// Heuristics:
+// - If `org` exists and isn't same as `contact`, treat `org` as bold line.
+// - If `contact` looks like "Last, First" or two simple tokens, show "First Last" as secondary.
+// - If there’s no org, but `title` looks like "Last, First", flip to "First Last" as the title.
+function isLikelyPersonName(s) {
+  if (!s) return false;
+  // Ignore obvious org hints
+  const orgHints = ['club', 'athletic', 'athletics', 'basketball', 'volleyball', 'elite', 'academy', 'flight', 'omona', 'empower', 'chicago sport', 'pink elite', 'catch corner'];
+  const lower = s.toLowerCase();
+  if (orgHints.some(h => lower.includes(h))) return false;
+
+  // Comma form "Last, First"
+  if (s.includes(',')) {
+    const parts = s.split(',').map(x => x.trim()).filter(Boolean);
+    if (parts.length === 2 && /^[A-Za-z'.-]+$/.test(parts[0]) && /^[A-Za-z'.-]+(?: [A-Za-z'.-]+)*$/.test(parts[1])) {
+      return true;
+    }
+  }
+  // Two tokens
+  const tokens = s.split(/\s+/).filter(Boolean);
+  if (tokens.length === 2 && tokens.every(t => /^[A-Za-z'.-]+$/.test(t))) return true;
+
+  return false;
+}
+function flipName(lastCommaFirst) {
+  const [last, first] = lastCommaFirst.split(',').map(s => s.trim());
+  if (first && last) return `${first} ${last}`;
+  return lastCommaFirst;
+}
+
+// “Open Pickleball” rule
+function formatPickleball(slot) {
+  // If anything screams “pickleball” or the RAEC hold that stands for it, normalize:
+  const t = `${slot.title || ''} ${slot.subtitle || ''}`.toLowerCase();
+  if (
+    t.includes('pickleball') ||
+    (slot.title || '').includes('RAEC Front Desk, Rentals - On Hold') ||
+    (slot.subtitle || '').toLowerCase().includes('open pickleball')
+  ) {
+    return { title: 'Open Pickleball', subtitle: '' };
+  }
+  return null;
+}
+
+/* =========================
+   1) Data loading
+========================= */
+
+async function loadData() {
   const url = `./events.json?ts=${Date.now()}`;
   const resp = await fetch(url, { cache: 'no-store' });
-  if (!resp.ok) throw new Error(`Failed to fetch ${url}: ${resp.status}`);
+  if (!resp.ok) throw new Error(`Failed to fetch events.json: ${resp.status} ${resp.statusText}`);
   const data = await resp.json();
   console.log('Loaded events.json', data);
   return data;
 }
 
-/*********************
- * Time helpers
- *********************/
-const PAD = n => String(n).padStart(2, '0');
-function fmt12h(mins) {
-  let h = Math.floor(mins / 60);
-  const m = mins % 60;
-  const ampm = h >= 12 ? 'pm' : 'am';
-  h = h % 12; if (h === 0) h = 12;
-  return `${h}:${PAD(m)}${ampm}`;
-}
-function timeRange(s, e) { return `${fmt12h(s)} - ${fmt12h(e)}`; }
-function notEnded(slot) {
-  const now = new Date();
-  const nowMin = now.getHours() * 60 + now.getMinutes();
-  return slot.endMin > nowMin;
-}
+/* =========================
+   2) Rendering helpers
+========================= */
 
-/*********************
- * Text rules
- *********************/
-const NAME_RX = /^[a-z' -]+$/i;
-function toFirstLast(last, first) {
-  const L = (last || '').trim();
-  const F = (first || '').trim();
-  return F && L ? `${F} ${L}` : (F || L || '');
+function ensureStageFit() {
+  // We keep your fixed 1920x1080 in index.html; this centers and scales without clipping.
+  const STAGE_W = 1920, STAGE_H = 1080;
+  function fit() {
+    const sx = window.innerWidth / STAGE_W;
+    const sy = window.innerHeight / STAGE_H;
+    const s = Math.min(sx, sy);
+    const stage = document.querySelector('.stage');
+    if (!stage) return;
+    stage.style.transform = `scale(${s})`;
+    stage.style.transformOrigin = 'top center';
+    document.body.style.minHeight = (STAGE_H * s) + 'px';
+    document.documentElement.style.setProperty('--stage-scale', s.toString());
+  }
+  window.addEventListener('resize', fit);
+  window.addEventListener('orientationchange', fit);
+  fit();
 }
 
-function cleanSubtitle(sub) {
-  if (!sub) return '';
-  let s = sub;
-  // remove “Internal Hold …”
-  s = s.replace(/\binternal hold.*$/i, '').trim();
-  // remove duplicated “Open Pickleball …”
-  s = s.replace(/\bopen\s+pickleball\b.*$/i, '').trim();
-  // trim punctuation
-  s = s.replace(/^[\-\–—:,.\s]+|[\-\–—:,.\s]+$/g, '');
-  return s;
+function headerClock() {
+  const dateEl = document.getElementById('headerDate');
+  const clockEl = document.getElementById('headerClock');
+  function tick() {
+    const now = new Date();
+    const dateFmt = now.toLocaleDateString(undefined, { weekday: 'long', month: 'long', day: 'numeric' });
+    let hours = now.getHours();
+    const minutes = now.getMinutes().toString().padStart(2, '0');
+    const ampm = hours >= 12 ? 'pm' : 'am';
+    hours = hours % 12; if (hours === 0) hours = 12;
+    if (dateEl) dateEl.textContent = dateFmt;
+    if (clockEl) clockEl.textContent = `${hours}:${minutes}${ampm}`;
+  }
+  tick();
+  setInterval(tick, 1000);
 }
 
-// Title parser for raw “X, Y”
-function parseTitleRaw(titleRaw) {
-  const title = (titleRaw || '').trim();
-  const parts = title.split(',').map(s => s.trim()).filter(Boolean);
-  if (parts.length !== 2) {
-    return { org: title || null, contact: null, isPerson: false, isOrgPerson: false };
-  }
-  const left = parts[0];      // could be Last OR Org
-  const right = parts[1];     // could be First OR Contact
-  const leftWords = left.split(/\s+/).filter(Boolean).length;
-  const rightWords = right.split(/\s+/).filter(Boolean).length;
+/* =========================
+   3) Slot formatting (names/orgs/pickleball)
+========================= */
 
-  const leftIsNamey = NAME_RX.test(left);
-  const rightIsNamey = NAME_RX.test(right);
-
-  const looksPerson = (leftWords === 1 && rightIsNamey && rightWords >= 1 && rightWords <= 3);
-  const looksOrgPerson = (leftWords >= 2 && rightIsNamey && rightWords >= 1 && rightWords <= 3);
-
-  if (looksPerson) {
-    return { org: null, contact: toFirstLast(left, right), isPerson: true, isOrgPerson: false };
-  }
-  if (looksOrgPerson) {
-    return { org: left, contact: right, isPerson: false, isOrgPerson: true };
-  }
-  return { org: title || null, contact: null, isPerson: false, isOrgPerson: false };
-}
-
-/**
- * normalizeWho(slot):
- * - Honors backend-provided slot.org/slot.contact if present (best signal)
- * - Pickleball rule
- * - Catch Corner rule
- * - Fallback to raw-title parsing
- */
-function normalizeWho(slot) {
-  const title = slot.title || '';
-  const subtitle = slot.subtitle || '';
-  const lowerTitle = title.toLowerCase();
-  const lowerSub = subtitle.toLowerCase();
-
-  // 1) Pickleball
-  if (lowerTitle.includes('pickleball') || lowerSub.includes('pickleball')) {
-    const line2 = cleanSubtitle(subtitle);
-    return { whoBold: 'Open Pickleball', whoLine2: line2 || null };
+function formatDisplay(slot) {
+  // Pickleball override
+  const pb = formatPickleball(slot);
+  if (pb) {
+    return {
+      title: pb.title,
+      subtitle: pb.subtitle,
+      when: `${to12h(slot.startMin)}–${to12h(slot.endMin)}`
+    };
   }
 
-  // 2) Catch Corner
-  if (/catch\s*corner/i.test(title)) {
-    let detail = subtitle || title;
-    detail = detail.replace(/^catch\s*corner\s*\(?\s*/i, '');
-    detail = detail.replace(/^\(+|\)+$/g, '');
-    detail = cleanSubtitle(detail);
-    return { whoBold: 'Catch Corner', whoLine2: detail || null };
-  }
+  // Prefer structured org/contact if present (your transform script often sets these)
+  let org = slot.org?.trim() || '';
+  let contact = slot.contact?.trim() || '';
+  let title = slot.title?.trim() || '';
+  let subtitle = slot.subtitle?.trim() || '';
 
-  // 3) Prefer explicit fields from transform (if present)
-  // Cases:
-  //   A) org + contact  -> bold org, line2 "Contact — subtitle?"
-  //   B) contact only   -> bold First Last (if title looked like "Last, First"; else contact), line2 subtitle
-  //   C) org only       -> bold org, line2 subtitle
-  if (slot.org && slot.contact) {
-    // If org seems like a person (rare), still present org on top per your preference.
-    const line2Sub = cleanSubtitle(subtitle);
-    const line2 = line2Sub ? `${slot.contact} — ${line2Sub}` : slot.contact;
-    return { whoBold: slot.org, whoLine2: line2 };
-  }
-  if (slot.contact && !slot.org) {
-    // If title was “Last, First”, make sure we show “First Last”
-    const parsed = parseTitleRaw(title);
-    const personName = parsed.isPerson ? parsed.contact : slot.contact;
-    const line2 = cleanSubtitle(subtitle);
-    return { whoBold: personName || slot.contact, whoLine2: line2 || null };
-  }
-  if (slot.org && !slot.contact) {
-    const line2 = cleanSubtitle(subtitle);
-    return { whoBold: slot.org, whoLine2: line2 || null };
-  }
-
-  // 4) Fallback to parsing the raw title
-  const parsed = parseTitleRaw(title);
-  if (parsed.isPerson) {
-    const line2 = cleanSubtitle(subtitle);
-    return { whoBold: parsed.contact, whoLine2: line2 || null };
-  }
-  if (parsed.isOrgPerson) {
-    const line2Sub = cleanSubtitle(subtitle);
-    const line2 = line2Sub ? `${parsed.contact} — ${line2Sub}` : parsed.contact;
-    return { whoBold: parsed.org, whoLine2: line2 };
-  }
-  const line2 = cleanSubtitle(subtitle);
-  return { whoBold: parsed.org || title || '—', whoLine2: line2 || null };
-}
-
-/*********************
- * Layout + buckets
- *********************/
-const SOUTH_TILES = ['1A','1B','2A','2B'];
-const FIELD_TILES = ['3','4','5','6','7','8'];
-const NORTH_TILES = ['9A','9B','10A','10B'];
-
-function distributeSlots(rawSlots) {
-  const active = (rawSlots || []).filter(notEnded);
-  const perTile = {};
-  const put = (tile, s) => { (perTile[tile] ||= []).push(s); };
-
-  for (const s of active) {
-    const r = String(s.roomId);
-    if (['1','2','9','10'].includes(r)) {
-      put(`${r}A`, s);
-      put(`${r}B`, s);
-    } else {
-      put(r, s); // fieldhouse numeric tiles
+  // If we don’t have org/contact, try to parse title like “Org, Person” or “Last, First”
+  if (!org && !contact && title.includes(',')) {
+    const parts = title.split(',').map(s => s.trim()).filter(Boolean);
+    if (parts.length >= 2) {
+      // Heuristic: first part more “org-like”, second part “person-like”
+      if (!isLikelyPersonName(parts[0]) && isLikelyPersonName(parts[1])) {
+        org = parts[0];
+        contact = parts.slice(1).join(', ');
+      } else if (isLikelyPersonName(parts[0])) {
+        // Person only
+        contact = parts.join(', ');
+      } else {
+        // Fallback: keep original
+      }
     }
   }
 
-  // de-dupe within each tile
-  for (const k of Object.keys(perTile)) {
-    const seen = new Set();
-    perTile[k] = perTile[k].filter(sl => {
-      const key = `${sl.startMin}|${sl.endMin}|${(sl.title||'').toLowerCase()}|${(sl.subtitle||'').toLowerCase()}|${(sl.org||'').toLowerCase()}|${(sl.contact||'').toLowerCase()}`;
-      if (seen.has(key)) return false;
-      seen.add(key);
-      return true;
-    });
+  // If contact is like "Last, First" → flip
+  if (contact && contact.includes(',') && isLikelyPersonName(contact)) {
+    contact = flipName(contact);
   }
 
-  return perTile;
-}
-
-/*********************
- * DOM helper
- *********************/
-function el(tag, cls, text) {
-  const n = document.createElement(tag);
-  if (cls) n.className = cls;
-  if (text != null) n.textContent = text;
-  return n;
-}
-
-/*********************
- * Smooth left-slide pager
- *********************/
-/**
- * Mounts slides and animates *always left* with a smoother feel:
- * - Uses translate3d for GPU
- * - Sets both slides to absolute, forces reflow, then animates
- * - Easing tuned for smoothness
- */
-function runPager(eventsWrap, slides, intervalMs = 8000, transMs = 600) {
-  if (slides.length <= 1) {
-    // Single (or none): just ensure the one slide is in normal flow
-    if (slides[0] && !eventsWrap.contains(slides[0])) eventsWrap.appendChild(slides[0]);
-    return;
+  // If the “org” looks like a person and isn’t a known team, treat as person-only
+  if (org && isLikelyPersonName(org)) {
+    if (org.includes(',')) org = flipName(org);
+    if (!contact) { // person only
+      title = org;
+      org = '';
+    }
   }
 
-  // Ensure container is a viewport
-  eventsWrap.style.position = 'relative';
-  eventsWrap.style.overflow = 'hidden';
+  // If org exists and is different from contact, bold org + contact normal; else just bold title/name
+  let top = '', mid = '';
+  if (org) {
+    top = org;
+    mid = contact || subtitle || '';
+  } else if (title) {
+    // If title itself is a name like “Last, First”, flip it
+    if (title.includes(',') && isLikelyPersonName(title)) {
+      title = flipName(title);
+    }
+    top = title;
+    mid = subtitle || contact || '';
+  } else {
+    top = contact || subtitle || '—';
+  }
 
-  // Start with first slide in normal flow
-  let curr = slides[0];
-  if (!eventsWrap.contains(curr)) eventsWrap.appendChild(curr);
+  // Tidy Catch Corner rule: “Catch Corner” bold; rest (without “Internal Holds”) as subtitle
+  if (top.toLowerCase().includes('catch corner')) {
+    top = 'Catch Corner';
+    mid = (mid || subtitle || '').replace(/\binternal holds?\b/ig, '').trim();
+    mid = mid.replace(/^\s*[-–,:]\s*/, '').trim();
+  }
 
-  function slideLeft(next) {
-    const nextEl = slides[next];
+  return {
+    title: top,
+    subtitle: mid,
+    when: `${to12h(slot.startMin)}–${to12h(slot.endMin)}`
+  };
+}
 
-    // Prepare both slides
-    // Current: make absolute at 0
-    curr.style.position = 'absolute';
-    curr.style.inset = '0';
-    curr.style.transform = 'translate3d(0,0,0)';
-    curr.style.willChange = 'transform';
+/* =========================
+   4) Paging (always slide left)
+========================= */
 
-    // Next: start off-screen right
-    nextEl.style.position = 'absolute';
-    nextEl.style.inset = '0';
-    nextEl.style.transform = 'translate3d(100%,0,0)';
-    nextEl.style.willChange = 'transform';
-    eventsWrap.appendChild(nextEl);
+// Creates a pager inside a room cell.
+// pages: array of arrays, each inner array is the events to show on that page.
+// opts = { intervalMs, startStaggerMs }
+function mountPager(container, pages, opts = {}) {
+  const interval = opts.intervalMs ?? 8000;   // 8s per page
+  const stagger  = opts.startStaggerMs ?? 0;  // per-room stagger
+  let pageIdx = 0;
+  let running = false;
 
-    // Force reflow before animating
-    // eslint-disable-next-line no-unused-expressions
-    nextEl.offsetHeight;
+  container.classList.add('roomPager');
+  container.innerHTML = ''; // clean
+
+  // Create page elements
+  const pageEls = pages.map((evs, i) => {
+    const page = document.createElement('div');
+    page.className = 'roomPage';
+    // initial offscreen to the right
+    page.style.transform = 'translateX(100%)';
+    page.style.opacity = '0';
+    page.style.transition = 'transform 600ms ease, opacity 600ms ease';
+
+    // render events into this page
+    page.appendChild(renderEventsList(evs));
+    container.appendChild(page);
+    return page;
+  });
+
+  function show(i, directionLeftAlways = true) {
+    // Always slide left: old page -> translateX(-100%), new page starts at +100% -> 0
+    const prev = pageEls[pageIdx];
+    const next = pageEls[i];
+
+    if (prev === next) {
+      // First paint: bring in from right
+      next.style.transform = 'translateX(0%)';
+      next.style.opacity = '1';
+      pageIdx = i;
+      return;
+    }
+
+    // Move next to right instantly (prep), then animate in
+    next.style.transition = 'none';
+    next.style.transform = 'translateX(100%)';
+    next.style.opacity = '0';
+    // Force reflow to apply the “none” transform before animating
+    void next.offsetWidth;
 
     // Animate both
-    const ease = 'cubic-bezier(.22,.61,.36,1)';
-    curr.style.transition = `transform ${transMs}ms ${ease}`;
-    nextEl.style.transition = `transform ${transMs}ms ${ease}`;
+    prev.style.transition = 'transform 600ms ease, opacity 600ms ease';
+    next.style.transition = 'transform 600ms ease, opacity 600ms ease';
 
-    requestAnimationFrame(() => {
-      curr.style.transform = 'translate3d(-100%,0,0)';
-      nextEl.style.transform = 'translate3d(0,0,0)';
-    });
+    // old page slides left
+    prev.style.transform = 'translateX(-100%)';
+    prev.style.opacity = '0';
 
-    // Cleanup after transition
-    setTimeout(() => {
-      // Remove the old slide, put the new slide into normal flow
-      if (eventsWrap.contains(curr)) eventsWrap.removeChild(curr);
-      nextEl.style.position = 'static';
-      nextEl.style.inset = '';
-      nextEl.style.transition = '';
-      nextEl.style.transform = '';
-      nextEl.style.willChange = '';
+    // next page slides from right into center
+    next.style.transform = 'translateX(0%)';
+    next.style.opacity = '1';
 
-      curr = nextEl; // new current
-    }, transMs + 40);
+    pageIdx = i;
   }
 
-  let ix = 0;
-  setInterval(() => {
-    ix = (ix + 1) % slides.length;
-    slideLeft(ix);
-  }, intervalMs);
+  function tick() {
+    if (!running || pageEls.length <= 1) return;
+    const nextIdx = (pageIdx + 1) % pageEls.length;
+    show(nextIdx, true);
+  }
+
+  // Start after a stagger to desync rooms
+  setTimeout(() => {
+    running = true;
+    // First show page 0
+    show(0, true);
+    if (pageEls.length > 1) {
+      setInterval(tick, interval);
+    }
+  }, stagger);
 }
 
-/*********************
- * Render one room
- *********************/
-function renderRoomTile(container, tileId, slots, maxPerPage) {
-  const room = el('div', 'room');
-  const header = el('div', 'roomHeader');
-  const id = el('div', 'id', tileId);
-  const count = el('div', 'count');
-  header.append(id, count);
-  room.appendChild(header);
+/* Render events list into a page (2 events vertical stack) */
+function renderEventsList(events) {
+  const wrap = document.createElement('div');
+  wrap.className = 'eventsPageStack';
+  // Style here in case CSS isn’t updated yet
+  wrap.style.display = 'flex';
+  wrap.style.flexDirection = 'column';
+  wrap.style.gap = '10px';
+  wrap.style.height = '100%';
 
-  const eventsWrap = el('div', 'events');
-  // keep some height so pager looks stable
-  eventsWrap.style.minHeight = '1px';
-  room.appendChild(eventsWrap);
+  events.forEach(ev => {
+    const { title, subtitle, when } = formatDisplay(ev);
 
-  const sorted = (slots || []).slice().sort((a,b)=>a.startMin - b.startMin);
-  const pages = [];
-  for (let i=0; i<sorted.length; i+=maxPerPage) {
-    pages.push(sorted.slice(i, i+maxPerPage));
-  }
-  if (pages.length === 0) pages.push([]);
+    const card = document.createElement('div');
+    card.className = 'event';
+    card.style.background = 'var(--chip)';
+    card.style.border = '1px solid var(--grid)';
+    card.style.borderRadius = '12px';
+    card.style.padding = '10px 12px';
+    card.style.display = 'flex';
+    card.style.flexDirection = 'column';
+    card.style.gap = '6px';
+    card.style.minHeight = 0;
 
-  count.textContent = sorted.length ? `${sorted.length} event${sorted.length>1?'s':''}` : 'No events';
+    const who = document.createElement('div');
+    who.className = 'who';
+    who.style.fontSize = '18px';
+    who.style.fontWeight = '800';
+    who.style.lineHeight = '1.1';
+    who.textContent = title;
 
-  const slides = pages.map(items => {
-    const slide = el('div', 'slide');
-    slide.style.display = 'flex';
-    slide.style.flexDirection = 'column';
-    slide.style.gap = '8px';
+    const what = document.createElement('div');
+    what.className = 'what';
+    what.style.fontSize = '15px';
+    what.style.color = 'var(--muted)';
+    what.style.lineHeight = '1.2';
+    what.textContent = subtitle || '';
 
-    items.forEach(slot => {
-      const { whoBold, whoLine2 } = normalizeWho(slot);
-      const card = el('div', 'event');
-      const who = el('div', 'who', whoBold || '—');
-      card.appendChild(who);
-      if (whoLine2) {
-        const what = el('div', 'what', whoLine2);
-        card.appendChild(what);
-      }
-      const when = el('div', 'when', timeRange(slot.startMin, slot.endMin));
-      card.appendChild(when);
-      slide.appendChild(card);
-    });
+    const whenEl = document.createElement('div');
+    whenEl.className = 'when';
+    whenEl.style.fontSize = '14px';
+    whenEl.style.color = '#b7c0cf';
+    whenEl.style.fontWeight = '600';
+    whenEl.textContent = when;
 
-    return slide;
+    card.appendChild(who);
+    if (what.textContent) card.appendChild(what);
+    card.appendChild(whenEl);
+
+    wrap.appendChild(card);
   });
 
-  // Mount/pager
-  if (slides.length === 1) {
-    eventsWrap.appendChild(slides[0]);
-  } else {
-    // start with first
-    eventsWrap.appendChild(slides[0]);
-    runPager(eventsWrap, slides, 8000, 650); // slightly longer + eased
-  }
+  // Spacer to push content up a bit (avoid bottom clipping)
+  const flexSpacer = document.createElement('div');
+  flexSpacer.style.flex = '1 1 auto';
+  wrap.appendChild(flexSpacer);
 
-  container.appendChild(room);
+  return wrap;
 }
 
-/*********************
- * Render board
- *********************/
-function renderBoard(data) {
+/* =========================
+   5) Main render
+========================= */
+
+function renderRoomsShell() {
+  // Assumes index.html has:
+  // #southRooms (1A/1B, 2A/2B), #fieldhouseRooms (3..8 grid), #northRooms (9A/9B, 10A/10B)
   const south = document.getElementById('southRooms');
-  const fieldhouse = document.getElementById('fieldhouseRooms');
+  const field = document.getElementById('fieldhouseRooms');
   const north = document.getElementById('northRooms');
-  if (!south || !fieldhouse || !north) return;
 
-  south.innerHTML = fieldhouse.innerHTML = north.innerHTML = '';
-
-  const perTile = distributeSlots(Array.isArray(data.slots) ? data.slots : []);
-
-  // South: 1 per page
-  SOUTH_TILES.forEach(t => {
-    renderRoomTile(south, t, perTile[t] || [], 1);
-  });
-
-  // Fieldhouse: 2 per page
-  FIELD_TILES.forEach(t => {
-    renderRoomTile(fieldhouse, t, perTile[t] || [], 2);
-  });
-
-  // North: 1 per page
-  NORTH_TILES.forEach(t => {
-    renderRoomTile(north, t, perTile[t] || [], 1);
-  });
-}
-
-/*********************
- * Init + refresh
- *********************/
-async function init() {
-  try {
-    const data = await loadEvents();
-    renderBoard(data);
-  } catch (e) {
-    console.error('Init failed:', e);
+  if (south) {
+    south.innerHTML = '';
+    // Row 1: 1A 1B
+    south.appendChild(roomCard('1A')); south.appendChild(roomCard('1B'));
+    // Row 2: 2A 2B
+    south.appendChild(roomCard('2A')); south.appendChild(roomCard('2B'));
+  }
+  if (field) {
+    field.innerHTML = '';
+    // 3..8 (2 rows x 3 cols)
+    ['3','4','5','6','7','8'].forEach(id => field.appendChild(roomCard(id)));
+  }
+  if (north) {
+    north.innerHTML = '';
+    // Row 1: 9A 9B
+    north.appendChild(roomCard('9A')); north.appendChild(roomCard('9B'));
+    // Row 2: 10A 10B
+    north.appendChild(roomCard('10A')); north.appendChild(roomCard('10B'));
   }
 }
+
+function roomCard(id) {
+  const card = document.createElement('div');
+  card.className = 'room';
+  card.style.border = '1px solid var(--grid)';
+  card.style.borderRadius = '14px';
+  card.style.padding = '14px';
+  card.style.display = 'flex';
+  card.style.flexDirection = 'column';
+  card.style.gap = '10px';
+  card.style.minHeight = 0;
+  card.style.overflow = 'hidden';
+  card.style.background = 'linear-gradient(180deg, rgba(255,255,255,0.02), rgba(0,0,0,0))';
+
+  const hdr = document.createElement('div');
+  hdr.className = 'roomHeader';
+  hdr.style.display = 'flex';
+  hdr.style.alignItems = 'center';
+  hdr.style.justifyContent = 'space-between';
+  hdr.style.gap = '12px';
+  hdr.style.borderBottom = '1px dashed var(--grid)';
+  hdr.style.paddingBottom = '8px';
+
+  const idEl = document.createElement('div');
+  idEl.className = 'id';
+  idEl.style.fontSize = '28px';
+  idEl.style.fontWeight = '800';
+  idEl.style.letterSpacing = '.04em';
+  idEl.textContent = id;
+
+  const countEl = document.createElement('div');
+  countEl.className = 'count';
+  countEl.style.fontSize = '13px';
+  countEl.style.color = 'var(--muted)';
+  countEl.textContent = '';
+
+  hdr.appendChild(idEl);
+  hdr.appendChild(countEl);
+
+  const pagerHost = document.createElement('div');
+  pagerHost.className = 'events'; // will be converted to a pager
+  pagerHost.style.flex = '1 1 auto';
+  pagerHost.style.overflow = 'hidden';
+
+  card.appendChild(hdr);
+  card.appendChild(pagerHost);
+
+  // Attach a small API so we can set the count and mount the pager later
+  card._setCount = (n) => { countEl.textContent = n ? `${n} event${n>1?'s':''}` : ''; };
+  card._pagerHost = pagerHost;
+
+  return card;
+}
+
+function chunk(arr, size) {
+  const out = [];
+  for (let i=0;i<arr.length;i+=size) out.push(arr.slice(i, i+size));
+  return out;
+}
+
+// Decide how many items per page per room type
+function perPageForRoom(id) {
+  // A/B rooms: show 1 at a time for readability (paging will rotate)
+  if (/^(1|2|9|10)[AB]$/.test(id)) return 1;
+  // Single-number fieldhouse rooms: 2 per page
+  return 2;
+}
+
+function findRoomCard(id) {
+  // Search for a .room with header text == id
+  const rooms = Array.from(document.querySelectorAll('.room'));
+  return rooms.find(r => r.querySelector('.roomHeader .id')?.textContent === id) || null;
+}
+
+/* =========================
+   6) Glue it together
+========================= */
+
+async function init() {
+  ensureStageFit();
+  headerClock();
+  renderRoomsShell();
+
+  const data = await loadData();
+
+  // Filter to “now” (and near-future) slots; also drop past-ended
+  const nowMin = (() => {
+    const d = new Date();
+    return d.getHours()*60 + d.getMinutes();
+  })();
+
+  // Only show slots that haven’t ended yet
+  let slots = (data.slots || []).filter(s => (s.endMin ?? 1440) > nowMin);
+
+  // Group slots by roomId as rendered on the board:
+  // We expect ids to be: 1A,1B,2A,2B, 3..8, 9A,9B,10A,10B
+  const buckets = new Map();
+  const wantedIds = ['1A','1B','2A','2B','3','4','5','6','7','8','9A','9B','10A','10B'];
+  wantedIds.forEach(id => buckets.set(id, []));
+
+  // Place each slot into a bucket:
+  slots.forEach(s => {
+    let rid = String(s.roomId || '').toUpperCase();
+    // Normalize numeric-only ids to their single room (3..8 ok)
+    // Keep A/B if present
+    // If CSV uses “1” while we show “1A/1B”, we’ll send to both A and B (same info)
+    if (/^(1|2|9|10)$/.test(rid)) {
+      // duplicate to A and B
+      const A = rid+'A', B = rid+'B';
+      if (buckets.has(A)) buckets.get(A).push(s);
+      if (buckets.has(B)) buckets.get(B).push(s);
+    } else if (/^(1|2|9|10)[AB]$/.test(rid)) {
+      if (buckets.has(rid)) buckets.get(rid).push(s);
+    } else if (/^[3-8]$/.test(rid)) {
+      if (buckets.has(rid)) buckets.get(rid).push(s);
+    }
+    // else ignore unknown ids
+  });
+
+  // Mount pagers in each card
+  let roomIndex = 0;
+  for (const [roomId, arr] of buckets.entries()) {
+    const card = findRoomCard(roomId);
+    if (!card) continue;
+
+    // Sort by start time ascending
+    arr.sort((a,b) => (a.startMin||0) - (b.startMin||0));
+
+    // Tell header how many total
+    card._setCount(arr.length);
+
+    // Build pages by room type
+    const size = perPageForRoom(roomId);
+    const pages = chunk(arr, size);
+
+    // Create pager with a small stagger so rooms don’t flip exactly together
+    mountPager(card._pagerHost, pages, {
+      intervalMs: 8000,
+      startStaggerMs: (roomIndex % 6) * 400
+    });
+
+    roomIndex++;
+  }
+}
+
 document.addEventListener('DOMContentLoaded', init);
-// refresh every 60s so ended events fall off and pages repaginate
-setInterval(init, 60_000);
