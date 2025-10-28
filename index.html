@@ -18,16 +18,12 @@
       --chip-text:#e7eaf1;
       --ok:#1f9d6a;
     }
-    html,body{
-      margin:0; height:100%;
-      background:var(--bg); color:var(--ink);
-      font-family: Inter, "SF Pro Text", Segoe UI, Roboto, Arial, sans-serif;
-    }
+    html,body{ margin:0; height:100%; background:var(--bg); color:var(--ink); font-family: Inter, "SF Pro Text", Segoe UI, Roboto, Arial, sans-serif; }
 
-    /* Fixed canvas; we auto-scale this to fit any screen without scrollbars */
+    /* Fixed canvas; we auto-scale this */
     .stage{
-      width:1920px; height:1080px; padding:32px; box-sizing:border-box;
-      display:grid; grid-template-rows: 120px 1fr; gap:24px;
+      width:1920px; height:1080px; padding:28px; box-sizing:border-box;
+      display:grid; grid-template-rows: 120px 1fr; gap:22px;
     }
 
     /* Header row */
@@ -37,128 +33,94 @@
     .brand{ display:flex; align-items:center; gap:16px; }
     .brand img{ height:80px; width:auto; object-fit:contain; }
     .dateclock{ justify-self:center; text-align:center; }
-    #headerDate{ font-size:44px; font-weight:800; letter-spacing:.02em; }
-    #headerClock{ font-size:28px; color:var(--muted); margin-top:6px; font-weight:600; }
+    #headerDate{ font-size:42px; font-weight:800; letter-spacing:.02em; }
+    #headerClock{ font-size:26px; color:var(--muted); margin-top:6px; font-weight:600; }
 
     .wifi{
       justify-self:end; background:var(--panel); border:1px solid var(--grid);
-      border-radius:14px; padding:14px 16px; min-width:320px;
+      border-radius:14px; padding:12px 14px; min-width:300px;
     }
-    .wifi .title{ font-size:16px; color:var(--muted); letter-spacing:.08em; text-transform:uppercase; }
-    .wifi .row{ display:flex; justify-content:space-between; gap:12px; margin-top:6px; }
+    .wifi .title{ font-size:14px; color:var(--muted); letter-spacing:.08em; text-transform:uppercase; }
+    .wifi .row{ display:flex; justify-content:space-between; gap:10px; margin-top:4px; }
     .wifi .row span:first-child{ color:var(--muted); }
     .wifi .row span:last-child{ font-weight:700; }
 
     /* Grid container: South | Fieldhouse | North */
     .grid{
-      display:grid; grid-template-columns: 1fr 1.5fr 1fr; gap:24px;
+      display:grid; grid-template-columns: 1fr 1.5fr 1fr; gap:18px;
       height:100%;
     }
 
     .group{
       background:var(--panel); border:1px solid var(--grid); border-radius:18px;
-      padding:16px; display:grid; grid-template-rows: 44px 1fr; gap:12px;
+      padding:12px; display:grid; grid-template-rows: 40px 1fr; gap:10px;
       overflow:hidden;
     }
     .group .title{
-      font-size:18px; color:var(--muted); letter-spacing:.1em; text-transform:uppercase;
+      font-size:16px; color:var(--muted); letter-spacing:.1em; text-transform:uppercase;
       border-bottom:1px solid var(--grid); display:flex; align-items:center; padding-bottom:6px;
     }
 
-    /* South/North: 2 rows (1..2) and (9..10) stacked */
+    /* South/North now have 4 tiles each: (1A,1B,2A,2B) and (9A,9B,10A,10B) */
     .rooms-stack{
-      display:grid; grid-template-rows: 1fr 1fr; gap:12px; min-height:0;
+      display:grid; grid-template-rows: repeat(4, 1fr); gap:10px; min-height:0;
     }
 
     /* Fieldhouse: 2 rows x 3 cols for 3..8 */
     .rooms-fieldhouse{
       display:grid; grid-template-columns: repeat(3, 1fr); grid-template-rows: 1fr 1fr;
-      gap:12px; min-height:0;
+      gap:10px; min-height:0;
     }
 
     /* Individual room card */
     .room{
-      border:1px solid var(--grid); border-radius:14px; padding:14px;
-      display:flex; flex-direction:column; gap:10px; min-height:0; overflow:hidden;
+      border:1px solid var(--grid); border-radius:14px; padding:10px;
+      display:flex; flex-direction:column; gap:8px; min-height:0; overflow:hidden;
       background:linear-gradient(180deg, rgba(255,255,255,0.02), rgba(0,0,0,0)) ;
     }
     .roomHeader{
-      display:flex; align-items:center; justify-content:space-between; gap:12px;
-      border-bottom:1px dashed var(--grid); padding-bottom:8px;
+      display:flex; align-items:center; justify-content:space-between; gap:10px;
+      border-bottom:1px dashed var(--grid); padding-bottom:6px;
     }
-    .roomHeader .id{ font-size:28px; font-weight:800; letter-spacing:.04em; }
-    .roomHeader .count{ font-size:13px; color:var(--muted); }
+    .roomHeader .id{ font-size:24px; font-weight:800; letter-spacing:.04em; }
+    .roomHeader .count{ font-size:12px; color:var(--muted); }
 
-    /* Events list within a room */
+    /* Events list within a room – no scrollbars on signage */
     .events{
-      display:flex; flex-direction:column; gap:10px; overflow:hidden; position:relative;
+      display:flex; flex-direction:column; gap:8px; overflow:hidden;
     }
-    /* Pager container */
-    .pager{
-      position:relative; width:100%; height:100%;
-      overflow:hidden; border-radius:10px;
-    }
-    .pager-inner{
-      position:absolute; top:0; left:0; height:100%; width:100%;
-    }
-    .page{
-      position:absolute; top:0; width:100%; height:100%; left:0;
-      padding-right:2px; box-sizing:border-box;
-      display:flex; flex-direction:column; gap:10px; overflow:hidden;
-    }
-    .page .scroll{
-      overflow:hidden; /* no scrollbars on signage */
-      display:flex; flex-direction:column; gap:10px;
-    }
-
-    /* Slide-left animation (always left) */
-    .slide-enter{ transform:translateX(100%); opacity:0; }
-    .slide-exit { transform:translateX(0%);    opacity:1; }
-    .slide-enter-active{ animation: slideLeft 700ms ease forwards; }
-    .slide-exit-active { animation: slideLeftOut 700ms ease forwards; }
-    @keyframes slideLeft {
-      0% { transform:translateX(100%); opacity:0; }
-      40% { opacity:1; }
-      100% { transform:translateX(0%); opacity:1; }
-    }
-    @keyframes slideLeftOut {
-      0% { transform:translateX(0%); opacity:1; }
-      100% { transform:translateX(-100%); opacity:0; }
-    }
-
     .event{
       background:var(--chip); border:1px solid var(--grid); border-radius:12px;
-      padding:10px 12px; display:flex; flex-direction:column; gap:6px;
+      padding:8px 10px; display:flex; flex-direction:column; gap:4px;
     }
-    .event .who{ font-size:18px; font-weight:800; line-height:1.1; }
-    .event .what{ font-size:15px; color:var(--muted); line-height:1.2; }
-    .event .when{ font-size:14px; color:#b7c0cf; font-weight:600; }
+    .event .who{ font-size:16px; font-weight:800; line-height:1.15; }
+    .event .what{ font-size:14px; color:var(--muted); line-height:1.2; }
+    .event .when{ font-size:13px; color:#b7c0cf; font-weight:600; }
+
+    .more{ font-size:12px; color:var(--muted); margin-top:-2px; }
 
     .who, .what{ word-wrap:break-word; overflow-wrap:anywhere; }
 
-    /* --- Auto-scale wrapper to center and fit stage --- */
-    body, html { height:100%; }
-    .fit-wrapper{
-      width:100vw; height:100vh; display:flex; justify-content:center; align-items:flex-start;
+    /* Auto-scale container centering */
+    .fit-wrap{
+      width:100vw; height:100vh; display:flex; align-items:flex-start; justify-content:center;
       overflow:hidden;
     }
-    .scaled{ transform-origin: top left; }
-
-    /* IMPORTANT: hide mouse cursor for kiosk */
-    html, body { cursor: none !important; }
   </style>
 </head>
 <body>
-  <div class="fit-wrapper">
-    <div class="stage scaled">
+  <div class="fit-wrap">
+    <div class="stage">
       <div class="header">
         <div class="brand">
           <img src="./logo.png" alt="Romeoville Athletic & Event Center">
         </div>
+
         <div class="dateclock">
           <div id="headerDate">—</div>
           <div id="headerClock">—</div>
         </div>
+
         <div class="wifi">
           <div class="title">Guest Wi-Fi</div>
           <div class="row"><span>Network</span><span id="wifiSsid">RAEC-Public</span></div>
@@ -167,7 +129,7 @@
       </div>
 
       <div class="grid">
-        <!-- South Gym (1,2) -->
+        <!-- South Gym (1A,1B,2A,2B) -->
         <section class="group" id="group-south">
           <div class="title">South Gym</div>
           <div class="rooms-stack" id="southRooms"></div>
@@ -179,7 +141,7 @@
           <div class="rooms-fieldhouse" id="fieldhouseRooms"></div>
         </section>
 
-        <!-- North Gym (9,10) -->
+        <!-- North Gym (9A,9B,10A,10B) -->
         <section class="group" id="group-north">
           <div class="title">North Gym</div>
           <div class="rooms-stack" id="northRooms"></div>
@@ -188,20 +150,21 @@
     </div>
   </div>
 
-  <!-- Your app code -->
   <script type="module" src="./app.js"></script>
 
-  <!-- Auto-scale logic: fit 1920x1080 stage to any screen, centered -->
+  <!-- Auto-scale helper -->
   <script>
-    (function fitStage(){
+    (function fitStageSetup(){
       const STAGE_W = 1920, STAGE_H = 1080;
       function fit() {
-        const stage = document.querySelector('.stage');
-        if (!stage) return;
-        const sx = window.innerWidth / STAGE_W;
+        const sx = window.innerWidth  / STAGE_W;
         const sy = window.innerHeight / STAGE_H;
         const s  = Math.min(sx, sy);
+        const stage = document.querySelector('.stage');
+        if (!stage) return;
         stage.style.transform = `scale(${s})`;
+        stage.style.transformOrigin = 'top center';
+        document.body.style.minHeight = (STAGE_H * s) + 'px';
       }
       window.addEventListener('resize', fit);
       window.addEventListener('orientationchange', fit);
