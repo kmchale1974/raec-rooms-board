@@ -1,426 +1,233 @@
-// app.js — grid board with always-left slide, paging, pickleball & Catch Corner rules,
-// and org/contact rendering that keeps org bold for "Illinois Flight + Brandon Brown"
-// while still showing "Isabel Vazquez" for single-word org/contact pairs.
+// app.js
 
-// -----------------------------
-// Time helpers
-// -----------------------------
-function fmtTime(mins) {
-  const h24 = Math.floor(mins / 60);
-  const m = mins % 60;
-  const ampm = h24 >= 12 ? 'pm' : 'am';
-  let h = h24 % 12;
-  if (h === 0) h = 12;
-  return `${h}:${m.toString().padStart(2, '0')}${ampm}`;
+// ------------ helpers
+const PAD = n => String(n).padStart(2, '0');
+function fmt12h(mins){
+  let h = Math.floor(mins/60), m = mins%60;
+  const ampm = h >= 12 ? 'pm' : 'am';
+  h = h % 12; if (h === 0) h = 12;
+  return `${h}:${PAD(m)}${ampm}`;
 }
-function nowMinutesLocal() {
-  const d = new Date();
-  return d.getHours() * 60 + d.getMinutes();
+function timeRange(s,e){ return `${fmt12h(s)} - ${fmt12h(e)}`; }
+
+function isNowBetween(startMin, endMin){
+  const dt = new Date();
+  const nowMin = dt.getHours()*60 + dt.getMinutes();
+  return endMin > nowMin; // hide ended events
 }
 
-// -----------------------------
-// String + name utilities
-// -----------------------------
-const S = v => (typeof v === 'string' ? v : '');
-const PERSON_RE = /^\s*[A-Za-zÀ-ÖØ-öø-ÿ'’\-\. ]+,\s*[A-Za-zÀ-ÖØ-öø-ÿ'’\-\. ]+\s*$/u;
-const ORG_HINTS = /\b(llc|inc|corp|co|foundation|association|academy|club|basketball|volleyball|training|gym|league|program|rec)\b/i;
+// Name & content cleaners
+function titleCaseName(s){
+  // "Vazquez, Isabel" => "Isabel Vazquez"; leave org-like strings alone
+  if (!s) return s;
+  if (s.includes('@')) return s; // email-ish
+  // quick heuristic: one comma and two tokens -> likely a person
+  const parts = s.split(',').map(t=>t.trim()).filter(Boolean);
+  if (parts.length === 2 && parts[0].split(' ').length <= 2 && parts[1].split(' ').length <= 3){
+    return `${parts[1]} ${parts[0]}`;
+  }
+  return s;
+}
 
-function looksLikePersonLoose(s = '') {
-  s = s.trim();
-  if (!s || /\d/.test(s)) return false;
-  if (PERSON_RE.test(s)) return true;
-  const parts = s.split(',');
-  if (parts.length === 2) {
-    const left = parts[0].trim();
-    const right = parts[1].trim();
-    if (left && right && !ORG_HINTS.test(s)) {
-      const rtoks = right.split(/\s+/).filter(Boolean);
-      if (rtoks.length >= 1 && rtoks.length <= 3 && !/\d/.test(right)) return true;
+function cleanupPickleball(slot){
+  // If it's a Pickleball internal hold, show "Open Pickleball" only
+  const t = (slot.title||'').toLowerCase();
+  const u = (slot.subtitle||'').toLowerCase();
+  if (t.includes('pickleball') || u.includes('pickleball')){
+    return {
+      ...slot,
+      title: 'Open Pickleball',
+      subtitle: ''
+    };
+  }
+  return slot;
+}
+
+function cleanupCatchCorner(slot){
+  // "Catch Corner (Internal Holds, ...)" => title "Catch Corner", subtitle stripped inside
+  const t = slot.title || '';
+  if (/^catch\s*corner/i.test(t)){
+    let sub = slot.subtitle || '';
+    // Remove "CatchCorner (" wrapper if present
+    sub = sub.replace(/^CatchCorner\s*\((.*)\)\s*$/i, '$1');
+    // Also strip leading "Internal Holds," or similar if left in title
+    return { ...slot, title: 'Catch Corner', subtitle: sub };
+  }
+  return slot;
+}
+
+function splitOrgContact(rawTitle){
+  // Try to keep org bold and contact below (e.g., "Illinois Flight, Brandon Brown")
+  if (!rawTitle) return { org: '', contact: '' };
+  const m = rawTitle.split(',').map(s=>s.trim());
+  if (m.length >= 2){
+    const org = m[0];
+    const contact = m.slice(1).join(', ');
+    return { org, contact };
+  }
+  return { org: rawTitle, contact: '' };
+}
+
+// If a slot is unsplit for courts 1/2/9/10 (meaning covers whole court), mirror it into A & B
+function expandABSlots(slots){
+  const BOTH = new Set(['1','2','9','10']); // unsplit means both halves
+  const out = [];
+  for (const s of slots){
+    const rid = String(s.roomId);
+    if (BOTH.has(rid)){
+      out.push({ ...s, roomId: `${rid}A` });
+      out.push({ ...s, roomId: `${rid}B` });
+    }else{
+      out.push(s);
     }
   }
-  return false;
-}
-function normalizePerson(s = '') {
-  s = s.trim();
-  const [last, rest] = s.split(',', 2).map(x => x.trim());
-  return `${rest} ${last}`.replace(/\s{2,}/g, ' ').trim();
-}
-function normalizeContactName(s = '') {
-  if (looksLikePersonLoose(s)) return normalizePerson(s);
-  if (s.includes(',')) return s.split(',', 1)[0].trim();
-  return s.trim();
-}
-const singleWordAlpha = s => /^[A-Za-zÀ-ÖØ-öø-ÿ'’\-\.]+$/u.test(s);
-
-// KEY FIX: prefer org bold, unless BOTH org/contact are single words (then treat as person)
-function buildDisplayFromOrgContact(slot) {
-  const org = S(slot.org).trim();
-  const contact = S(slot.contact).trim();
-  if (!org && !contact) return null;
-
-  if (org && contact) {
-    const orgSingle = singleWordAlpha(org);
-    const contactSingle = singleWordAlpha(contact);
-
-    // Only when BOTH are single words (e.g., "Vazquez" + "Isabel") show "Isabel Vazquez"
-    if (orgSingle && contactSingle) {
-      return { whoBold: `${contact} ${org}`, what: '' };
-    }
-
-    // Otherwise: org wins (e.g., "Illinois Flight" + "Brandon Brown")
-    return { whoBold: org, what: contact };
-  }
-
-  // Only one present
-  if (org) return { whoBold: org, what: '' };
-  if (contact) return { whoBold: contact, what: '' };
-  return null;
-}
-
-// -----------------------------
-// Special-case text rules
-// -----------------------------
-function cleanCatchCornerDetail(s = '') {
-  let out = s.replace(/^Catch\s*Corner\s*\(?/i, '')
-             .replace(/^CatchCorner\s*\(?/i, '');
-  out = out.replace(/\)?\s*$/,'').trim();
-  out = out.replace(/internal holds?/i, '').trim();
   return out;
 }
-function isPickleball(slot) {
-  const t = (slot.title || '').toLowerCase();
-  const sub = (slot.subtitle || '').toLowerCase();
-  return /pickleball/.test(t) || /pickleball/.test(sub);
-}
-function cleanPickleball(slot) {
-  return { ...slot, title: 'Open Pickleball', subtitle: '' };
-}
 
-// -----------------------------
-// DOM handles
-// -----------------------------
-const els = {
-  headerDate: document.getElementById('headerDate'),
-  headerClock: document.getElementById('headerClock'),
-  south: document.getElementById('southRooms'),
-  fieldhouse: document.getElementById('fieldhouseRooms'),
-  north: document.getElementById('northRooms'),
-};
+// Keep only current/future events and apply cleanup rules
+function normalizeSlots(slots){
+  return expandABSlots(slots)
+    .filter(s => isNowBetween(s.startMin, s.endMin))
+    .map(s => cleanupPickleball(s))
+    .map(s => cleanupCatchCorner(s))
+    .map(s => {
+      // Derive org/contact if missing
+      const base = splitOrgContact(s.title || '');
+      let org = s.org || base.org || '';
+      let contact = s.contact || base.contact || '';
 
-// Infinite-slide state
-let PAGE_TICK = null;
-const PAGE_INTERVAL_MS = 7000; // 7s
-const PER_PAGE = 2;            // keep cards tall enough so nothing clips
+      // If org looks like a person ("Last, First"), convert to "First Last"
+      const tcOrg = titleCaseName(org);
+      // If contact exists and is a person "Last, First", convert
+      const tcContact = titleCaseName(contact);
 
-// -----------------------------
-// Header clock
-// -----------------------------
-function renderClock() {
-  const now = new Date();
-  const date = now.toLocaleDateString(undefined, {
-    weekday: 'long', year: 'numeric', month: 'long', day: 'numeric'
-  });
-  let hh = now.getHours(), mm = now.getMinutes(), ss = now.getSeconds();
-  const ampm = hh >= 12 ? 'pm' : 'am';
-  let h12 = hh % 12; if (h12 === 0) h12 = 12;
-
-  if (els.headerDate) els.headerDate.textContent = date;
-  if (els.headerClock) els.headerClock.textContent =
-    `${h12}:${String(mm).padStart(2,'0')}:${String(ss).padStart(2,'0')}${ampm}`;
+      return { ...s, org: tcOrg, contact: tcContact };
+    });
 }
 
-// -----------------------------
-// Event rendering
-// -----------------------------
-function eventNode(slot) {
-  const rawTitle = S(slot.title);
-  const title = rawTitle.replace(/[,\s]+$/, '').trim();
-  const subtitle = S(slot.subtitle).trim();
+// Group rooms for rendering
+const SOUTH_ROOMS = ['1A','1B','2A','2B'];
+const NORTH_ROOMS = ['9A','9B','10A','10B'];
+const FIELD_ROOMS = ['3','4','5','6','7','8'];
 
-  const node = document.createElement('div');
-  node.className = 'event';
-
-  // Pickleball presentation
-  if (isPickleball(slot)) {
-    const who = document.createElement('div');
-    who.className = 'who';
-    who.textContent = 'Open Pickleball';
-
-    const when = document.createElement('div');
-    when.className = 'when';
-    when.textContent = `${fmtTime(slot.startMin)} – ${fmtTime(slot.endMin)}`;
-
-    node.appendChild(who);
-    node.appendChild(when);
-    return node;
-  }
-
-  // Catch Corner presentation
-  if (/^catch\s*corner|^catchcorner/i.test(title)) {
-    const who = document.createElement('div');
-    who.className = 'who';
-    who.textContent = 'Catch Corner';
-
-    const detailSrc = subtitle || cleanCatchCornerDetail(title);
-    const detail = cleanCatchCornerDetail(detailSrc);
-
-    const when = document.createElement('div');
-    when.className = 'when';
-    when.textContent = `${fmtTime(slot.startMin)} – ${fmtTime(slot.endMin)}`;
-
-    node.appendChild(who);
-    if (detail) {
-      const what = document.createElement('div');
-      what.className = 'what';
-      what.textContent = detail;
-      node.appendChild(what);
-    }
-    node.appendChild(when);
-    return node;
-  }
-
-  // Prefer org/contact fields if present (this keeps org bold for Illinois Flight + Brandon Brown)
-  const oc = buildDisplayFromOrgContact(slot);
-
-  if (oc) {
-    const who = document.createElement('div');
-    who.className = 'who';
-    who.textContent = oc.whoBold || title;
-
-    const when = document.createElement('div');
-    when.className = 'when';
-    when.textContent = `${fmtTime(slot.startMin)} – ${fmtTime(slot.endMin)}`;
-
-    node.appendChild(who);
-    const detail = S(subtitle) || S(oc.what);
-    if (detail) {
-      const what = document.createElement('div');
-      what.className = 'what';
-      what.textContent = detail;
-      node.appendChild(what);
-    }
-    node.appendChild(when);
-    return node;
-  }
-
-  // Otherwise, fall back to heuristic parsing of title/subtitle
-  if (looksLikePersonLoose(title)) {
-    const who = document.createElement('div');
-    who.className = 'who';
-    who.textContent = normalizePerson(title);
-
-    const when = document.createElement('div');
-    when.className = 'when';
-    when.textContent = `${fmtTime(slot.startMin)} – ${fmtTime(slot.endMin)}`;
-
-    node.appendChild(who);
-    if (subtitle) {
-      const what = document.createElement('div');
-      what.className = 'what';
-      what.textContent = subtitle;
-      node.appendChild(what);
-    }
-    node.appendChild(when);
-    return node;
-  }
-
-  let orgBold = title, contact = '';
-  if (title.includes(',')) {
-    orgBold = title.split(',', 1)[0].trim();
-    contact = title.split(',').slice(1).join(',').trim();
-    if (looksLikePersonLoose(contact)) contact = normalizePerson(contact);
-  }
-
-  const who = document.createElement('div');
-  who.className = 'who';
-  who.textContent = normalizeContactName(orgBold);
-
-  const what = document.createElement('div');
-  what.className = 'what';
-  what.textContent = subtitle || contact;
-
-  const when = document.createElement('div');
-  when.className = 'when';
-  when.textContent = `${fmtTime(slot.startMin)} – ${fmtTime(slot.endMin)}`;
-
-  node.appendChild(who);
-  if (what.textContent) node.appendChild(what);
-  node.appendChild(when);
-  return node;
+function roomGroup(roomId){
+  if (SOUTH_ROOMS.includes(roomId)) return 'south';
+  if (NORTH_ROOMS.includes(roomId)) return 'north';
+  if (FIELD_ROOMS.includes(roomId)) return 'fieldhouse';
+  return 'unknown';
 }
 
-// -----------------------------
-// Paging (always slide left)
-// -----------------------------
-function pageify(list, perPage = 2) {
-  const pages = [];
-  for (let i = 0; i < list.length; i += perPage) pages.push(list.slice(i, i + perPage));
-  return pages.length ? pages : [[]];
+// ------------ rendering
+function el(tag, cls, text){
+  const e = document.createElement(tag);
+  if (cls) e.className = cls;
+  if (text != null) e.textContent = text;
+  return e;
 }
-function buildRoomCard(room, pages) {
-  const card = document.createElement('div');
-  card.className = 'room';
-  card.dataset.roomId = room.id;
 
-  const header = document.createElement('div');
-  header.className = 'roomHeader';
+function renderHeaderClock(){
+  const dEl = document.getElementById('headerDate');
+  const cEl = document.getElementById('headerClock');
+  function tick(){
+    const now = new Date();
+    const optsD = { weekday:'long', month:'long', day:'numeric' };
+    dEl.textContent = now.toLocaleDateString(undefined, optsD);
+    const hh = now.getHours(), mm = now.getMinutes();
+    const ampm = hh >= 12 ? 'PM' : 'AM';
+    let h12 = hh % 12; if (h12 === 0) h12 = 12;
+    cEl.textContent = `${h12}:${PAD(mm)} ${ampm}`;
+  }
+  tick();
+  setInterval(tick, 1000*10);
+}
 
-  const id = document.createElement('div');
-  id.className = 'id';
-  id.textContent = room.label;
+function makeRoomCard(roomId, events){
+  const card = el('div','room');
+  const hdr = el('div','roomHeader');
+  hdr.append(el('div','id', roomId));
+  hdr.append(el('div','count', events.length ? `${events.length} event${events.length>1?'s':''}` : ''));
+  card.append(hdr);
 
-  const count = document.createElement('div');
-  count.className = 'count';
-  const total = pages.reduce((a,b) => a + b.length, 0);
-  count.textContent = total > 0 ? `${total} event${total>1?'s':''}` : '';
+  const list = el('div','events');
 
-  header.appendChild(id);
-  header.appendChild(count);
-  card.appendChild(header);
-
-  const viewport = document.createElement('div');
-  viewport.className = 'events';
-  viewport.style.position = 'relative';
-  viewport.style.overflow = 'hidden';
-
-  const strip = document.createElement('div');
-  strip.style.display = 'flex';
-  strip.style.gap = '0';
-  strip.style.willChange = 'transform';
-  strip.style.transition = 'transform 650ms cubic-bezier(.22,.61,.36,1)'; // smooth
-  strip.style.transform = 'translateX(0)';
-
-  pages.forEach(page => {
-    const pageCol = document.createElement('div');
-    pageCol.style.flex = '0 0 100%';
-    pageCol.style.display = 'flex';
-    pageCol.style.flexDirection = 'column';
-    pageCol.style.gap = '10px';
-    page.forEach(slot => pageCol.appendChild(eventNode(slot)));
-    strip.appendChild(pageCol);
+  // show up to TWO events per tile
+  const toShow = events.slice(0,2);
+  toShow.forEach(s => {
+    const item = el('div','event');
+    // Bold org (or title fallback), then regular line for contact/purpose, then time
+    const who = el('div','who', s.org || s.title || '—');
+    const whatBits = [];
+    if (s.contact && s.contact !== s.org) whatBits.push(s.contact);
+    if (s.subtitle) whatBits.push(s.subtitle);
+    const what = el('div','what', whatBits.join(' • '));
+    const when = el('div','when', timeRange(s.startMin, s.endMin));
+    item.append(who);
+    if (what.textContent) item.append(what);
+    item.append(when);
+    list.append(item);
   });
 
-  viewport.appendChild(strip);
-  card.appendChild(viewport);
-  card._strip = strip;
-  card._pages = pages.length;
+  if (events.length > 2){
+    list.append(el('div','more', `+${events.length-2} more`));
+  }
+
+  card.append(list);
   return card;
 }
-function slideLeftOnce(strip) {
-  if (!strip || strip.children.length <= 1) return;
-  strip.style.transition = 'transform 650ms cubic-bezier(.22,.61,.36,1)';
-  strip.style.transform = 'translateX(-100%)';
-  const handler = () => {
-    strip.removeEventListener('transitionend', handler);
-    const first = strip.children[0];
-    if (first) strip.appendChild(first);
-    strip.style.transition = 'none';
-    strip.style.transform = 'translateX(0)';
-    // reflow
-    // eslint-disable-next-line no-unused-expressions
-    strip.offsetHeight;
-  };
-  strip.addEventListener('transitionend', handler, { once: true });
-}
 
-// -----------------------------
-// Dedupe & render
-// -----------------------------
-function dedupeSlots(slots) {
-  const seen = new Set();
-  const out = [];
-  for (const s of slots) {
-    const t = S(s.title).replace(/[,\s]+$/, '').trim().toLowerCase();
-    const sub = S(s.subtitle).trim().toLowerCase();
-    const key = [s.roomId, s.startMin, s.endMin, t, sub, S(s.org).toLowerCase(), S(s.contact).toLowerCase()].join('|');
-    if (seen.has(key)) continue;
-    seen.add(key);
-    out.push(s);
-  }
-  return out;
-}
+function renderGrid(data){
+  const southWrap = document.getElementById('southRooms');
+  const northWrap = document.getElementById('northRooms');
+  const fieldWrap = document.getElementById('fieldhouseRooms');
+  southWrap.innerHTML = ''; northWrap.innerHTML = ''; fieldWrap.innerHTML = '';
 
-function renderGrid(data) {
-  const now = nowMinutesLocal();
-  let slots = Array.isArray(data.slots) ? data.slots.slice() : [];
-  slots = slots.filter(s => s.endMin > now);                 // drop past
-  slots = slots.map(s => (isPickleball(s) ? cleanPickleball(s) : s)); // pickleball cleanup
-  slots = dedupeSlots(slots);
-
-  // group by room
+  const slots = normalizeSlots(Array.isArray(data.slots) ? data.slots : []);
   const byRoom = new Map();
-  for (const s of slots) {
-    if (!byRoom.has(s.roomId)) byRoom.set(s.roomId, []);
-    byRoom.get(s.roomId).push(s);
+  const allRooms = [...SOUTH_ROOMS, ...FIELD_ROOMS, ...NORTH_ROOMS];
+  allRooms.forEach(id => byRoom.set(id, []));
+
+  for (const s of slots){
+    const id = String(s.roomId);
+    if (!byRoom.has(id)) byRoom.set(id, []);
+    byRoom.get(id).push(s);
   }
-  for (const list of byRoom.values()) {
-    list.sort((a,b) => (a.startMin - b.startMin) || S(a.title).localeCompare(S(b.title)));
-  }
 
-  // clear columns
-  const south = document.getElementById('southRooms');
-  const fieldhouse = document.getElementById('fieldhouseRooms');
-  const north = document.getElementById('northRooms');
-  if (south) south.innerHTML = '';
-  if (fieldhouse) fieldhouse.innerHTML = '';
-  if (north) north.innerHTML = '';
+  // Sort events in each room by start time
+  for (const [id, arr] of byRoom) arr.sort((a,b)=>a.startMin-b.startMin);
 
-  const rooms = Array.isArray(data.rooms) ? data.rooms : [];
-  const roomCards = [];
-
-  rooms.forEach(room => {
-    const list = byRoom.get(room.id) || [];
-    const pages = pageify(list, 2); // 2 per page to avoid clipping
-    const card = buildRoomCard(room, pages);
-    roomCards.push(card);
-
-    if (room.group === 'south' && south) south.appendChild(card);
-    if (room.group === 'fieldhouse' && fieldhouse) fieldhouse.appendChild(card);
-    if (room.group === 'north' && north) north.appendChild(card);
+  // South
+  SOUTH_ROOMS.forEach(id => {
+    southWrap.append( makeRoomCard(id, byRoom.get(id) || []) );
   });
-
-  // global ticker: slide every strip left
-  if (PAGE_TICK) clearInterval(PAGE_TICK);
-  PAGE_TICK = setInterval(() => {
-    for (const c of roomCards) {
-      if (c._pages > 1) slideLeftOnce(c._strip);
-    }
-  }, PAGE_INTERVAL_MS);
+  // Fieldhouse 3..8 laid out 3 columns x 2 rows
+  FIELD_ROOMS.forEach(id => {
+    fieldWrap.append( makeRoomCard(id, byRoom.get(id) || []) );
+  });
+  // North
+  NORTH_ROOMS.forEach(id => {
+    northWrap.append( makeRoomCard(id, byRoom.get(id) || []) );
+  });
 }
 
-// -----------------------------
-// Boot
-// -----------------------------
-async function loadEvents() {
+// ------------ data load & init
+async function loadData(){
   const url = `./events.json?ts=${Date.now()}`;
-  const resp = await fetch(url, { cache: 'no-store' });
+  const resp = await fetch(url, { cache:'no-store' });
   if (!resp.ok) throw new Error(`Failed to fetch events.json: ${resp.status}`);
-  const json = await resp.json();
-  console.log('Loaded events.json', json);
-  return json;
+  return resp.json();
 }
 
-async function init() {
-  try {
-    const data = await loadEvents();
+async function init(){
+  renderHeaderClock();
+  try{
+    const data = await loadData();
+    console.log('Loaded events.json', data);
     renderGrid(data);
-  } catch (e) {
-    console.error(e);
+  }catch(err){
+    console.error(err);
   }
-
-  // header clock
-  renderClock();
-  setInterval(renderClock, 1000);
-
-  // refresh board every 2 minutes in case a new CSV lands
-  setInterval(async () => {
-    try {
-      const data = await loadEvents();
-      renderGrid(data);
-    } catch (e) {
-      console.error('refresh failed', e);
-    }
-  }, 120000);
 }
-
 document.addEventListener('DOMContentLoaded', init);
+
+// Optional: refresh the board every 5 minutes
+setInterval(()=>init(), 5*60*1000);
