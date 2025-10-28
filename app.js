@@ -1,5 +1,5 @@
-// app.js — smoother always-left slide; person-name fix for single-token org/contact;
-// tighter autoscale to avoid bottom/right clipping; pickleball & Catch Corner rules kept.
+// app.js — one-reservation-per-page everywhere; smoother always-left slide;
+// name rules (first+last), pickleball & Catch Corner cleanup; safer autoscale.
 
 // ---------- Time ----------
 function to12h(mins) {
@@ -69,7 +69,7 @@ async function loadData() {
   return data;
 }
 
-// ---------- Fit 1920×1080 safely (extra margin) ----------
+// ---------- Fit 1920×1080 with extra safety ----------
 function ensureStageFit() {
   const STAGE_W = 1920, STAGE_H = 1080;
   const stage = document.querySelector('.stage');
@@ -79,8 +79,7 @@ function ensureStageFit() {
     if (!stage || !viewport) return;
     const sx = window.innerWidth  / STAGE_W;
     const sy = window.innerHeight / STAGE_H;
-    // slightly smaller scale to ensure no clipping on tight players
-    const s  = Math.min(sx, sy) * 0.97;
+    const s  = Math.min(sx, sy) * 0.965; // slightly smaller than before
 
     stage.style.transform = `scale(${s})`;
     stage.style.transformOrigin = 'top center';
@@ -112,17 +111,17 @@ function headerClock() {
 
 // ---------- Display formatter ----------
 function formatDisplay(slot) {
-  // 1) Pickleball
+  // 1) Pickleball rule
   const pb = pickleballOverride(slot);
   if (pb) return { title: pb.title, subtitle: pb.subtitle, when: `${to12h(slot.startMin)}–${to12h(slot.endMin)}` };
 
-  // Prefer structured fields when present
+  // Prefer structured fields
   let org = (slot.org||'').trim();
   let contact = (slot.contact||'').trim();
   let title = (slot.title||'').trim();
   let subtitle = (slot.subtitle||'').trim();
 
-  // If no org/contact but title has comma → try to split
+  // If no org/contact but title has comma → try split
   if (!org && !contact && title.includes(',')) {
     const parts = title.split(',').map(s=>s.trim()).filter(Boolean);
     if (parts.length >= 2) {
@@ -139,7 +138,7 @@ function formatDisplay(slot) {
   org = flipIfPerson(org);
   contact = flipIfPerson(contact);
 
-  // --- NEW: single-token person pair rule (e.g., org="Vazquez", contact="Isabel") ---
+  // Single-token person pair (e.g., org="Vazquez", contact="Isabel")
   if (
     org && contact &&
     isSingleToken(org) && isSingleToken(contact) &&
@@ -153,7 +152,7 @@ function formatDisplay(slot) {
     };
   }
 
-  // PERSON-FIRST rule (both look like names)
+  // Both look like names → person first
   if (org && contact && isLikelyPersonName(org) && isLikelyPersonName(contact)) {
     const person = `${contact} ${org}`;
     return {
@@ -172,13 +171,12 @@ function formatDisplay(slot) {
     };
   }
 
-  // Catch Corner tidy-up
+  // Catch Corner cleanup
   const tidyCatch = (s) => (s||'')
     .replace(/\binternal holds?\b/ig,'')
     .replace(/^\s*[-–,:]\s*/,'')
     .trim();
 
-  // Default: ORG bold; contact or subtitle beneath
   if (org) {
     let detail = contact || subtitle || '';
     if (org.toLowerCase().includes('catch corner')) {
@@ -192,15 +190,15 @@ function formatDisplay(slot) {
     };
   }
 
-  // Fallback: title/subtitle
+  // Fallback
   return {
-    title: (title && isLikelyPersonName(title) ? flipIfPerson(title) : title) || '—',
+    title: (title && title.includes(',') ? flipName(title) : title) || '—',
     subtitle: subtitle || contact || '',
     when: `${to12h(slot.startMin)}–${to12h(slot.endMin)}`
   };
 }
 
-// ---------- Pager (always slide left, smoother) ----------
+// ---------- Pager (always slide left, smooth) ----------
 function mountPager(container, pages, { intervalMs=8000, startStaggerMs=0 } = {}) {
   let pageIdx = 0;
   let running = false;
@@ -265,7 +263,7 @@ function renderEventsList(events) {
   wrap.className = 'eventsPageStack';
   wrap.style.display = 'flex';
   wrap.style.flexDirection = 'column';
-  wrap.style.gap = '8px';
+  wrap.style.gap = '6px';
   wrap.style.height = '100%';
 
   events.forEach(ev => {
@@ -300,7 +298,7 @@ function renderEventsList(events) {
     wrap.appendChild(card);
   });
 
-  // Spacer keeps last card from kissing the bottom edge
+  // Spacer to keep card off bottom edge
   const spacer = document.createElement('div');
   spacer.style.flex = '1 1 auto';
   wrap.appendChild(spacer);
@@ -370,12 +368,8 @@ function chunk(arr, size) {
   return out;
 }
 
-function perPageForRoom(id) {
-  // A/B rooms rotate one at a time for readability
-  if (/^(1|2|9|10)[AB]$/.test(id)) return 1;
-  // Fieldhouse single rooms can show two per page
-  return 2;
-}
+// Always show 1 per page (more vertical room)
+function perPageForRoom(/*id*/) { return 1; }
 
 // ---------- Init ----------
 async function init() {
@@ -417,7 +411,7 @@ async function init() {
     arr.sort((a,b) => (a.startMin||0) - (b.startMin||0));
     card._setCount(arr.length);
 
-    const size = perPageForRoom(roomId);
+    const size = perPageForRoom(roomId); // now always 1
     const pages = chunk(arr, size);
 
     mountPager(card._pagerHost, pages, {
