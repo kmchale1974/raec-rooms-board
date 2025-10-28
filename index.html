@@ -30,85 +30,85 @@
       position:fixed; inset:0; display:flex;
       justify-content:center; align-items:flex-start;
       overflow:hidden;
-      padding:0; /* no outer padding so scaling math is clean */
     }
 
-    /* Fixed 1920x1080 canvas */
+    /* Fixed 1920x1080 canvas (tighter padding & gaps) */
     .stage{
       width:1920px; height:1080px; box-sizing:border-box;
-      padding:24px; /* tighter to reduce vertical overflow risk */
-      display:grid; grid-template-rows: 104px 1fr; gap:18px;
+      padding:18px;            /* was 24 */
+      display:grid; grid-template-rows: 92px 1fr; /* was 104px */
+      gap:14px;                /* was 18 */
       will-change: transform;
     }
 
     /* Header row */
     .header{
-      display:grid; grid-template-columns: 320px 1fr 320px; align-items:center;
-      column-gap:16px;
+      display:grid; grid-template-columns: 300px 1fr 300px; align-items:center;
+      column-gap:12px;
     }
-    .brand{ display:flex; align-items:center; gap:12px; }
-    .brand img{ height:68px; width:auto; object-fit:contain; }
+    .brand{ display:flex; align-items:center; gap:10px; }
+    .brand img{ height:62px; width:auto; object-fit:contain; }
 
     .dateclock{ justify-self:center; text-align:center; }
-    #headerDate{ font-size:38px; font-weight:800; letter-spacing:.02em; line-height:1; }
-    #headerClock{ font-size:24px; color:var(--muted); margin-top:6px; font-weight:600; }
+    #headerDate{ font-size:34px; font-weight:800; letter-spacing:.02em; line-height:1; }
+    #headerClock{ font-size:22px; color:var(--muted); margin-top:4px; font-weight:600; }
 
     .wifi{
       justify-self:end; background:var(--panel); border:1px solid var(--grid);
-      border-radius:12px; padding:10px 12px; min-width:280px;
+      border-radius:10px; padding:8px 10px; min-width:250px;
     }
-    .wifi .title{ font-size:14px; color:var(--muted); letter-spacing:.08em; text-transform:uppercase; }
-    .wifi .row{ display:flex; justify-content:space-between; gap:10px; margin-top:4px; }
+    .wifi .title{ font-size:13px; color:var(--muted); letter-spacing:.08em; text-transform:uppercase; }
+    .wifi .row{ display:flex; justify-content:space-between; gap:8px; margin-top:4px; }
     .wifi .row span:first-child{ color:var(--muted); }
     .wifi .row span:last-child{ font-weight:700; }
 
     /* Grid container: South | Fieldhouse | North */
     .grid{
-      display:grid; grid-template-columns: 1fr 1.5fr 1fr; gap:18px;
+      display:grid; grid-template-columns: 1fr 1.5fr 1fr; gap:14px;
       height:100%;
       min-width:0;
     }
 
     .group{
-      background:var(--panel); border:1px solid var(--grid); border-radius:16px;
-      padding:12px; display:grid; grid-template-rows: 40px 1fr; gap:10px;
+      background:var(--panel); border:1px solid var(--grid); border-radius:14px;
+      padding:10px; display:grid; grid-template-rows: 36px 1fr; gap:8px;
       overflow:hidden; min-width:0;
     }
     .group .title{
-      font-size:16px; color:var(--muted); letter-spacing:.1em; text-transform:uppercase;
+      font-size:14px; color:var(--muted); letter-spacing:.1em; text-transform:uppercase;
       border-bottom:1px solid var(--grid); display:flex; align-items:center; padding-bottom:6px;
     }
 
     /* South/North: 1A/1B (stack) then 2A/2B (stack) etc. */
     .rooms-stack{
-      display:grid; grid-template-rows: 1fr 1fr; gap:10px; min-height:0; min-width:0;
+      display:grid; grid-template-rows: 1fr 1fr; gap:8px; min-height:0; min-width:0;
     }
 
     /* Fieldhouse: 3..8 in 2 rows x 3 cols */
     .rooms-fieldhouse{
       display:grid; grid-template-columns: repeat(3, 1fr); grid-template-rows: 1fr 1fr;
-      gap:10px; min-height:0; min-width:0;
+      gap:8px; min-height:0; min-width:0;
     }
 
     /* Individual room card */
     .room{
-      border:1px solid var(--grid); border-radius:12px; padding:10px;
-      display:flex; flex-direction:column; gap:8px; min-height:0; overflow:hidden;
+      border:1px solid var(--grid); border-radius:12px; padding:8px;
+      display:flex; flex-direction:column; gap:6px; min-height:0; overflow:hidden;
       background:linear-gradient(180deg, rgba(255,255,255,0.02), rgba(0,0,0,0)) ;
       min-width:0;
     }
     .roomHeader{
-      display:flex; align-items:center; justify-content:space-between; gap:10px;
+      display:flex; align-items:center; justify-content:space-between; gap:8px;
       border-bottom:1px dashed var(--grid); padding-bottom:6px;
       min-width:0;
     }
-    .roomHeader .id{ font-size:24px; font-weight:800; letter-spacing:.04em; }
+    .roomHeader .id{ font-size:22px; font-weight:800; letter-spacing:.04em; }
     .roomHeader .count{ font-size:12px; color:var(--muted); }
 
     /* Pager host */
     .events{ flex:1 1 auto; overflow:hidden; }
 
-    /* Event card text (JS sets container/layout) */
+    /* Event card text */
     .event .who{ font-size:17px; font-weight:800; line-height:1.1; }
     .event .what{ font-size:14px; color:var(--muted); line-height:1.2; }
     .event .when{ font-size:13px; color:#b7c0cf; font-weight:600; }
