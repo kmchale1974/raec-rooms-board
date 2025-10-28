@@ -1,14 +1,15 @@
-// app.js — in-sync left slide, absolute-stacked pages, top-left content,
-// name/person rules, pickleball & Catch Corner cleanup, autoscale.
+// app.js — robust room routing for 1/2/9/10 + AB/combined forms,
+// always-left slider, one-at-a-time pages, pickleball & Catch Corner cleanup,
+// person-name flip, and small console diagnostics.
 
 // ---------- Time ----------
 function to12h(mins) {
-  const h = Math.floor(mins / 60);
+  const h24 = Math.floor(mins / 60);
   const m = mins % 60;
-  const ampm = h >= 12 ? 'pm' : 'am';
-  let hh = h % 12;
-  if (hh === 0) hh = 12;
-  return `${hh}:${m.toString().padStart(2,'0')}${ampm}`;
+  const ampm = h24 >= 12 ? 'pm' : 'am';
+  let h = h24 % 12;
+  if (h === 0) h = 12;
+  return `${h}:${m.toString().padStart(2,'0')}${ampm}`;
 }
 
 // ---------- Name helpers ----------
@@ -46,7 +47,7 @@ function flipName(lastCommaFirst) {
 
 // ---------- Pickleball normalization ----------
 function pickleballOverride(slot) {
-  const t = `${slot.title||''} ${slot.subtitle||''}`.toLowerCase();
+  const t = `${slot.title||''} ${slot.subtitle||''} ${slot.org||''} ${slot.contact||''}`.toLowerCase();
   if (
     t.includes('pickleball') ||
     (slot.title||'').includes('RAEC Front Desk, Rentals - On Hold') ||
@@ -70,7 +71,7 @@ async function loadData() {
 function ensureStageFit() {
   const STAGE_W = 1920, STAGE_H = 1080;
   const stage = document.querySelector('.stage');
-  const viewport = document.querySelector('.viewport') || document.body; // fallback
+  const viewport = document.querySelector('.viewport') || document.body;
   function fit(){
     if (!stage || !viewport) return;
     const sx = window.innerWidth  / STAGE_W;
@@ -129,6 +130,7 @@ function formatDisplay(slot) {
   org = flipIfPerson(org);
   contact = flipIfPerson(contact);
 
+  // If both look like personal tokens, present "First Last" bold as title
   if (
     org && contact &&
     isSingleToken(org) && isSingleToken(contact) &&
@@ -147,6 +149,7 @@ function formatDisplay(slot) {
     return { title: contact, subtitle: subtitle || '', when: `${to12h(slot.startMin)}–${to12h(slot.endMin)}` };
   }
 
+  // Catch Corner cleanup
   const tidyCatch = (s) => (s||'')
     .replace(/\binternal holds?\b/ig,'')
     .replace(/^\s*[-–,:]\s*/,'')
@@ -210,10 +213,9 @@ function roomCard(id) {
 
   const pagerHost = document.createElement('div');
   pagerHost.className = 'events';
-  // Top-left pin + stack context
   pagerHost.style.position = 'relative';
   pagerHost.style.overflow = 'hidden';
-  pagerHost.style.display = 'block'; // remove flex so absolute children don't get weird alignment
+  pagerHost.style.display = 'block';
 
   card.appendChild(hdr);
   card.appendChild(pagerHost);
@@ -231,7 +233,6 @@ function findRoomCard(id) {
 // ---------- Pages (absolute-stacked, always left slide) ----------
 function renderEventsPage(events) {
   const wrap = document.createElement('div');
-  wrap.className = 'eventsPageStack';
   wrap.style.display = 'flex';
   wrap.style.flexDirection = 'column';
   wrap.style.gap = '6px';
@@ -259,17 +260,14 @@ function renderEventsPage(events) {
     const who = document.createElement('div');
     who.className = 'who';
     who.textContent = title;
-    who.style.textAlign = 'left';
 
     const what = document.createElement('div');
     what.className = 'what';
     what.textContent = subtitle || '';
-    what.style.textAlign = 'left';
 
     const whenEl = document.createElement('div');
     whenEl.className = 'when';
     whenEl.textContent = when;
-    whenEl.style.textAlign = 'left';
 
     card.appendChild(who);
     if (what.textContent) card.appendChild(what);
@@ -280,13 +278,10 @@ function renderEventsPage(events) {
   return wrap;
 }
 
-// Global pager registry
 const GLOBAL_PAGERS = [];
 let GLOBAL_TIMER = null;
 
-function registerPager(p) {
-  GLOBAL_PAGERS.push(p);
-}
+function registerPager(p) { GLOBAL_PAGERS.push(p); }
 function startGlobalPager(intervalMs=8000) {
   if (GLOBAL_TIMER) { clearInterval(GLOBAL_TIMER); GLOBAL_TIMER = null; }
   GLOBAL_PAGERS.forEach(p => p.show(0, true));
@@ -298,17 +293,12 @@ function startGlobalPager(intervalMs=8000) {
 }
 
 function createPager(container, pages) {
-  container.classList.add('roomPager');
   container.innerHTML = '';
-
-  // Make container a stacking context
   container.style.position = 'relative';
   container.style.overflow = 'hidden';
 
   const pageEls = pages.map(evs => {
     const page = document.createElement('div');
-    page.className = 'roomPage';
-    // Absolute stack each page so they don't affect layout width
     page.style.position = 'absolute';
     page.style.left = '0';
     page.style.top = '0';
@@ -336,7 +326,6 @@ function createPager(container, pages) {
       next.style.transform = 'translateX(0%)';
       next.style.opacity = '1';
       pageIdx = i;
-      // restore transitions for subsequent moves
       requestAnimationFrame(() => {
         next.style.transition = 'transform 700ms cubic-bezier(.22,.61,.36,1), opacity 700ms ease';
       });
@@ -350,13 +339,11 @@ function createPager(container, pages) {
       return;
     }
 
-    // prepare incoming
     next.style.transition = 'none';
     next.style.transform = 'translateX(100%)';
     next.style.opacity = '0';
     void next.offsetWidth;
 
-    // animate both
     prev.style.transition = 'transform 700ms cubic-bezier(.22,.61,.36,1), opacity 700ms ease';
     next.style.transition = 'transform 700ms cubic-bezier(.22,.61,.36,1), opacity 700ms ease';
 
@@ -383,7 +370,59 @@ function chunk(arr, size) {
   for (let i=0;i<arr.length;i+=size) out.push(arr.slice(i, i+size));
   return out;
 }
-function perPageForRoom(){ return 1; } // one reservation at a time
+function perPageForRoom(){ return 1; } // show one reservation at a time
+
+// ---------- NEW: robust room routing ----------
+function normalizeRoomTargets(roomIdRaw) {
+  // Returns an array of display room IDs to place the slot into
+  // e.g. "2" -> ["2A","2B"], "10AB" -> ["10A","10B"], "9&10" -> ["9A","9B","10A","10B"]
+  const raw = String(roomIdRaw||'').trim();
+  const s = raw.toUpperCase().replace(/\s+/g,''); // strip spaces for easier matching
+
+  // Exact single courts 1..10 (no suffix) -> duplicate into A/B for 1,2,9,10
+  if (/^(1|2|9|10)$/.test(s)) return [`${s}A`, `${s}B`];
+
+  // A/B explicit
+  if (/^(1|2|9|10)[AB]$/.test(s)) return [s];
+
+  // Combined AB like 1AB, 2-AB, COURT1-AB
+  if (/^(?:COURT)?(1|2|9|10)[\- ]?AB$/.test(raw.toUpperCase())) {
+    const base = raw.match(/(1|2|9|10)/)[1];
+    return [`${base}A`, `${base}B`];
+  }
+
+  // Combined gyms like "9&10", "9-10", "FULLGYM9&10"
+  if (/(^|[^0-9])9\s*(&|-)\s*10([^0-9]|$)/.test(raw.toUpperCase())) {
+    return ['9A','9B','10A','10B'];
+  }
+  if (/(^|[^0-9])1\s*(&|-)\s*2([^0-9]|$)/.test(raw.toUpperCase())) {
+    return ['1A','1B','2A','2B'];
+  }
+
+  // Fieldhouse singles 3..8
+  if (/^[3-8]$/.test(s)) return [s];
+
+  // Fallback: if it's a plain number 3–8 with extra text like "Court 6"
+  const numMatch = raw.match(/\b(1|2|3|4|5|6|7|8|9|10)\b/);
+  if (numMatch) {
+    const base = numMatch[1];
+    if (/^(1|2|9|10)$/.test(base)) return [`${base}A`, `${base}B`];
+    return [base];
+  }
+
+  return []; // unknown, skip
+}
+
+// De-dupe helper per room: key by timing + text
+function dedupeByKey(arr) {
+  const seen = new Set();
+  const out = [];
+  for (const s of arr) {
+    const k = `${s.startMin}|${s.endMin}|${(s.org||s.title||'').toLowerCase()}|${(s.subtitle||'').toLowerCase()}|${(s.contact||'').toLowerCase()}`;
+    if (!seen.has(k)) { seen.add(k); out.push(s); }
+  }
+  return out;
+}
 
 // ---------- Init ----------
 async function init() {
@@ -396,32 +435,30 @@ async function init() {
   const now = new Date();
   const nowMin = now.getHours()*60 + now.getMinutes();
 
-  // Keep only current/future
+  // Keep only current/future items
   const slots = (data.slots||[]).filter(s => (s.endMin ?? 1440) > nowMin);
 
   const wanted = ['1A','1B','2A','2B','3','4','5','6','7','8','9A','9B','10A','10B'];
   const buckets = new Map(wanted.map(k => [k, []]));
 
-  // Map CSV room ids → display ids
-  slots.forEach(s => {
-    let rid = String(s.roomId || '').toUpperCase();
+  // Route each slot to appropriate display room(s)
+  for (const s of slots) {
+    const targets = normalizeRoomTargets(s.roomId);
+    targets.forEach(t => { if (buckets.has(t)) buckets.get(t).push(s); });
+  }
 
-    if (/^(1|2|9|10)$/.test(rid)) {
-      ['A','B'].forEach(sfx => buckets.get(rid+sfx)?.push(s));
-    } else if (/^(1|2|9|10)[AB]$/.test(rid)) {
-      buckets.get(rid)?.push(s);
-    } else if (/^[3-8]$/.test(rid)) {
-      buckets.get(rid)?.push(s);
-    }
-  });
+  // Diagnostics
+  const counts = {};
+  for (const k of wanted) counts[k] = buckets.get(k).length;
+  console.log('Room fill counts:', counts);
 
   // Build pagers
   GLOBAL_PAGERS.length = 0;
-  for (const [roomId, arr] of buckets.entries()) {
+  for (const [roomId, arrRaw] of buckets.entries()) {
     const card = findRoomCard(roomId);
     if (!card) continue;
 
-    arr.sort((a,b) => (a.startMin||0) - (b.startMin||0));
+    const arr = dedupeByKey(arrRaw).sort((a,b) => (a.startMin||0) - (b.startMin||0));
     card._setCount(arr.length);
 
     const pages = chunk(arr, perPageForRoom(roomId));
