@@ -1,5 +1,5 @@
-// app.js — global in-sync pager; top-aligned pages; always-left slide;
-// name rules, pickleball & Catch Corner cleanup; safer autoscale.
+// app.js — in-sync left slide, absolute-stacked pages, top-left content,
+// name/person rules, pickleball & Catch Corner cleanup, autoscale.
 
 // ---------- Time ----------
 function to12h(mins) {
@@ -66,11 +66,11 @@ async function loadData() {
   return data;
 }
 
-// ---------- Fit 1920×1080 with extra safety ----------
+// ---------- Fit 1920×1080 ----------
 function ensureStageFit() {
   const STAGE_W = 1920, STAGE_H = 1080;
   const stage = document.querySelector('.stage');
-  const viewport = document.querySelector('.viewport');
+  const viewport = document.querySelector('.viewport') || document.body; // fallback
   function fit(){
     if (!stage || !viewport) return;
     const sx = window.innerWidth  / STAGE_W;
@@ -105,17 +105,14 @@ function headerClock() {
 
 // ---------- Display formatter ----------
 function formatDisplay(slot) {
-  // 1) Pickleball rule
   const pb = pickleballOverride(slot);
   if (pb) return { title: pb.title, subtitle: pb.subtitle, when: `${to12h(slot.startMin)}–${to12h(slot.endMin)}` };
 
-  // Prefer structured fields
   let org = (slot.org||'').trim();
   let contact = (slot.contact||'').trim();
   let title = (slot.title||'').trim();
   let subtitle = (slot.subtitle||'').trim();
 
-  // If no org/contact but title has comma → try split
   if (!org && !contact && title.includes(',')) {
     const parts = title.split(',').map(s=>s.trim()).filter(Boolean);
     if (parts.length >= 2) {
@@ -132,40 +129,24 @@ function formatDisplay(slot) {
   org = flipIfPerson(org);
   contact = flipIfPerson(contact);
 
-  // Single-token person pair (e.g., org="Vazquez", contact="Isabel")
   if (
     org && contact &&
     isSingleToken(org) && isSingleToken(contact) &&
     !looksOrg(org) && !looksOrg(contact)
   ) {
-    const person = `${contact} ${org}`; // Isabel Vazquez
-    return {
-      title: person,
-      subtitle: subtitle || '',
-      when: `${to12h(slot.startMin)}–${to12h(slot.endMin)}`
-    };
+    const person = `${contact} ${org}`;
+    return { title: person, subtitle: subtitle || '', when: `${to12h(slot.startMin)}–${to12h(slot.endMin)}` };
   }
 
-  // Both look like names → person first
   if (org && contact && isLikelyPersonName(org) && isLikelyPersonName(contact)) {
     const person = `${contact} ${org}`;
-    return {
-      title: person,
-      subtitle: subtitle || '',
-      when: `${to12h(slot.startMin)}–${to12h(slot.endMin)}`
-    };
+    return { title: person, subtitle: subtitle || '', when: `${to12h(slot.startMin)}–${to12h(slot.endMin)}` };
   }
 
-  // Contact alone looks like a person
   if (!org && contact && (isLikelyPersonName(contact) || isSingleToken(contact))) {
-    return {
-      title: contact,
-      subtitle: subtitle || '',
-      when: `${to12h(slot.startMin)}–${to12h(slot.endMin)}`
-    };
+    return { title: contact, subtitle: subtitle || '', when: `${to12h(slot.startMin)}–${to12h(slot.endMin)}` };
   }
 
-  // Catch Corner cleanup
   const tidyCatch = (s) => (s||'')
     .replace(/\binternal holds?\b/ig,'')
     .replace(/^\s*[-–,:]\s*/,'')
@@ -177,14 +158,9 @@ function formatDisplay(slot) {
       org = 'Catch Corner';
       detail = tidyCatch(detail || subtitle);
     }
-    return {
-      title: org,
-      subtitle: detail,
-      when: `${to12h(slot.startMin)}–${to12h(slot.endMin)}`
-    };
+    return { title: org, subtitle: detail, when: `${to12h(slot.startMin)}–${to12h(slot.endMin)}` };
   }
 
-  // Fallback
   return {
     title: (title && title.includes(',') ? flipName(title) : title) || '—',
     subtitle: subtitle || contact || '',
@@ -234,10 +210,10 @@ function roomCard(id) {
 
   const pagerHost = document.createElement('div');
   pagerHost.className = 'events';
-  // Explicit top alignment for every room’s content
-  pagerHost.style.display = 'flex';
-  pagerHost.style.alignItems = 'stretch';
-  pagerHost.style.justifyContent = 'flex-start';
+  // Top-left pin + stack context
+  pagerHost.style.position = 'relative';
+  pagerHost.style.overflow = 'hidden';
+  pagerHost.style.display = 'block'; // remove flex so absolute children don't get weird alignment
 
   card.appendChild(hdr);
   card.appendChild(pagerHost);
@@ -252,7 +228,7 @@ function findRoomCard(id) {
     .find(r => r.querySelector('.roomHeader .id')?.textContent === id) || null;
 }
 
-// ---------- Pages (top aligned, no spacer) ----------
+// ---------- Pages (absolute-stacked, always left slide) ----------
 function renderEventsPage(events) {
   const wrap = document.createElement('div');
   wrap.className = 'eventsPageStack';
@@ -261,6 +237,9 @@ function renderEventsPage(events) {
   wrap.style.gap = '6px';
   wrap.style.height = '100%';
   wrap.style.justifyContent = 'flex-start';
+  wrap.style.alignItems = 'stretch';
+  wrap.style.textAlign = 'left';
+  wrap.style.width = '100%';
 
   events.forEach(ev => {
     const { title, subtitle, when } = formatDisplay(ev);
@@ -275,18 +254,22 @@ function renderEventsPage(events) {
     card.style.flexDirection = 'column';
     card.style.gap = '4px';
     card.style.minHeight = 0;
+    card.style.textAlign = 'left';
 
     const who = document.createElement('div');
     who.className = 'who';
     who.textContent = title;
+    who.style.textAlign = 'left';
 
     const what = document.createElement('div');
     what.className = 'what';
     what.textContent = subtitle || '';
+    what.style.textAlign = 'left';
 
     const whenEl = document.createElement('div');
     whenEl.className = 'when';
     whenEl.textContent = when;
+    whenEl.style.textAlign = 'left';
 
     card.appendChild(who);
     if (what.textContent) card.appendChild(what);
@@ -297,7 +280,7 @@ function renderEventsPage(events) {
   return wrap;
 }
 
-// ---------- Global pager bus (in-sync transitions) ----------
+// Global pager registry
 const GLOBAL_PAGERS = [];
 let GLOBAL_TIMER = null;
 
@@ -306,7 +289,6 @@ function registerPager(p) {
 }
 function startGlobalPager(intervalMs=8000) {
   if (GLOBAL_TIMER) { clearInterval(GLOBAL_TIMER); GLOBAL_TIMER = null; }
-  // Show first pages in all rooms together
   GLOBAL_PAGERS.forEach(p => p.show(0, true));
   if (GLOBAL_PAGERS.length > 0) {
     GLOBAL_TIMER = setInterval(() => {
@@ -319,9 +301,20 @@ function createPager(container, pages) {
   container.classList.add('roomPager');
   container.innerHTML = '';
 
+  // Make container a stacking context
+  container.style.position = 'relative';
+  container.style.overflow = 'hidden';
+
   const pageEls = pages.map(evs => {
     const page = document.createElement('div');
     page.className = 'roomPage';
+    // Absolute stack each page so they don't affect layout width
+    page.style.position = 'absolute';
+    page.style.left = '0';
+    page.style.top = '0';
+    page.style.width = '100%';
+    page.style.height = '100%';
+    page.style.display = 'block';
     page.style.transform = 'translateX(100%)';
     page.style.opacity = '0';
     page.style.transition = 'transform 700ms cubic-bezier(.22,.61,.36,1), opacity 700ms ease';
@@ -343,6 +336,10 @@ function createPager(container, pages) {
       next.style.transform = 'translateX(0%)';
       next.style.opacity = '1';
       pageIdx = i;
+      // restore transitions for subsequent moves
+      requestAnimationFrame(() => {
+        next.style.transition = 'transform 700ms cubic-bezier(.22,.61,.36,1), opacity 700ms ease';
+      });
       return;
     }
 
@@ -353,11 +350,13 @@ function createPager(container, pages) {
       return;
     }
 
+    // prepare incoming
     next.style.transition = 'none';
     next.style.transform = 'translateX(100%)';
     next.style.opacity = '0';
-    void next.offsetWidth; // reflow
+    void next.offsetWidth;
 
+    // animate both
     prev.style.transition = 'transform 700ms cubic-bezier(.22,.61,.36,1), opacity 700ms ease';
     next.style.transition = 'transform 700ms cubic-bezier(.22,.61,.36,1), opacity 700ms ease';
 
@@ -384,7 +383,7 @@ function chunk(arr, size) {
   for (let i=0;i<arr.length;i+=size) out.push(arr.slice(i, i+size));
   return out;
 }
-function perPageForRoom(/*id*/) { return 1; } // one reservation at a time
+function perPageForRoom(){ return 1; } // one reservation at a time
 
 // ---------- Init ----------
 async function init() {
@@ -403,12 +402,11 @@ async function init() {
   const wanted = ['1A','1B','2A','2B','3','4','5','6','7','8','9A','9B','10A','10B'];
   const buckets = new Map(wanted.map(k => [k, []]));
 
-  // Map CSV room ids onto our displayed ids
+  // Map CSV room ids → display ids
   slots.forEach(s => {
     let rid = String(s.roomId || '').toUpperCase();
 
     if (/^(1|2|9|10)$/.test(rid)) {
-      // If CSV says "1", show in both 1A and 1B (same info)
       ['A','B'].forEach(sfx => buckets.get(rid+sfx)?.push(s));
     } else if (/^(1|2|9|10)[AB]$/.test(rid)) {
       buckets.get(rid)?.push(s);
@@ -417,7 +415,7 @@ async function init() {
     }
   });
 
-  // Build pagers (register for global sync)
+  // Build pagers
   GLOBAL_PAGERS.length = 0;
   for (const [roomId, arr] of buckets.entries()) {
     const card = findRoomCard(roomId);
@@ -426,13 +424,12 @@ async function init() {
     arr.sort((a,b) => (a.startMin||0) - (b.startMin||0));
     card._setCount(arr.length);
 
-    const size = perPageForRoom(roomId); // 1
-    const pages = chunk(arr, size);
+    const pages = chunk(arr, perPageForRoom(roomId));
     const pager = createPager(card._pagerHost, pages);
     registerPager(pager);
   }
 
-  // Kick off in-sync transitions
+  // Start in-sync cycle
   startGlobalPager(8000);
 }
 
