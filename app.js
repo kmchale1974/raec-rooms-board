@@ -1,23 +1,23 @@
 // app.js
 
-/**************************
- *  Clock + date header
- **************************/
+/*********************
+ * Clock + date
+ *********************/
 function updateClock() {
   const now = new Date();
-  const optsDate = { weekday: 'long', month: 'long', day: 'numeric' };
-  const optsTime = { hour: 'numeric', minute: '2-digit' };
-  document.getElementById('headerDate').textContent =
-    now.toLocaleDateString(undefined, optsDate);
-  document.getElementById('headerClock').textContent =
-    now.toLocaleTimeString(undefined, optsTime).toLowerCase();
+  const dateFmt = { weekday: 'long', month: 'long', day: 'numeric' };
+  const timeFmt = { hour: 'numeric', minute: '2-digit' };
+  const d = document.getElementById('headerDate');
+  const t = document.getElementById('headerClock');
+  if (d) d.textContent = now.toLocaleDateString(undefined, dateFmt);
+  if (t) t.textContent = now.toLocaleTimeString(undefined, timeFmt).toLowerCase();
 }
 setInterval(updateClock, 1000);
 updateClock();
 
-/**************************
- *  Fetch events.json
- **************************/
+/*********************
+ * Fetch events.json
+ *********************/
 async function loadEvents() {
   const url = `./events.json?ts=${Date.now()}`;
   const resp = await fetch(url, { cache: 'no-store' });
@@ -27,10 +27,10 @@ async function loadEvents() {
   return data;
 }
 
-/**************************
- *  Time helpers
- **************************/
-const PAD = (n) => String(n).padStart(2, '0');
+/*********************
+ * Time helpers
+ *********************/
+const PAD = n => String(n).padStart(2, '0');
 function fmt12h(mins) {
   let h = Math.floor(mins / 60);
   const m = mins % 60;
@@ -45,138 +45,148 @@ function notEnded(slot) {
   return slot.endMin > nowMin;
 }
 
-/**************************
- *  Text cleanup + parsing
- **************************/
+/*********************
+ * Text rules
+ *********************/
 const NAME_RX = /^[a-z' -]+$/i;
-
-// returns {org, contact, isPersonTitle, isOrgPerson}
-function parseTitle(titleRaw) {
-  const title = (titleRaw || '').trim();
-
-  // Split on the first comma only (org, person) OR (last, first)
-  const parts = title.split(',').map(s => s.trim()).filter(Boolean);
-  if (parts.length !== 2) {
-    return { org: title, contact: null, isPersonTitle: false, isOrgPerson: false };
-  }
-  const left = parts[0];
-  const right = parts[1];
-
-  const leftWordCount = left.split(/\s+/).filter(Boolean).length;
-  const rightWordCount = right.split(/\s+/).filter(Boolean).length;
-  const leftAlpha = NAME_RX.test(left);
-  const rightAlpha = NAME_RX.test(right);
-
-  // PERSON pattern: "Last, First" (single-word last name on left, first is alpha words)
-  const looksPerson = (leftWordCount === 1 && rightAlpha && rightWordCount >= 1 && rightWordCount <= 3);
-
-  // ORG,PERSON pattern: left has 2+ words (org name), right looks like a human name
-  const looksOrgPerson = (leftWordCount >= 2 && rightAlpha && rightWordCount >= 1 && rightWordCount <= 3);
-
-  if (looksPerson) {
-    return { org: null, contact: `${right} ${left}`.trim(), isPersonTitle: true, isOrgPerson: false };
-  }
-  if (looksOrgPerson) {
-    return { org: left, contact: right, isPersonTitle: false, isOrgPerson: true };
-  }
-  // default: treat as org with no contact
-  return { org: title, contact: null, isPersonTitle: false, isOrgPerson: false };
+function toFirstLast(last, first) {
+  const L = (last || '').trim();
+  const F = (first || '').trim();
+  return F && L ? `${F} ${L}` : (F || L || '');
 }
 
 function cleanSubtitle(sub) {
   if (!sub) return '';
   let s = sub;
-
-  // remove "Internal Hold..." phrases
+  // remove “Internal Hold …”
   s = s.replace(/\binternal hold.*$/i, '').trim();
-
-  // remove duplicated "Open Pickleball" if present
+  // remove duplicated “Open Pickleball …”
   s = s.replace(/\bopen\s+pickleball\b.*$/i, '').trim();
-
-  // trim stray punctuation
+  // trim punctuation
   s = s.replace(/^[\-\–—:,.\s]+|[\-\–—:,.\s]+$/g, '');
-
   return s;
 }
 
+// Title parser for raw “X, Y”
+function parseTitleRaw(titleRaw) {
+  const title = (titleRaw || '').trim();
+  const parts = title.split(',').map(s => s.trim()).filter(Boolean);
+  if (parts.length !== 2) {
+    return { org: title || null, contact: null, isPerson: false, isOrgPerson: false };
+  }
+  const left = parts[0];      // could be Last OR Org
+  const right = parts[1];     // could be First OR Contact
+  const leftWords = left.split(/\s+/).filter(Boolean).length;
+  const rightWords = right.split(/\s+/).filter(Boolean).length;
+
+  const leftIsNamey = NAME_RX.test(left);
+  const rightIsNamey = NAME_RX.test(right);
+
+  const looksPerson = (leftWords === 1 && rightIsNamey && rightWords >= 1 && rightWords <= 3);
+  const looksOrgPerson = (leftWords >= 2 && rightIsNamey && rightWords >= 1 && rightWords <= 3);
+
+  if (looksPerson) {
+    return { org: null, contact: toFirstLast(left, right), isPerson: true, isOrgPerson: false };
+  }
+  if (looksOrgPerson) {
+    return { org: left, contact: right, isPerson: false, isOrgPerson: true };
+  }
+  return { org: title || null, contact: null, isPerson: false, isOrgPerson: false };
+}
+
+/**
+ * normalizeWho(slot):
+ * - Honors backend-provided slot.org/slot.contact if present (best signal)
+ * - Pickleball rule
+ * - Catch Corner rule
+ * - Fallback to raw-title parsing
+ */
 function normalizeWho(slot) {
   const title = slot.title || '';
   const subtitle = slot.subtitle || '';
   const lowerTitle = title.toLowerCase();
   const lowerSub = subtitle.toLowerCase();
 
-  // 1) Pickleball rule
+  // 1) Pickleball
   if (lowerTitle.includes('pickleball') || lowerSub.includes('pickleball')) {
-    // Bold: Open Pickleball
-    // Line 2: cleaned subtitle (without "Internal Hold..." or duplicated phrase)
     const line2 = cleanSubtitle(subtitle);
     return { whoBold: 'Open Pickleball', whoLine2: line2 || null };
   }
 
-  // 2) Catch Corner rule
+  // 2) Catch Corner
   if (/catch\s*corner/i.test(title)) {
     let detail = subtitle || title;
-    // strip leading "Catch Corner" and parens
     detail = detail.replace(/^catch\s*corner\s*\(?\s*/i, '');
     detail = detail.replace(/^\(+|\)+$/g, '');
     detail = cleanSubtitle(detail);
     return { whoBold: 'Catch Corner', whoLine2: detail || null };
   }
 
-  // 3) Title parsing (Org, Person) or (Last, First)
-  const { org, contact, isPersonTitle, isOrgPerson } = parseTitle(title);
-
-  if (isPersonTitle) {
-    // Person only: bold First Last; line 2 is the subtitle (if any)
-    const line2 = cleanSubtitle(subtitle);
-    return { whoBold: contact, whoLine2: line2 || null };
-  }
-
-  if (isOrgPerson) {
-    // Org + contact: bold org; line 2: "Contact — subtitle?" (if subtitle exists)
+  // 3) Prefer explicit fields from transform (if present)
+  // Cases:
+  //   A) org + contact  -> bold org, line2 "Contact — subtitle?"
+  //   B) contact only   -> bold First Last (if title looked like "Last, First"; else contact), line2 subtitle
+  //   C) org only       -> bold org, line2 subtitle
+  if (slot.org && slot.contact) {
+    // If org seems like a person (rare), still present org on top per your preference.
     const line2Sub = cleanSubtitle(subtitle);
-    const line2 = line2Sub ? `${contact} — ${line2Sub}` : contact;
-    return { whoBold: org, whoLine2: line2 };
+    const line2 = line2Sub ? `${slot.contact} — ${line2Sub}` : slot.contact;
+    return { whoBold: slot.org, whoLine2: line2 };
+  }
+  if (slot.contact && !slot.org) {
+    // If title was “Last, First”, make sure we show “First Last”
+    const parsed = parseTitleRaw(title);
+    const personName = parsed.isPerson ? parsed.contact : slot.contact;
+    const line2 = cleanSubtitle(subtitle);
+    return { whoBold: personName || slot.contact, whoLine2: line2 || null };
+  }
+  if (slot.org && !slot.contact) {
+    const line2 = cleanSubtitle(subtitle);
+    return { whoBold: slot.org, whoLine2: line2 || null };
   }
 
-  // 4) Fallback: bold the title, show cleaned subtitle if present
+  // 4) Fallback to parsing the raw title
+  const parsed = parseTitleRaw(title);
+  if (parsed.isPerson) {
+    const line2 = cleanSubtitle(subtitle);
+    return { whoBold: parsed.contact, whoLine2: line2 || null };
+  }
+  if (parsed.isOrgPerson) {
+    const line2Sub = cleanSubtitle(subtitle);
+    const line2 = line2Sub ? `${parsed.contact} — ${line2Sub}` : parsed.contact;
+    return { whoBold: parsed.org, whoLine2: line2 };
+  }
   const line2 = cleanSubtitle(subtitle);
-  return { whoBold: org || title || '—', whoLine2: line2 || null };
+  return { whoBold: parsed.org || title || '—', whoLine2: line2 || null };
 }
 
-/**************************
- *  Layout constants
- **************************/
+/*********************
+ * Layout + buckets
+ *********************/
 const SOUTH_TILES = ['1A','1B','2A','2B'];
 const FIELD_TILES = ['3','4','5','6','7','8'];
 const NORTH_TILES = ['9A','9B','10A','10B'];
 
-/**************************
- *  Slot distribution
- **************************/
 function distributeSlots(rawSlots) {
   const active = (rawSlots || []).filter(notEnded);
-
   const perTile = {};
   const put = (tile, s) => { (perTile[tile] ||= []).push(s); };
 
   for (const s of active) {
     const r = String(s.roomId);
     if (['1','2','9','10'].includes(r)) {
-      // Mirror numeric to A/B
       put(`${r}A`, s);
       put(`${r}B`, s);
     } else {
-      // Fieldhouse remain numeric
-      put(r, s);
+      put(r, s); // fieldhouse numeric tiles
     }
   }
 
-  // De-duplicate within each tile (same time+title+subtitle)
+  // de-dupe within each tile
   for (const k of Object.keys(perTile)) {
     const seen = new Set();
     perTile[k] = perTile[k].filter(sl => {
-      const key = `${sl.startMin}|${sl.endMin}|${(sl.title||'').toLowerCase()}|${(sl.subtitle||'').toLowerCase()}`;
+      const key = `${sl.startMin}|${sl.endMin}|${(sl.title||'').toLowerCase()}|${(sl.subtitle||'').toLowerCase()}|${(sl.org||'').toLowerCase()}|${(sl.contact||'').toLowerCase()}`;
       if (seen.has(key)) return false;
       seen.add(key);
       return true;
@@ -186,9 +196,9 @@ function distributeSlots(rawSlots) {
   return perTile;
 }
 
-/**************************
- *  DOM helpers
- **************************/
+/*********************
+ * DOM helper
+ *********************/
 function el(tag, cls, text) {
   const n = document.createElement(tag);
   if (cls) n.className = cls;
@@ -196,9 +206,85 @@ function el(tag, cls, text) {
   return n;
 }
 
-/**************************
- *  Room tile renderer (paged + left slide)
- **************************/
+/*********************
+ * Smooth left-slide pager
+ *********************/
+/**
+ * Mounts slides and animates *always left* with a smoother feel:
+ * - Uses translate3d for GPU
+ * - Sets both slides to absolute, forces reflow, then animates
+ * - Easing tuned for smoothness
+ */
+function runPager(eventsWrap, slides, intervalMs = 8000, transMs = 600) {
+  if (slides.length <= 1) {
+    // Single (or none): just ensure the one slide is in normal flow
+    if (slides[0] && !eventsWrap.contains(slides[0])) eventsWrap.appendChild(slides[0]);
+    return;
+  }
+
+  // Ensure container is a viewport
+  eventsWrap.style.position = 'relative';
+  eventsWrap.style.overflow = 'hidden';
+
+  // Start with first slide in normal flow
+  let curr = slides[0];
+  if (!eventsWrap.contains(curr)) eventsWrap.appendChild(curr);
+
+  function slideLeft(next) {
+    const nextEl = slides[next];
+
+    // Prepare both slides
+    // Current: make absolute at 0
+    curr.style.position = 'absolute';
+    curr.style.inset = '0';
+    curr.style.transform = 'translate3d(0,0,0)';
+    curr.style.willChange = 'transform';
+
+    // Next: start off-screen right
+    nextEl.style.position = 'absolute';
+    nextEl.style.inset = '0';
+    nextEl.style.transform = 'translate3d(100%,0,0)';
+    nextEl.style.willChange = 'transform';
+    eventsWrap.appendChild(nextEl);
+
+    // Force reflow before animating
+    // eslint-disable-next-line no-unused-expressions
+    nextEl.offsetHeight;
+
+    // Animate both
+    const ease = 'cubic-bezier(.22,.61,.36,1)';
+    curr.style.transition = `transform ${transMs}ms ${ease}`;
+    nextEl.style.transition = `transform ${transMs}ms ${ease}`;
+
+    requestAnimationFrame(() => {
+      curr.style.transform = 'translate3d(-100%,0,0)';
+      nextEl.style.transform = 'translate3d(0,0,0)';
+    });
+
+    // Cleanup after transition
+    setTimeout(() => {
+      // Remove the old slide, put the new slide into normal flow
+      if (eventsWrap.contains(curr)) eventsWrap.removeChild(curr);
+      nextEl.style.position = 'static';
+      nextEl.style.inset = '';
+      nextEl.style.transition = '';
+      nextEl.style.transform = '';
+      nextEl.style.willChange = '';
+
+      curr = nextEl; // new current
+    }, transMs + 40);
+  }
+
+  let ix = 0;
+  setInterval(() => {
+    ix = (ix + 1) % slides.length;
+    slideLeft(ix);
+  }, intervalMs);
+}
+
+/*********************
+ * Render one room
+ *********************/
 function renderRoomTile(container, tileId, slots, maxPerPage) {
   const room = el('div', 'room');
   const header = el('div', 'roomHeader');
@@ -208,8 +294,7 @@ function renderRoomTile(container, tileId, slots, maxPerPage) {
   room.appendChild(header);
 
   const eventsWrap = el('div', 'events');
-  // ensure wrapper holds height even while slides are absolute
-  eventsWrap.style.position = 'relative';
+  // keep some height so pager looks stable
   eventsWrap.style.minHeight = '1px';
   room.appendChild(eventsWrap);
 
@@ -224,7 +309,6 @@ function renderRoomTile(container, tileId, slots, maxPerPage) {
 
   const slides = pages.map(items => {
     const slide = el('div', 'slide');
-    slide.style.minHeight = '0';
     slide.style.display = 'flex';
     slide.style.flexDirection = 'column';
     slide.style.gap = '8px';
@@ -246,85 +330,50 @@ function renderRoomTile(container, tileId, slots, maxPerPage) {
     return slide;
   });
 
-  // Mount first slide in normal flow
-  if (slides[0]) eventsWrap.appendChild(slides[0]);
-
-  if (slides.length > 1) {
-    let ix = 0;
-    const INTERVAL = 8000; // 8s per page
-    const TRANS = 450;     // ms
-
-    function slideLeft(next) {
-      const currEl = eventsWrap.firstElementChild;
-      const nextEl = slides[next];
-
-      // position next off-screen right
-      nextEl.style.position = 'absolute';
-      nextEl.style.inset = '0';
-      nextEl.style.transform = 'translateX(100%)';
-      nextEl.style.transition = `transform ${TRANS}ms ease`;
-      eventsWrap.appendChild(nextEl);
-
-      // animate both to slide left
-      requestAnimationFrame(() => {
-        if (currEl) {
-          currEl.style.position = 'absolute';
-          currEl.style.inset = '0';
-          currEl.style.transition = `transform ${TRANS}ms ease`;
-          currEl.style.transform = 'translateX(-100%)';
-        }
-        nextEl.style.transform = 'translateX(0%)';
-      });
-
-      // cleanup and reset next into normal flow so container doesn't collapse
-      setTimeout(() => {
-        if (currEl) eventsWrap.removeChild(currEl);
-        nextEl.style.position = 'static';
-        nextEl.style.inset = '';
-        nextEl.style.transition = '';
-        nextEl.style.transform = '';
-      }, TRANS + 40);
-    }
-
-    setInterval(() => {
-      ix = (ix + 1) % slides.length;
-      slideLeft(ix);
-    }, INTERVAL);
+  // Mount/pager
+  if (slides.length === 1) {
+    eventsWrap.appendChild(slides[0]);
+  } else {
+    // start with first
+    eventsWrap.appendChild(slides[0]);
+    runPager(eventsWrap, slides, 8000, 650); // slightly longer + eased
   }
 
   container.appendChild(room);
 }
 
-/**************************
- *  Render whole board
- **************************/
+/*********************
+ * Render board
+ *********************/
 function renderBoard(data) {
   const south = document.getElementById('southRooms');
   const fieldhouse = document.getElementById('fieldhouseRooms');
   const north = document.getElementById('northRooms');
+  if (!south || !fieldhouse || !north) return;
+
   south.innerHTML = fieldhouse.innerHTML = north.innerHTML = '';
 
   const perTile = distributeSlots(Array.isArray(data.slots) ? data.slots : []);
 
-  // South: 1 event per A/B tile
+  // South: 1 per page
   SOUTH_TILES.forEach(t => {
     renderRoomTile(south, t, perTile[t] || [], 1);
   });
 
-  // Fieldhouse: 2 events per tile + pager
+  // Fieldhouse: 2 per page
   FIELD_TILES.forEach(t => {
     renderRoomTile(fieldhouse, t, perTile[t] || [], 2);
   });
 
-  // North: 1 event per A/B tile
+  // North: 1 per page
   NORTH_TILES.forEach(t => {
     renderRoomTile(north, t, perTile[t] || [], 1);
   });
 }
 
-/**************************
- *  Init + periodic refresh
- **************************/
+/*********************
+ * Init + refresh
+ *********************/
 async function init() {
   try {
     const data = await loadEvents();
@@ -334,6 +383,5 @@ async function init() {
   }
 }
 document.addEventListener('DOMContentLoaded', init);
-
-// refresh every 60s so ended events drop off + layout repaginates
+// refresh every 60s so ended events fall off and pages repaginate
 setInterval(init, 60_000);
