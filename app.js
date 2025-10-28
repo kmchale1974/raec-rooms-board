@@ -1,7 +1,7 @@
-// app.js — always slide-left paging, people names as "First Last" bold,
-// purpose under it, then time; pickleball rule preserved; safer autoscale.
+// app.js — smoother always-left slide; person-name fix for single-token org/contact;
+// tighter autoscale to avoid bottom/right clipping; pickleball & Catch Corner rules kept.
 
-// ---------- Utilities ----------
+// ---------- Time ----------
 function to12h(mins) {
   const h = Math.floor(mins / 60);
   const m = mins % 60;
@@ -11,15 +11,24 @@ function to12h(mins) {
   return `${hh}:${m.toString().padStart(2,'0')}${ampm}`;
 }
 
+// ---------- Name helpers ----------
+const ORG_HINTS = [
+  'club','athletic','athletics','basketball','volleyball','elite','academy',
+  'flight','omona','empower','chicago sport','pink elite','catch corner','training',
+  'school','rec','soccer','baseball'
+];
+
+function looksOrg(s) {
+  if (!s) return false;
+  const lower = s.toLowerCase();
+  return ORG_HINTS.some(h => lower.includes(h));
+}
+
+function isSingleToken(s){ return /^[A-Za-z'.-]+$/.test(s||''); }
+
 function isLikelyPersonName(s) {
   if (!s) return false;
-  const orgHints = [
-    'club','athletic','athletics','basketball','volleyball','elite','academy',
-    'flight','omona','empower','chicago sport','pink elite','catch corner','training'
-  ];
-  const lower = s.toLowerCase();
-  if (orgHints.some(h => lower.includes(h))) return false;
-
+  if (looksOrg(s)) return false;
   if (s.includes(',')) {
     const parts = s.split(',').map(x=>x.trim()).filter(Boolean);
     if (
@@ -30,7 +39,6 @@ function isLikelyPersonName(s) {
   }
   const tokens = s.split(/\s+/).filter(Boolean);
   if (tokens.length === 2 && tokens.every(t => /^[A-Za-z'.-]+$/.test(t))) return true;
-
   return false;
 }
 function flipName(lastCommaFirst) {
@@ -61,7 +69,7 @@ async function loadData() {
   return data;
 }
 
-// ---------- Fit 1920×1080 safely ----------
+// ---------- Fit 1920×1080 safely (extra margin) ----------
 function ensureStageFit() {
   const STAGE_W = 1920, STAGE_H = 1080;
   const stage = document.querySelector('.stage');
@@ -71,13 +79,12 @@ function ensureStageFit() {
     if (!stage || !viewport) return;
     const sx = window.innerWidth  / STAGE_W;
     const sy = window.innerHeight / STAGE_H;
-    // Slight safety margin so nothing clips on the right/bottom
-    const s  = Math.min(sx, sy) * 0.985;
+    // slightly smaller scale to ensure no clipping on tight players
+    const s  = Math.min(sx, sy) * 0.97;
 
     stage.style.transform = `scale(${s})`;
     stage.style.transformOrigin = 'top center';
 
-    // Keep wrapper flex-centering
     viewport.style.display = 'flex';
     viewport.style.justifyContent = 'center';
     viewport.style.alignItems = 'flex-start';
@@ -119,7 +126,6 @@ function formatDisplay(slot) {
   if (!org && !contact && title.includes(',')) {
     const parts = title.split(',').map(s=>s.trim()).filter(Boolean);
     if (parts.length >= 2) {
-      // If first looks org-ish and second looks person-ish:
       if (!isLikelyPersonName(parts[0]) && isLikelyPersonName(parts[1])) {
         org = parts[0];
         contact = parts.slice(1).join(', ');
@@ -129,25 +135,36 @@ function formatDisplay(slot) {
     }
   }
 
-  // Flip any "Last, First" we decide is a person
   const flipIfPerson = (s) => (s && s.includes(',') && isLikelyPersonName(s)) ? flipName(s) : s;
   org = flipIfPerson(org);
   contact = flipIfPerson(contact);
 
-  // --- PERSON-FIRST rule ---
-  // If BOTH org and contact are person-like (e.g., org="Vazquez", contact="Isabel"),
-  // treat as one person: bold "First Last", subtitle = purpose.
-  if (org && contact && isLikelyPersonName(org) && isLikelyPersonName(contact)) {
-    const person = `${contact} ${org}`; // Isabel + Vazquez
+  // --- NEW: single-token person pair rule (e.g., org="Vazquez", contact="Isabel") ---
+  if (
+    org && contact &&
+    isSingleToken(org) && isSingleToken(contact) &&
+    !looksOrg(org) && !looksOrg(contact)
+  ) {
+    const person = `${contact} ${org}`; // Isabel Vazquez
     return {
-      title: person,                // bold
-      subtitle: subtitle || '',     // purpose (e.g., Volleyball)
+      title: person,
+      subtitle: subtitle || '',
       when: `${to12h(slot.startMin)}–${to12h(slot.endMin)}`
     };
   }
 
-  // If contact alone looks like a person and there is NO org → bold the person
-  if (!org && contact && isLikelyPersonName(contact)) {
+  // PERSON-FIRST rule (both look like names)
+  if (org && contact && isLikelyPersonName(org) && isLikelyPersonName(contact)) {
+    const person = `${contact} ${org}`;
+    return {
+      title: person,
+      subtitle: subtitle || '',
+      when: `${to12h(slot.startMin)}–${to12h(slot.endMin)}`
+    };
+  }
+
+  // Contact alone looks like a person
+  if (!org && contact && (isLikelyPersonName(contact) || isSingleToken(contact))) {
     return {
       title: contact,
       subtitle: subtitle || '',
@@ -155,22 +172,15 @@ function formatDisplay(slot) {
     };
   }
 
-  // If title itself is a person and there is no org/contact, bold flipped name
-  if (!org && !contact && title && isLikelyPersonName(title)) {
-    return {
-      title: flipIfPerson(title) || title,
-      subtitle: subtitle || '',
-      when: `${to12h(slot.startMin)}–${to12h(slot.endMin)}`
-    };
-  }
+  // Catch Corner tidy-up
+  const tidyCatch = (s) => (s||'')
+    .replace(/\binternal holds?\b/ig,'')
+    .replace(/^\s*[-–,:]\s*/,'')
+    .trim();
 
-  // Catch Corner tidy-up: keep bold "Catch Corner", strip “Internal Holds” from detail
-  const tidyCatch = (s) => (s||'').replace(/\binternal holds?\b/ig,'').replace(/^\s*[-–,:]\s*/,'').trim();
-
-  // Default: ORG in bold; contact or subtitle beneath
+  // Default: ORG bold; contact or subtitle beneath
   if (org) {
     let detail = contact || subtitle || '';
-    // If Catch Corner, normalize label & detail
     if (org.toLowerCase().includes('catch corner')) {
       org = 'Catch Corner';
       detail = tidyCatch(detail || subtitle);
@@ -182,7 +192,7 @@ function formatDisplay(slot) {
     };
   }
 
-  // Fallback: use title/subtitle
+  // Fallback: title/subtitle
   return {
     title: (title && isLikelyPersonName(title) ? flipIfPerson(title) : title) || '—',
     subtitle: subtitle || contact || '',
@@ -190,7 +200,7 @@ function formatDisplay(slot) {
   };
 }
 
-// ---------- Pager (always slide left) ----------
+// ---------- Pager (always slide left, smoother) ----------
 function mountPager(container, pages, { intervalMs=8000, startStaggerMs=0 } = {}) {
   let pageIdx = 0;
   let running = false;
@@ -203,7 +213,7 @@ function mountPager(container, pages, { intervalMs=8000, startStaggerMs=0 } = {}
     page.className = 'roomPage';
     page.style.transform = 'translateX(100%)';
     page.style.opacity = '0';
-    page.style.transition = 'transform 600ms ease, opacity 600ms ease';
+    page.style.transition = 'transform 700ms cubic-bezier(.22,.61,.36,1), opacity 700ms ease';
     page.appendChild(renderEventsList(evs));
     container.appendChild(page);
     return page;
@@ -225,8 +235,8 @@ function mountPager(container, pages, { intervalMs=8000, startStaggerMs=0 } = {}
     next.style.opacity = '0';
     void next.offsetWidth; // reflow
 
-    prev.style.transition = 'transform 600ms ease, opacity 600ms ease';
-    next.style.transition = 'transform 600ms ease, opacity 600ms ease';
+    prev.style.transition = 'transform 700ms cubic-bezier(.22,.61,.36,1), opacity 700ms ease';
+    next.style.transition = 'transform 700ms cubic-bezier(.22,.61,.36,1), opacity 700ms ease';
 
     prev.style.transform = 'translateX(-100%)';
     prev.style.opacity = '0';
@@ -255,7 +265,7 @@ function renderEventsList(events) {
   wrap.className = 'eventsPageStack';
   wrap.style.display = 'flex';
   wrap.style.flexDirection = 'column';
-  wrap.style.gap = '10px';
+  wrap.style.gap = '8px';
   wrap.style.height = '100%';
 
   events.forEach(ev => {
@@ -265,11 +275,11 @@ function renderEventsList(events) {
     card.className = 'event';
     card.style.background = 'var(--chip)';
     card.style.border = '1px solid var(--grid)';
-    card.style.borderRadius = '12px';
-    card.style.padding = '10px 12px';
+    card.style.borderRadius = '10px';
+    card.style.padding = '8px 10px';
     card.style.display = 'flex';
     card.style.flexDirection = 'column';
-    card.style.gap = '6px';
+    card.style.gap = '4px';
     card.style.minHeight = 0;
 
     const who = document.createElement('div');
@@ -290,7 +300,7 @@ function renderEventsList(events) {
     wrap.appendChild(card);
   });
 
-  // Spacer prevents bottom clipping of last card
+  // Spacer keeps last card from kissing the bottom edge
   const spacer = document.createElement('div');
   spacer.style.flex = '1 1 auto';
   wrap.appendChild(spacer);
@@ -361,9 +371,9 @@ function chunk(arr, size) {
 }
 
 function perPageForRoom(id) {
-  // A/B rooms: one-at-a-time for readability (rotating)
+  // A/B rooms rotate one at a time for readability
   if (/^(1|2|9|10)[AB]$/.test(id)) return 1;
-  // Fieldhouse singles: two per page
+  // Fieldhouse single rooms can show two per page
   return 2;
 }
 
@@ -381,15 +391,15 @@ async function init() {
   // Keep only current/future
   const slots = (data.slots||[]).filter(s => (s.endMin ?? 1440) > nowMin);
 
-  // Bucket by room id we render: 1A,1B,2A,2B, 3..8, 9A,9B,10A,10B
   const wanted = ['1A','1B','2A','2B','3','4','5','6','7','8','9A','9B','10A','10B'];
   const buckets = new Map(wanted.map(k => [k, []]));
 
+  // Map CSV room ids onto our displayed ids
   slots.forEach(s => {
     let rid = String(s.roomId || '').toUpperCase();
 
     if (/^(1|2|9|10)$/.test(rid)) {
-      // If CSV says just "1", show in both 1A and 1B (same info) per your instruction
+      // If CSV says "1", show in both 1A and 1B (same info)
       ['A','B'].forEach(sfx => buckets.get(rid+sfx)?.push(s));
     } else if (/^(1|2|9|10)[AB]$/.test(rid)) {
       buckets.get(rid)?.push(s);
@@ -412,7 +422,7 @@ async function init() {
 
     mountPager(card._pagerHost, pages, {
       intervalMs: 8000,
-      startStaggerMs: (idx % 6) * 400
+      startStaggerMs: (idx % 6) * 350
     });
     idx++;
   }
