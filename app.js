@@ -1,6 +1,5 @@
-// app.js — robust room routing for 1/2/9/10 + AB/combined forms,
-// always-left slider, one-at-a-time pages, pickleball & Catch Corner cleanup,
-// person-name flip, and small console diagnostics.
+// app.js — same logic as last version, but the room cards now explicitly
+// flex to full height and the events pane flexes too (see CSS + these styles).
 
 // ---------- Time ----------
 function to12h(mins) {
@@ -79,9 +78,6 @@ function ensureStageFit() {
     const s  = Math.min(sx, sy) * 0.965;
     stage.style.transform = `scale(${s})`;
     stage.style.transformOrigin = 'top center';
-    viewport.style.display = 'flex';
-    viewport.style.justifyContent = 'center';
-    viewport.style.alignItems = 'flex-start';
   }
   window.addEventListener('resize', fit);
   window.addEventListener('orientationchange', fit);
@@ -130,7 +126,6 @@ function formatDisplay(slot) {
   org = flipIfPerson(org);
   contact = flipIfPerson(contact);
 
-  // If both look like personal tokens, present "First Last" bold as title
   if (
     org && contact &&
     isSingleToken(org) && isSingleToken(contact) &&
@@ -139,12 +134,10 @@ function formatDisplay(slot) {
     const person = `${contact} ${org}`;
     return { title: person, subtitle: subtitle || '', when: `${to12h(slot.startMin)}–${to12h(slot.endMin)}` };
   }
-
   if (org && contact && isLikelyPersonName(org) && isLikelyPersonName(contact)) {
     const person = `${contact} ${org}`;
     return { title: person, subtitle: subtitle || '', when: `${to12h(slot.startMin)}–${to12h(slot.endMin)}` };
   }
-
   if (!org && contact && (isLikelyPersonName(contact) || isSingleToken(contact))) {
     return { title: contact, subtitle: subtitle || '', when: `${to12h(slot.startMin)}–${to12h(slot.endMin)}` };
   }
@@ -196,6 +189,11 @@ function renderRoomsShell() {
 function roomCard(id) {
   const card = document.createElement('div');
   card.className = 'room';
+  // ensure full height even when empty
+  card.style.display = 'flex';
+  card.style.flexDirection = 'column';
+  card.style.minHeight = '0';
+  card.style.height = '100%';
 
   const hdr = document.createElement('div');
   hdr.className = 'roomHeader';
@@ -213,9 +211,11 @@ function roomCard(id) {
 
   const pagerHost = document.createElement('div');
   pagerHost.className = 'events';
+  // flex to fill remaining height
+  pagerHost.style.flex = '1 1 auto';
+  pagerHost.style.minHeight = '0';
   pagerHost.style.position = 'relative';
   pagerHost.style.overflow = 'hidden';
-  pagerHost.style.display = 'block';
 
   card.appendChild(hdr);
   card.appendChild(pagerHost);
@@ -370,50 +370,30 @@ function chunk(arr, size) {
   for (let i=0;i<arr.length;i+=size) out.push(arr.slice(i, i+size));
   return out;
 }
-function perPageForRoom(){ return 1; } // show one reservation at a time
+function perPageForRoom(){ return 1; }
 
-// ---------- NEW: robust room routing ----------
+// ---------- Room routing ----------
 function normalizeRoomTargets(roomIdRaw) {
-  // Returns an array of display room IDs to place the slot into
-  // e.g. "2" -> ["2A","2B"], "10AB" -> ["10A","10B"], "9&10" -> ["9A","9B","10A","10B"]
   const raw = String(roomIdRaw||'').trim();
-  const s = raw.toUpperCase().replace(/\s+/g,''); // strip spaces for easier matching
-
-  // Exact single courts 1..10 (no suffix) -> duplicate into A/B for 1,2,9,10
+  const s = raw.toUpperCase().replace(/\s+/g,'');
   if (/^(1|2|9|10)$/.test(s)) return [`${s}A`, `${s}B`];
-
-  // A/B explicit
   if (/^(1|2|9|10)[AB]$/.test(s)) return [s];
-
-  // Combined AB like 1AB, 2-AB, COURT1-AB
-  if (/^(?:COURT)?(1|2|9|10)[\- ]?AB$/.test(raw.toUpperCase())) {
+  if (/^(?:COURT)?(1|2|9|10)[\- ]?AB$/i.test(raw)) {
     const base = raw.match(/(1|2|9|10)/)[1];
     return [`${base}A`, `${base}B`];
   }
-
-  // Combined gyms like "9&10", "9-10", "FULLGYM9&10"
-  if (/(^|[^0-9])9\s*(&|-)\s*10([^0-9]|$)/.test(raw.toUpperCase())) {
-    return ['9A','9B','10A','10B'];
-  }
-  if (/(^|[^0-9])1\s*(&|-)\s*2([^0-9]|$)/.test(raw.toUpperCase())) {
-    return ['1A','1B','2A','2B'];
-  }
-
-  // Fieldhouse singles 3..8
+  if (/(^|[^0-9])9\s*(&|-)\s*10([^0-9]|$)/i.test(raw)) return ['9A','9B','10A','10B'];
+  if (/(^|[^0-9])1\s*(&|-)\s*2([^0-9]|$)/i.test(raw))  return ['1A','1B','2A','2B'];
   if (/^[3-8]$/.test(s)) return [s];
-
-  // Fallback: if it's a plain number 3–8 with extra text like "Court 6"
   const numMatch = raw.match(/\b(1|2|3|4|5|6|7|8|9|10)\b/);
   if (numMatch) {
     const base = numMatch[1];
     if (/^(1|2|9|10)$/.test(base)) return [`${base}A`, `${base}B`];
     return [base];
   }
-
-  return []; // unknown, skip
+  return [];
 }
 
-// De-dupe helper per room: key by timing + text
 function dedupeByKey(arr) {
   const seen = new Set();
   const out = [];
@@ -431,28 +411,22 @@ async function init() {
   renderRoomsShell();
 
   const data = await loadData();
-
   const now = new Date();
   const nowMin = now.getHours()*60 + now.getMinutes();
-
-  // Keep only current/future items
   const slots = (data.slots||[]).filter(s => (s.endMin ?? 1440) > nowMin);
 
   const wanted = ['1A','1B','2A','2B','3','4','5','6','7','8','9A','9B','10A','10B'];
   const buckets = new Map(wanted.map(k => [k, []]));
 
-  // Route each slot to appropriate display room(s)
   for (const s of slots) {
     const targets = normalizeRoomTargets(s.roomId);
     targets.forEach(t => { if (buckets.has(t)) buckets.get(t).push(s); });
   }
 
-  // Diagnostics
   const counts = {};
   for (const k of wanted) counts[k] = buckets.get(k).length;
   console.log('Room fill counts:', counts);
 
-  // Build pagers
   GLOBAL_PAGERS.length = 0;
   for (const [roomId, arrRaw] of buckets.entries()) {
     const card = findRoomCard(roomId);
@@ -465,8 +439,6 @@ async function init() {
     const pager = createPager(card._pagerHost, pages);
     registerPager(pager);
   }
-
-  // Start in-sync cycle
   startGlobalPager(8000);
 }
 
