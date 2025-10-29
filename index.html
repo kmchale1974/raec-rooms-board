@@ -16,7 +16,7 @@
       --chip:#263043;
       --chip-text:#e7eaf1;
       --ok:#1f9d6a;
-      --safe-pad: 24px; /* edge padding when auto-scaling */
+      --safe-pad: 36px; /* more breathing room to avoid right/bottom clipping */
     }
 
     html, body {
@@ -97,6 +97,7 @@
       border:1px solid var(--grid); border-radius:14px; padding:14px;
       display:grid; grid-template-rows: 60px 1fr; gap:10px; min-height:0; overflow:hidden;
       background:linear-gradient(180deg, rgba(255,255,255,0.02), rgba(0,0,0,0));
+      height:100%;               /* ⬅️ fill its grid track to prevent collapse */
     }
 
     .roomHeader{
@@ -112,12 +113,14 @@
       max-width:50%; text-align:right;
     }
 
-    /* Events area must fill! */
+    /* Events area MUST occupy full height */
     .events{
+      display:grid;             /* ⬅️ participate in layout */
+      grid-template-rows: 1fr;  /* one slot that fills area */
       position:relative;
       overflow:hidden;
       min-height:0;
-      height:100%;          /* <— ensures the pager has space in every card */
+      height:100%;              /* ⬅️ guarantee height for absolutely-positioned pages */
     }
 
     /* Full-size sliding pages */
@@ -128,6 +131,7 @@
       width:100%; height:100%;
       transition: transform 500ms ease, opacity 500ms ease;
       transform: translateX(100%); opacity:0;
+      will-change: transform, opacity;
     }
     .page.is-active{ transform: translateX(0%); opacity:1; }
     .page.is-leaving{ transform: translateX(-100%); opacity:0; }
@@ -187,7 +191,7 @@
       const STAGE_W = 1920, STAGE_H = 1080;
       const stage = document.querySelector('.stage');
       function fit() {
-        const pad = parseInt(getComputedStyle(document.documentElement).getPropertyValue('--safe-pad')) || 24;
+        const pad = parseInt(getComputedStyle(document.documentElement).getPropertyValue('--safe-pad')) || 36;
         const availW = Math.max(0, window.innerWidth  - pad*2);
         const availH = Math.max(0, window.innerHeight - pad*2);
         const s = Math.min(availW / STAGE_W, availH / STAGE_H);
