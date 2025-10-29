@@ -6,7 +6,6 @@
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <link rel="icon" href="data:,">
   <style>
-    /* Global box sizing for predictable heights */
     *, *::before, *::after { box-sizing: border-box; }
 
     :root{
@@ -19,7 +18,7 @@
       --chip:#263043;
       --chip-text:#e7eaf1;
       --ok:#1f9d6a;
-      --safe-pad: 36px; /* padding around the 1920x1080 canvas in the viewport */
+      --safe-pad: 36px;
     }
 
     html, body {
@@ -39,8 +38,7 @@
 
     .stage{
       width:1920px; height:1080px;
-      box-sizing:border-box;
-      padding:28px; /* slightly tighter top-level padding to reclaim height */
+      padding:28px;
       display:grid; grid-template-rows: 112px 1fr; gap:20px;
       transform-origin: center center;
       will-change: transform;
@@ -95,18 +93,14 @@
       gap:10px; min-height:0; height:100%;
     }
 
-    /* Room card: fixed header + flexible events area */
+    /* Room card */
     .room{
       border:1px solid var(--grid); border-radius:14px; padding:12px;
       display:grid; grid-template-rows: 56px 1fr; gap:8px; min-height:0; overflow:hidden;
       background:linear-gradient(180deg, rgba(255,255,255,0.02), rgba(0,0,0,0));
       height:100%;
     }
-    /* Compact variant for A/B rooms (tighter header+fonts so a single event never clips) */
-    .room.compact{
-      grid-template-rows: 50px 1fr;
-      padding:10px;
-    }
+    .room.compact{ grid-template-rows: 50px 1fr; padding:10px; }
 
     .roomHeader{
       min-height:56px; max-height:56px;
@@ -126,23 +120,32 @@
       max-width:55%; text-align:right;
     }
 
-    /* Events area MUST occupy full height */
+    /* Events containers */
     .events{
-      display:grid;
-      grid-template-rows: 1fr;  /* one slot that fills area */
-      position:relative;
-      overflow:hidden;
-      min-height:0;
-      height:100%;
+      position:relative; min-height:0; height:100%; overflow:hidden;
     }
 
-    /* Full-size sliding pages */
+    /* A/B: single rotator (no absolute overlays) */
+    .single-rotor{
+      height:100%;
+      display:flex; flex-direction:column; justify-content:flex-start; align-items:stretch;
+    }
+    .single-rotor .event{
+      margin-top:0; /* always top aligned */
+      transition: opacity 450ms ease, transform 450ms ease;
+    }
+    .fade-enter { opacity:0; transform:translateX(12px); }
+    .fade-enter-active { opacity:1; transform:translateX(0); }
+    .fade-exit { opacity:1; transform:translateX(0); }
+    .fade-exit-active { opacity:0; transform:translateX(-12px); }
+
+    /* Fieldhouse pager (absolute pages) */
     .page{
       position:absolute; inset:0;
       display:flex; flex-direction:column; gap:8px;
       justify-content:flex-start; align-items:stretch;
       width:100%; height:100%;
-      padding-bottom:2px; /* tiny guard against bottom crop */
+      padding-bottom:2px;
       transition: transform 500ms ease, opacity 500ms ease;
       transform: translateX(100%); opacity:0;
       will-change: transform, opacity;
@@ -164,8 +167,6 @@
     .room.compact .event .who{ font-size:18px; }
     .room.compact .event .what{ font-size:14px; }
     .room.compact .event .when{ font-size:13.5px; }
-
-    .who, .what{ word-wrap:break-word; overflow-wrap:anywhere; }
   </style>
 </head>
 <body>
@@ -206,7 +207,6 @@
   </div>
 
   <script type="module" src="./app.js"></script>
-
   <script>
     (function fitStage(){
       const STAGE_W = 1920, STAGE_H = 1080;
