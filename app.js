@@ -90,23 +90,23 @@ function renderRoomsShell() {
 
   if (south) {
     south.innerHTML = '';
-    south.appendChild(roomCard('1A')); south.appendChild(roomCard('1B'));
-    south.appendChild(roomCard('2A')); south.appendChild(roomCard('2B'));
+    south.appendChild(roomCard('1A', true)); south.appendChild(roomCard('1B', true));
+    south.appendChild(roomCard('2A', true)); south.appendChild(roomCard('2B', true));
   }
   if (field) {
     field.innerHTML = '';
-    ['3','4','5','6','7','8'].forEach(id => field.appendChild(roomCard(id)));
+    ['3','4','5','6','7','8'].forEach(id => field.appendChild(roomCard(id, false)));
   }
   if (north) {
     north.innerHTML = '';
-    north.appendChild(roomCard('9A')); north.appendChild(roomCard('9B'));
-    north.appendChild(roomCard('10A')); north.appendChild(roomCard('10B'));
+    north.appendChild(roomCard('9A', true)); north.appendChild(roomCard('9B', true));
+    north.appendChild(roomCard('10A', true)); north.appendChild(roomCard('10B', true));
   }
 }
 
-function roomCard(id) {
+function roomCard(id, compact=false) {
   const card = document.createElement('div');
-  card.className = 'room';
+  card.className = 'room' + (compact ? ' compact' : '');
   card.dataset.roomid = id;
 
   const hdr = document.createElement('div');
@@ -147,7 +147,7 @@ function renderEventsPage(events) {
   const inner = document.createElement('div');
   inner.style.display = 'flex';
   inner.style.flexDirection = 'column';
-  inner.style.gap = '10px';
+  inner.style.gap = '8px';
   inner.style.height = '100%';
   inner.style.justifyContent = 'flex-start';
   inner.style.alignItems = 'stretch';
@@ -189,7 +189,6 @@ function createPager(container, pages) {
     return el;
   });
 
-  // Ensure immediate visibility to prevent “empty looking” cells
   if (pageEls[0]) pageEls[0].classList.add('is-active');
 
   let idx = 0;
@@ -290,9 +289,6 @@ function normalizeRoomTargets(roomIdRaw) {
 
   const halfAB = raw.match(/\b(1|2|9|10)\s*([AB])\b/i);
   if (halfAB) return [`${halfAB[1]}${halfAB[2].toUpperCase()}`];
-
-  const halfABTight = raw.match(/half\s*court[^0-9]*\b(1|2|9|10)\s*([AB])\b/i);
-  if (halfABTight) return [`${halfABTight[1]}${halfABTight[2].toUpperCase()}`];
 
   const abWide = raw.match(/\b(?:court\s*)?(1|2|9|10)\s*[- ]?\s*AB\b/i);
   if (abWide) {
