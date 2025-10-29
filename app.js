@@ -185,6 +185,9 @@ function createPager(container, pages) {
     return el;
   });
 
+  // 🔧 Ensure something is visible immediately
+  if (pageEls[0]) pageEls[0].classList.add('is-active');
+
   let idx = 0;
   function show(i, immediate=false) {
     if (!pageEls.length) return;
@@ -218,23 +221,23 @@ function chunk(arr, size) {
   return out;
 }
 
-// One-at-a-time for A/B rooms; allow more in Fieldhouse if desired
+// One-at-a-time for A/B rooms; allow more in Fieldhouse if you want
 function perPageForRoom(roomId){
-  return /^(1|2|9|10)[AB]$/.test(roomId) ? 1 : 2; // fieldhouse shows up to 2 per page; change if needed
+  return /^(1|2|9|10)[AB]$/.test(roomId) ? 1 : 2;
 }
 
 // ===== display formatting =====
+function to12Range(s){ return `${to12h(s.startMin)}–${to12h(s.endMin)}`; }
+
 function formatDisplay(slot) {
-  // pickleball override
   const pb = pickleballOverride(slot);
-  if (pb) return { title: pb.title, subtitle: pb.subtitle, when: `${to12h(slot.startMin)}–${to12h(slot.endMin)}` };
+  if (pb) return { title: pb.title, subtitle: '', when: to12Range(slot) };
 
   let org = (slot.org||'').trim();
   let contact = (slot.contact||'').trim();
   let title = (slot.title||'').trim();
   let subtitle = (slot.subtitle||'').trim();
 
-  // derive org/contact from title if needed
   if (!org && !contact && title.includes(',')) {
     const parts = title.split(',').map(s=>s.trim()).filter(Boolean);
     if (parts.length >= 2) {
@@ -251,24 +254,22 @@ function formatDisplay(slot) {
   org = flipIfPerson(org);
   contact = flipIfPerson(contact);
 
-  // Catch Corner cleanup
   if (org && org.toLowerCase().includes('catch corner')) {
     org = 'Catch Corner';
     const detail = tidyCatch(contact || subtitle);
-    return { title: org, subtitle: detail, when: `${to12h(slot.startMin)}–${to12h(slot.endMin)}` };
+    return { title: org, subtitle: detail, when: to12Range(slot) };
   }
 
-  // Prefer organization bold; if it's clearly a person, show First Last bold
   if (isLikelyPersonName(org)) {
-    return { title: org, subtitle: subtitle || '', when: `${to12h(slot.startMin)}–${to12h(slot.endMin)}` };
+    return { title: org, subtitle: subtitle || '', when: to12Range(slot) };
   }
   if (!org && isLikelyPersonName(contact)) {
-    return { title: contact, subtitle: subtitle || '', when: `${to12h(slot.startMin)}–${to12h(slot.endMin)}` };
+    return { title: contact, subtitle: subtitle || '', when: to12Range(slot) };
   }
   return {
     title: org || (title && title.includes(',') ? flipName(title) : title) || '—',
     subtitle: subtitle || contact || '',
-    when: `${to12h(slot.startMin)}–${to12h(slot.endMin)}`
+    when: to12Range(slot)
   };
 }
 
@@ -278,39 +279,29 @@ function normalizeRoomTargets(roomIdRaw) {
   const s = raw.toUpperCase().replace(/\s+/g,'');
   const low = raw.toLowerCase();
 
-  // Championship Court => 1A,1B,2A,2B
   if (low.includes('championship court')) return ['1A','1B','2A','2B'];
-
-  // "Full Gym 9 & 10", "Court 9-10"
   if (/(^|[^0-9])9\s*(&|-)\s*10([^0-9]|$)/i.test(raw)) return ['9A','9B','10A','10B'];
   if (/(^|[^0-9])1\s*(&|-)\s*2([^0-9]|$)/i.test(raw))  return ['1A','1B','2A','2B'];
 
-  // Half-court explicit A/B
   const halfAB = raw.match(/\b(1|2|9|10)\s*([AB])\b/i);
   if (halfAB) return [`${halfAB[1]}${halfAB[2].toUpperCase()}`];
 
   const halfABTight = raw.match(/half\s*court[^0-9]*\b(1|2|9|10)\s*([AB])\b/i);
   if (halfABTight) return [`${halfABTight[1]}${halfABTight[2].toUpperCase()}`];
 
-  // "Court 10-AB" / "10AB" / "Court 9 AB"
   const abWide = raw.match(/\b(?:court\s*)?(1|2|9|10)\s*[- ]?\s*AB\b/i);
   if (abWide) {
-    const base = abWide[1];
-    return [`${base}A`, `${base}B`];
+    const base = abWide[1]; return [`${base}A`, `${base}B`];
   }
 
-  // Plain “Court 10” → show in A and B
   const justNum = raw.match(/\b(1|2|9|10)\b/);
   if (justNum) {
-    const base = justNum[1];
-    return [`${base}A`, `${base}B`];
+    const base = justNum[1]; return [`${base}A`, `${base}B`];
   }
 
-  // Fieldhouse numbers 3..8 map 1:1
   const fh = raw.match(/\b([3-8])\b/);
   if (fh) return [fh[1]];
 
-  // Already exact (e.g. "10A")
   if (/^(1|2|9|10)[AB]$/.test(s)) return [s];
 
   return [];
@@ -344,7 +335,6 @@ async function init() {
     targets.forEach(t => { if (buckets.has(t)) buckets.get(t).push(s); });
   }
 
-  // Build pagers, “one at a time” in the A/B rooms
   const pagers = [];
   for (const [roomId, arrRaw] of buckets.entries()) {
     const card = findRoomCard(roomId);
@@ -358,7 +348,6 @@ async function init() {
     pagers.push(pager);
   }
 
-  // Kick off paging synced; transition every 8s
   pagers.forEach(p => p.show(0, true));
   setInterval(() => pagers.forEach(p => p.next()), 8000);
 }
