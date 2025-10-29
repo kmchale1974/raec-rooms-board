@@ -302,27 +302,51 @@ function chunk(arr, size) {
 }
 function perPageForRoom(){ return 1; } // identical everywhere
 
-// ---------- routing ----------
+// ---------- robust room routing ----------
 function normalizeRoomTargets(roomIdRaw) {
   const raw = String(roomIdRaw||'').trim();
-  const s = raw.toUpperCase().replace(/\s+/g,'');
-  if (/^(1|2|9|10)$/.test(s)) return [`${s}A`, `${s}B`];
-  if (/^(1|2|9|10)[AB]$/.test(s)) return [s];
-  if (/^(?:COURT)?(1|2|9|10)[\- ]?AB$/i.test(raw)) {
-    const base = raw.match(/(1|2|9|10)/)[1];
-    return [`${base}A`, `${base}B`];
-  }
+  const s = raw.toUpperCase().replace(/\s+/g,'');      // collapse spaces
+  const low = raw.toLowerCase();
+
+  // Championship Court => 1A,1B,2A,2B
+  if (low.includes('championship court')) return ['1A','1B','2A','2B'];
+
+  // "Full Gym 9 & 10", "Court 9 & 10", "9-10"
   if (/(^|[^0-9])9\s*(&|-)\s*10([^0-9]|$)/i.test(raw)) return ['9A','9B','10A','10B'];
   if (/(^|[^0-9])1\s*(&|-)\s*2([^0-9]|$)/i.test(raw))  return ['1A','1B','2A','2B'];
-  if (/^[3-8]$/.test(s)) return [s];
-  const numMatch = raw.match(/\b(1|2|3|4|5|6|7|8|9|10)\b/);
-  if (numMatch) {
-    const base = numMatch[1];
-    if (/^(1|2|9|10)$/.test(base)) return [`${base}A`, `${base}B`];
-    return [base];
+
+  // Explicit half-court A/B (allow "10 A", "10A")
+  const halfAB = raw.match(/\b(1|2|9|10)\s*([AB])\b/i);
+  if (halfAB) return [`${halfAB[1]}${halfAB[2].toUpperCase()}`];
+
+  // Variants like "Half Court 10A", "Half Court 10 B"
+  const halfABTight = raw.match(/half\s*court[^0-9]*\b(1|2|9|10)\s*([AB])\b/i);
+  if (halfABTight) return [`${halfABTight[1]}${halfABTight[2].toUpperCase()}`];
+
+  // "Court 10-AB", "10AB", "Court 9 AB"
+  const abWide = raw.match(/\b(?:court\s*)?(1|2|9|10)\s*[- ]?\s*AB\b/i);
+  if (abWide) {
+    const base = abWide[1];
+    return [`${base}A`, `${base}B`];
   }
+
+  // Plain “Court 10”, “Gym 2”, etc. → split to A+B for 1/2/9/10
+  const justNum = raw.match(/\b(1|2|9|10)\b/);
+  if (justNum) {
+    const base = justNum[1];
+    return [`${base}A`, `${base}B`];
+  }
+
+  // Fieldhouse numbers 3..8 map 1:1
+  const fh = raw.match(/\b([3-8])\b/);
+  if (fh) return [fh[1]];
+
+  // Already exact (e.g., incoming is "10A")
+  if (/^(1|2|9|10)[AB]$/.test(s)) return [s];
+
   return [];
 }
+
 function dedupeByKey(arr) {
   const seen = new Set();
   const out = [];
