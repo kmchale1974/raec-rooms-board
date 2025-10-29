@@ -3,8 +3,7 @@ function to12h(mins) {
   const h24 = Math.floor(mins / 60);
   const m = mins % 60;
   const ampm = h24 >= 12 ? 'pm' : 'am';
-  let h = h24 % 12;
-  if (h === 0) h = 12;
+  let h = h24 % 12; if (h === 0) h = 12;
   return `${h}:${m.toString().padStart(2,'0')}${ampm}`;
 }
 
@@ -234,7 +233,7 @@ function formatDisplay(slot) {
   let title = (slot.title||'').trim();
   let subtitle = (slot.subtitle||'').trim();
 
-  // derive org/contact from title when needed (e.g., "Org, Person")
+  // derive org/contact from title if needed
   if (!org && !contact && title.includes(',')) {
     const parts = title.split(',').map(s=>s.trim()).filter(Boolean);
     if (parts.length >= 2) {
@@ -258,7 +257,7 @@ function formatDisplay(slot) {
     return { title: org, subtitle: detail, when: `${to12h(slot.startMin)}–${to12h(slot.endMin)}` };
   }
 
-  // If clearly a person, show "First Last" bold, purpose below
+  // If clearly a person, show "First Last" bold, purpose under
   if (
     org && contact &&
     isSingleToken(org) && isSingleToken(contact) &&
@@ -355,6 +354,7 @@ async function init() {
     targets.forEach(t => { if (buckets.has(t)) buckets.get(t).push(s); });
   }
 
+  // Build pagers (one-at-a-time pages)
   const pagers = [];
   for (const [roomId, arrRaw] of buckets.entries()) {
     const card = findRoomCard(roomId);
@@ -363,12 +363,12 @@ async function init() {
     const arr = dedupeByKey(arrRaw).sort((a,b) => (a.startMin||0) - (b.startMin||0));
     card._setCount(arr.length);
 
-    const pages = chunk(arr, 1); // one-at-a-time
+    const pages = chunk(arr, 1);
     const pager = createPager(card._pagerHost, pages);
     pagers.push(pager);
   }
 
-  // start all pagers in sync and rotate
+  // Start all pagers in sync and rotate
   pagers.forEach(p => p.show(0, true));
   setInterval(() => pagers.forEach(p => p.next()), 8000);
 }
