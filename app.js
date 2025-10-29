@@ -1,6 +1,3 @@
-// app.js — same logic as last version, but the room cards now explicitly
-// flex to full height and the events pane flexes too (see CSS + these styles).
-
 // ---------- Time ----------
 function to12h(mins) {
   const h24 = Math.floor(mins / 60);
@@ -70,9 +67,8 @@ async function loadData() {
 function ensureStageFit() {
   const STAGE_W = 1920, STAGE_H = 1080;
   const stage = document.querySelector('.stage');
-  const viewport = document.querySelector('.viewport') || document.body;
   function fit(){
-    if (!stage || !viewport) return;
+    if (!stage) return;
     const sx = window.innerWidth  / STAGE_W;
     const sy = window.innerHeight / STAGE_H;
     const s  = Math.min(sx, sy) * 0.965;
@@ -172,28 +168,24 @@ function renderRoomsShell() {
 
   if (south) {
     south.innerHTML = '';
-    south.appendChild(roomCard('1A')); south.appendChild(roomCard('1B'));
-    south.appendChild(roomCard('2A')); south.appendChild(roomCard('2B'));
+    south.appendChild(roomCard('1A', true)); south.appendChild(roomCard('1B', true));
+    south.appendChild(roomCard('2A', true)); south.appendChild(roomCard('2B', true));
   }
   if (field) {
     field.innerHTML = '';
-    ['3','4','5','6','7','8'].forEach(id => field.appendChild(roomCard(id)));
+    ['3','4','5','6','7','8'].forEach(id => field.appendChild(roomCard(id, false)));
   }
   if (north) {
     north.innerHTML = '';
-    north.appendChild(roomCard('9A')); north.appendChild(roomCard('9B'));
-    north.appendChild(roomCard('10A')); north.appendChild(roomCard('10B'));
+    north.appendChild(roomCard('9A', true)); north.appendChild(roomCard('9B', true));
+    north.appendChild(roomCard('10A', true)); north.appendChild(roomCard('10B', true));
   }
 }
 
-function roomCard(id) {
+function roomCard(id, isHalf=false) {
   const card = document.createElement('div');
-  card.className = 'room';
-  // ensure full height even when empty
-  card.style.display = 'flex';
-  card.style.flexDirection = 'column';
-  card.style.minHeight = '0';
-  card.style.height = '100%';
+  card.className = 'room' + (isHalf ? ' half' : '');
+  card.dataset.roomid = id;
 
   const hdr = document.createElement('div');
   hdr.className = 'roomHeader';
@@ -211,7 +203,6 @@ function roomCard(id) {
 
   const pagerHost = document.createElement('div');
   pagerHost.className = 'events';
-  // flex to fill remaining height
   pagerHost.style.flex = '1 1 auto';
   pagerHost.style.minHeight = '0';
   pagerHost.style.position = 'relative';
@@ -427,7 +418,19 @@ async function init() {
   for (const k of wanted) counts[k] = buckets.get(k).length;
   console.log('Room fill counts:', counts);
 
-  GLOBAL_PAGERS.length = 0;
+  // Build pagers
+  const GLOBAL_PAGERS = [];
+  function registerPager(p) { GLOBAL_PAGERS.push(p); }
+  function startGlobalPager(intervalMs=8000) {
+    if (window.__GP_TIMER) { clearInterval(window.__GP_TIMER); window.__GP_TIMER = null; }
+    GLOBAL_PAGERS.forEach(p => p.show(0, true));
+    if (GLOBAL_PAGERS.length > 0) {
+      window.__GP_TIMER = setInterval(() => {
+        GLOBAL_PAGERS.forEach(p => p.next());
+      }, intervalMs);
+    }
+  }
+
   for (const [roomId, arrRaw] of buckets.entries()) {
     const card = findRoomCard(roomId);
     if (!card) continue;
