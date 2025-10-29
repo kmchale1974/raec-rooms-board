@@ -67,23 +67,6 @@ async function loadData() {
   return data;
 }
 
-// ---------- fit 1920×1080 ----------
-function ensureStageFit() {
-  const STAGE_W = 1920, STAGE_H = 1080;
-  const stage = document.querySelector('.stage');
-  function fit(){
-    if (!stage) return;
-    const sx = window.innerWidth  / STAGE_W;
-    const sy = window.innerHeight / STAGE_H;
-    const s  = Math.min(sx, sy) * 0.965; // slight inset to guard edges
-    stage.style.transform = `scale(${s})`;
-    stage.style.transformOrigin = 'top center';
-  }
-  window.addEventListener('resize', fit);
-  window.addEventListener('orientationchange', fit);
-  fit();
-}
-
 // ---------- header clock ----------
 function headerClock() {
   const dateEl = document.getElementById('headerDate');
@@ -100,65 +83,7 @@ function headerClock() {
   setInterval(tick, 1000);
 }
 
-// ---------- format display ----------
-function formatDisplay(slot) {
-  const pb = pickleballOverride(slot);
-  if (pb) return { title: pb.title, subtitle: pb.subtitle, when: `${to12h(slot.startMin)}–${to12h(slot.endMin)}` };
-
-  let org = (slot.org||'').trim();
-  let contact = (slot.contact||'').trim();
-  let title = (slot.title||'').trim();
-  let subtitle = (slot.subtitle||'').trim();
-
-  // derive org/contact from title if absent
-  if (!org && !contact && title.includes(',')) {
-    const parts = title.split(',').map(s=>s.trim()).filter(Boolean);
-    if (parts.length >= 2) {
-      if (!isLikelyPersonName(parts[0]) && isLikelyPersonName(parts[1])) {
-        org = parts[0];
-        contact = parts.slice(1).join(', ');
-      } else if (isLikelyPersonName(parts[0])) {
-        contact = parts.join(', ');
-      }
-    }
-  }
-
-  const flipIfPerson = (s) => (s && s.includes(',') && isLikelyPersonName(s)) ? flipName(s) : s;
-  org = flipIfPerson(org);
-  contact = flipIfPerson(contact);
-
-  // Catch Corner cleanup
-  if (org && org.toLowerCase().includes('catch corner')) {
-    org = 'Catch Corner';
-    const detail = tidyCatch(contact || subtitle);
-    return { title: org, subtitle: detail, when: `${to12h(slot.startMin)}–${to12h(slot.endMin)}` };
-  }
-
-  // Person-first display if we believe it's a person
-  if (
-    org && contact &&
-    isSingleToken(org) && isSingleToken(contact) &&
-    !looksOrg(org) && !looksOrg(contact)
-  ) {
-    const person = `${contact} ${org}`;
-    return { title: person, subtitle: subtitle || '', when: `${to12h(slot.startMin)}–${to12h(slot.endMin)}` };
-  }
-  if (org && contact && isLikelyPersonName(org) && isLikelyPersonName(contact)) {
-    const person = `${contact} ${org}`;
-    return { title: person, subtitle: subtitle || '', when: `${to12h(slot.startMin)}–${to12h(slot.endMin)}` };
-  }
-  if (!org && contact && (isLikelyPersonName(contact) || isSingleToken(contact))) {
-    return { title: contact, subtitle: subtitle || '', when: `${to12h(slot.startMin)}–${to12h(slot.endMin)}` };
-  }
-
-  return {
-    title: org || (title && title.includes(',') ? flipName(title) : title) || '—',
-    subtitle: subtitle || contact || '',
-    when: `${to12h(slot.startMin)}–${to12h(slot.endMin)}`
-  };
-}
-
-// ---------- room shells ----------
+// ---------- shells ----------
 function renderRoomsShell() {
   const south = document.getElementById('southRooms');
   const field = document.getElementById('fieldhouseRooms');
@@ -220,14 +145,15 @@ function findRoomCard(id) {
 // ---------- page builder (always slide left) ----------
 function renderEventsPage(events) {
   const wrap = document.createElement('div');
-  wrap.style.display = 'flex';
-  wrap.style.flexDirection = 'column';
-  wrap.style.gap = '8px';
-  wrap.style.height = '100%';
-  wrap.style.justifyContent = 'flex-start';
-  wrap.style.alignItems = 'stretch';
-  wrap.style.textAlign = 'left';
-  wrap.style.width = '100%';
+  wrap.className = 'page';
+  // contents
+  const inner = document.createElement('div');
+  inner.style.display = 'flex';
+  inner.style.flexDirection = 'column';
+  inner.style.gap = '10px';
+  inner.style.height = '100%';
+  inner.style.justifyContent = 'flex-start';
+  inner.style.alignItems = 'stretch';
 
   events.forEach(ev => {
     const { title, subtitle, when } = formatDisplay(ev);
@@ -250,9 +176,10 @@ function renderEventsPage(events) {
     card.appendChild(who);
     if (what.textContent) card.appendChild(what);
     card.appendChild(whenEl);
-    wrap.appendChild(card);
+    inner.appendChild(card);
   });
 
+  wrap.appendChild(inner);
   return wrap;
 }
 
@@ -260,9 +187,7 @@ function createPager(container, pages) {
   container.innerHTML = '';
 
   const pageEls = pages.map(evs => {
-    const el = document.createElement('div');
-    el.className = 'page';
-    el.appendChild(renderEventsPage(evs));
+    const el = renderEventsPage(evs);
     container.appendChild(el);
     return el;
   });
@@ -300,7 +225,67 @@ function chunk(arr, size) {
   for (let i=0;i<arr.length;i+=size) out.push(arr.slice(i, i+size));
   return out;
 }
-function perPageForRoom(){ return 1; } // identical everywhere
+function perPageForRoom(){ return 1; } // one-at-a-time everywhere
+
+// ---------- display formatting ----------
+function formatDisplay(slot) {
+  // pickleball override
+  const pb = pickleballOverride(slot);
+  if (pb) return { title: pb.title, subtitle: pb.subtitle, when: `${to12h(slot.startMin)}–${to12h(slot.endMin)}` };
+
+  let org = (slot.org||'').trim();
+  let contact = (slot.contact||'').trim();
+  let title = (slot.title||'').trim();
+  let subtitle = (slot.subtitle||'').trim();
+
+  // derive org/contact from title when needed
+  if (!org && !contact && title.includes(',')) {
+    const parts = title.split(',').map(s=>s.trim()).filter(Boolean);
+    if (parts.length >= 2) {
+      if (!isLikelyPersonName(parts[0]) && isLikelyPersonName(parts[1])) {
+        org = parts[0];
+        contact = parts.slice(1).join(', ');
+      } else if (isLikelyPersonName(parts[0])) {
+        contact = parts.join(', ');
+      }
+    }
+  }
+
+  const flipIfPerson = (s) => (s && s.includes(',') && isLikelyPersonName(s)) ? flipName(s) : s;
+  org = flipIfPerson(org);
+  contact = flipIfPerson(contact);
+
+  // Catch Corner cleanup
+  if (org && org.toLowerCase().includes('catch corner')) {
+    org = 'Catch Corner';
+    const detail = tidyCatch(contact || subtitle);
+    return { title: org, subtitle: detail, when: `${to12h(slot.startMin)}–${to12h(slot.endMin)}` };
+  }
+
+  // If we are confident it's a person: show "First Last" in bold, purpose under
+  if (
+    org && contact &&
+    isSingleToken(org) && isSingleToken(contact) &&
+    !looksOrg(org) && !looksOrg(contact)
+  ) {
+    const person = `${contact} ${org}`;
+    return { title: person, subtitle: subtitle || '', when: `${to12h(slot.startMin)}–${to12h(slot.endMin)}` };
+  }
+  if (org && contact && isLikelyPersonName(org) && isLikelyPersonName(contact)) {
+    const person = `${contact} ${org}`;
+    return { title: person, subtitle: subtitle || '', when: `${to12h(slot.startMin)}–${to12h(slot.endMin)}` };
+  }
+  if (!org && contact && (isLikelyPersonName(contact) || isSingleToken(contact))) {
+    return { title: contact, subtitle: subtitle || '', when: `${to12h(slot.startMin)}–${to12h(slot.endMin)}` };
+  }
+
+  // Default: organization in bold; purpose or contact below
+  return {
+    title: org || (title && title.includes(',') ? flipName(title) : title) || '—',
+    subtitle: subtitle || contact || '',
+    when: `${to12h(slot.startMin)}–${to12h(slot.endMin)}`
+  };
+}
 
 // ---------- robust room routing ----------
 function normalizeRoomTargets(roomIdRaw) {
@@ -359,7 +344,6 @@ function dedupeByKey(arr) {
 
 // ---------- run ----------
 async function init() {
-  ensureStageFit();
   headerClock();
   renderRoomsShell();
 
@@ -389,7 +373,7 @@ async function init() {
     pagers.push(pager);
   }
 
-  // start all pagers in sync
+  // start all pagers in sync and rotate
   pagers.forEach(p => p.show(0, true));
   setInterval(() => pagers.forEach(p => p.next()), 8000);
 }
