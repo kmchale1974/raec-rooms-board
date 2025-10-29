@@ -72,28 +72,28 @@
 
     /* South/North: 2 rows stacked */
     .rooms-stack{
-      display:grid; grid-template-rows: 1fr 1fr; gap:12px;
+      display:grid; grid-template-rows: repeat(2, minmax(0, 1fr)); gap:12px;
       min-height:0; height:100%; /* ensure rows split evenly */
     }
 
     /* Fieldhouse: 2 rows x 3 cols for 3..8 */
     .rooms-fieldhouse{
-      display:grid; grid-template-columns: repeat(3, 1fr); grid-template-rows: 1fr 1fr;
+      display:grid; grid-template-columns: repeat(3, 1fr); grid-template-rows: repeat(2, minmax(0,1fr));
       gap:12px; min-height:0; height:100%;
     }
 
-    /* Individual room card fills its grid cell fully */
+    /* Room card (all rooms identical) */
     .room{
       border:1px solid var(--grid); border-radius:14px; padding:14px;
       background:linear-gradient(180deg, rgba(255,255,255,0.02), rgba(0,0,0,0));
       display:flex; flex-direction:column;
-      min-height:0; height:100%;
+      min-height:0; height:100%; box-sizing:border-box;
     }
     .roomHeader{
       display:flex; align-items:center; justify-content:space-between; gap:12px;
       border-bottom:1px dashed var(--grid); padding-bottom:8px; flex:0 0 auto;
     }
-    .roomHeader .id{ font-size:28px; font-weight:800; letter-spacing:.04em; }
+    .roomHeader .id{ font-size:26px; font-weight:800; letter-spacing:.04em; }
     .roomHeader .count{ font-size:13px; color:var(--muted); }
 
     /* Events area flexes to fill remainder of card height */
@@ -101,25 +101,26 @@
       position:relative; overflow:hidden; flex:1 1 auto; min-height:0;
     }
 
-    /* Event tile */
+    /* Event tile (identical everywhere) */
     .event{
       background:var(--chip); border:1px solid var(--grid); border-radius:12px;
       padding:10px 12px; display:flex; flex-direction:column; gap:6px; min-height:0;
     }
-    .event .who{ font-size:18px; font-weight:800; line-height:1.1; }
-    .event .what{ font-size:15px; color:var(--muted); line-height:1.2; }
-    .event .when{ font-size:14px; color:#b7c0cf; font-weight:600; }
+    .event .who{ font-size:17px; font-weight:800; line-height:1.12; }
+    .event .what{ font-size:14px; color:var(--muted); line-height:1.15; }
+    .event .when{ font-size:13px; color:#b7c0cf; font-weight:600; }
 
     .who,.what{ word-wrap:break-word; overflow-wrap:anywhere; }
 
-    /* Tighten ONLY for half-court boxes (1A/1B/2A/2B/9A/9B/10A/10B) */
-    .room.half .roomHeader .id{ font-size:24px; }
-    .room.half .event{ padding:8px 10px; gap:4px; }
-    .room.half .event .who{ font-size:16px; line-height:1.05; }
-    .room.half .event .what{ font-size:14px; line-height:1.15; }
-    .room.half .event .when{ font-size:13px; }
-
-    .legend{ position:absolute; right:24px; bottom:18px; color:var(--muted); font-size:12px; }
+    /* Pager pages (stacked, animated) */
+    .page{
+      position:absolute; inset:0;
+      transform:translateX(100%); opacity:0;
+      transition:transform 700ms cubic-bezier(.22,.61,.36,1), opacity 700ms ease;
+      display:flex; flex-direction:column; gap:8px; padding:0; box-sizing:border-box;
+    }
+    .page.is-active{ transform:translateX(0%); opacity:1; }
+    .page.is-leaving{ transform:translateX(-100%); opacity:0; }
   </style>
 </head>
 <body>
