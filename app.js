@@ -1,4 +1,4 @@
-// ---------- Time ----------
+// ---------- time ----------
 function to12h(mins) {
   const h24 = Math.floor(mins / 60);
   const m = mins % 60;
@@ -8,7 +8,7 @@ function to12h(mins) {
   return `${h}:${m.toString().padStart(2,'0')}${ampm}`;
 }
 
-// ---------- Name helpers ----------
+// ---------- name/org helpers ----------
 const ORG_HINTS = [
   'club','athletic','athletics','basketball','volleyball','elite','academy',
   'flight','omona','empower','chicago sport','pink elite','catch corner','training',
@@ -41,7 +41,7 @@ function flipName(lastCommaFirst) {
   return lastCommaFirst;
 }
 
-// ---------- Pickleball normalization ----------
+// ---------- special text rules ----------
 function pickleballOverride(slot) {
   const t = `${slot.title||''} ${slot.subtitle||''} ${slot.org||''} ${slot.contact||''}`.toLowerCase();
   if (
@@ -53,8 +53,12 @@ function pickleballOverride(slot) {
   }
   return null;
 }
+const tidyCatch = (s) => (s||'')
+  .replace(/\binternal holds?\b/ig,'')
+  .replace(/^\s*[-–,:]\s*/,'')
+  .trim();
 
-// ---------- Load ----------
+// ---------- load ----------
 async function loadData() {
   const resp = await fetch(`./events.json?ts=${Date.now()}`, { cache:'no-store' });
   if (!resp.ok) throw new Error(`Failed to fetch events.json: ${resp.status} ${resp.statusText}`);
@@ -63,7 +67,7 @@ async function loadData() {
   return data;
 }
 
-// ---------- Fit 1920×1080 ----------
+// ---------- fit 1920×1080 ----------
 function ensureStageFit() {
   const STAGE_W = 1920, STAGE_H = 1080;
   const stage = document.querySelector('.stage');
@@ -71,7 +75,7 @@ function ensureStageFit() {
     if (!stage) return;
     const sx = window.innerWidth  / STAGE_W;
     const sy = window.innerHeight / STAGE_H;
-    const s  = Math.min(sx, sy) * 0.965;
+    const s  = Math.min(sx, sy) * 0.965; // slight inset to guard edges
     stage.style.transform = `scale(${s})`;
     stage.style.transformOrigin = 'top center';
   }
@@ -80,7 +84,7 @@ function ensureStageFit() {
   fit();
 }
 
-// ---------- Header clock ----------
+// ---------- header clock ----------
 function headerClock() {
   const dateEl = document.getElementById('headerDate');
   const clockEl = document.getElementById('headerClock');
@@ -96,7 +100,7 @@ function headerClock() {
   setInterval(tick, 1000);
 }
 
-// ---------- Display formatter ----------
+// ---------- format display ----------
 function formatDisplay(slot) {
   const pb = pickleballOverride(slot);
   if (pb) return { title: pb.title, subtitle: pb.subtitle, when: `${to12h(slot.startMin)}–${to12h(slot.endMin)}` };
@@ -106,6 +110,7 @@ function formatDisplay(slot) {
   let title = (slot.title||'').trim();
   let subtitle = (slot.subtitle||'').trim();
 
+  // derive org/contact from title if absent
   if (!org && !contact && title.includes(',')) {
     const parts = title.split(',').map(s=>s.trim()).filter(Boolean);
     if (parts.length >= 2) {
@@ -122,6 +127,14 @@ function formatDisplay(slot) {
   org = flipIfPerson(org);
   contact = flipIfPerson(contact);
 
+  // Catch Corner cleanup
+  if (org && org.toLowerCase().includes('catch corner')) {
+    org = 'Catch Corner';
+    const detail = tidyCatch(contact || subtitle);
+    return { title: org, subtitle: detail, when: `${to12h(slot.startMin)}–${to12h(slot.endMin)}` };
+  }
+
+  // Person-first display if we believe it's a person
   if (
     org && contact &&
     isSingleToken(org) && isSingleToken(contact) &&
@@ -138,29 +151,14 @@ function formatDisplay(slot) {
     return { title: contact, subtitle: subtitle || '', when: `${to12h(slot.startMin)}–${to12h(slot.endMin)}` };
   }
 
-  // Catch Corner cleanup
-  const tidyCatch = (s) => (s||'')
-    .replace(/\binternal holds?\b/ig,'')
-    .replace(/^\s*[-–,:]\s*/,'')
-    .trim();
-
-  if (org) {
-    let detail = contact || subtitle || '';
-    if (org.toLowerCase().includes('catch corner')) {
-      org = 'Catch Corner';
-      detail = tidyCatch(detail || subtitle);
-    }
-    return { title: org, subtitle: detail, when: `${to12h(slot.startMin)}–${to12h(slot.endMin)}` };
-  }
-
   return {
-    title: (title && title.includes(',') ? flipName(title) : title) || '—',
+    title: org || (title && title.includes(',') ? flipName(title) : title) || '—',
     subtitle: subtitle || contact || '',
     when: `${to12h(slot.startMin)}–${to12h(slot.endMin)}`
   };
 }
 
-// ---------- Room shells ----------
+// ---------- room shells ----------
 function renderRoomsShell() {
   const south = document.getElementById('southRooms');
   const field = document.getElementById('fieldhouseRooms');
@@ -168,23 +166,22 @@ function renderRoomsShell() {
 
   if (south) {
     south.innerHTML = '';
-    south.appendChild(roomCard('1A', true)); south.appendChild(roomCard('1B', true));
-    south.appendChild(roomCard('2A', true)); south.appendChild(roomCard('2B', true));
+    south.appendChild(roomCard('1A')); south.appendChild(roomCard('1B'));
+    south.appendChild(roomCard('2A')); south.appendChild(roomCard('2B'));
   }
   if (field) {
     field.innerHTML = '';
-    ['3','4','5','6','7','8'].forEach(id => field.appendChild(roomCard(id, false)));
+    ['3','4','5','6','7','8'].forEach(id => field.appendChild(roomCard(id)));
   }
   if (north) {
     north.innerHTML = '';
-    north.appendChild(roomCard('9A', true)); north.appendChild(roomCard('9B', true));
-    north.appendChild(roomCard('10A', true)); north.appendChild(roomCard('10B', true));
+    north.appendChild(roomCard('9A')); north.appendChild(roomCard('9B'));
+    north.appendChild(roomCard('10A')); north.appendChild(roomCard('10B'));
   }
 }
-
-function roomCard(id, isHalf=false) {
+function roomCard(id) {
   const card = document.createElement('div');
-  card.className = 'room' + (isHalf ? ' half' : '');
+  card.className = 'room';
   card.dataset.roomid = id;
 
   const hdr = document.createElement('div');
@@ -215,18 +212,17 @@ function roomCard(id, isHalf=false) {
   card._pagerHost = pagerHost;
   return card;
 }
-
 function findRoomCard(id) {
   return Array.from(document.querySelectorAll('.room'))
     .find(r => r.querySelector('.roomHeader .id')?.textContent === id) || null;
 }
 
-// ---------- Pages (absolute-stacked, always left slide) ----------
+// ---------- page builder (always slide left) ----------
 function renderEventsPage(events) {
   const wrap = document.createElement('div');
   wrap.style.display = 'flex';
   wrap.style.flexDirection = 'column';
-  wrap.style.gap = '6px';
+  wrap.style.gap = '8px';
   wrap.style.height = '100%';
   wrap.style.justifyContent = 'flex-start';
   wrap.style.alignItems = 'stretch';
@@ -238,15 +234,6 @@ function renderEventsPage(events) {
 
     const card = document.createElement('div');
     card.className = 'event';
-    card.style.background = 'var(--chip)';
-    card.style.border = '1px solid var(--grid)';
-    card.style.borderRadius = '10px';
-    card.style.padding = '8px 10px';
-    card.style.display = 'flex';
-    card.style.flexDirection = 'column';
-    card.style.gap = '4px';
-    card.style.minHeight = 0;
-    card.style.textAlign = 'left';
 
     const who = document.createElement('div');
     who.className = 'who';
@@ -269,90 +256,42 @@ function renderEventsPage(events) {
   return wrap;
 }
 
-const GLOBAL_PAGERS = [];
-let GLOBAL_TIMER = null;
-
-function registerPager(p) { GLOBAL_PAGERS.push(p); }
-function startGlobalPager(intervalMs=8000) {
-  if (GLOBAL_TIMER) { clearInterval(GLOBAL_TIMER); GLOBAL_TIMER = null; }
-  GLOBAL_PAGERS.forEach(p => p.show(0, true));
-  if (GLOBAL_PAGERS.length > 0) {
-    GLOBAL_TIMER = setInterval(() => {
-      GLOBAL_PAGERS.forEach(p => p.next());
-    }, intervalMs);
-  }
-}
-
 function createPager(container, pages) {
   container.innerHTML = '';
-  container.style.position = 'relative';
-  container.style.overflow = 'hidden';
 
   const pageEls = pages.map(evs => {
-    const page = document.createElement('div');
-    page.style.position = 'absolute';
-    page.style.left = '0';
-    page.style.top = '0';
-    page.style.width = '100%';
-    page.style.height = '100%';
-    page.style.display = 'block';
-    page.style.transform = 'translateX(100%)';
-    page.style.opacity = '0';
-    page.style.transition = 'transform 700ms cubic-bezier(.22,.61,.36,1), opacity 700ms ease';
-    page.appendChild(renderEventsPage(evs));
-    container.appendChild(page);
-    return page;
+    const el = document.createElement('div');
+    el.className = 'page';
+    el.appendChild(renderEventsPage(evs));
+    container.appendChild(el);
+    return el;
   });
 
-  let pageIdx = 0;
-
+  let idx = 0;
   function show(i, immediate=false) {
-    if (pageEls.length === 0) return;
-    const prev = pageEls[pageIdx];
-    const next = pageEls[i];
+    if (!pageEls.length) return;
+    const from = pageEls[idx];
+    const to = pageEls[i];
 
     if (immediate) {
-      pageEls.forEach(el => { el.style.transition = 'none'; el.style.transform = 'translateX(100%)'; el.style.opacity = '0'; });
-      next.style.transition = 'none';
-      next.style.transform = 'translateX(0%)';
-      next.style.opacity = '1';
-      pageIdx = i;
-      requestAnimationFrame(() => {
-        next.style.transition = 'transform 700ms cubic-bezier(.22,.61,.36,1), opacity 700ms ease';
-      });
+      pageEls.forEach(p => p.classList.remove('is-active','is-leaving'));
+      to.classList.add('is-active');
+      idx = i;
       return;
     }
-
-    if (prev === next) {
-      next.style.transform = 'translateX(0%)';
-      next.style.opacity = '1';
-      pageIdx = i;
-      return;
+    if (from === to) {
+      to.classList.add('is-active'); to.classList.remove('is-leaving');
+      idx = i; return;
     }
-
-    next.style.transition = 'none';
-    next.style.transform = 'translateX(100%)';
-    next.style.opacity = '0';
-    void next.offsetWidth;
-
-    prev.style.transition = 'transform 700ms cubic-bezier(.22,.61,.36,1), opacity 700ms ease';
-    next.style.transition = 'transform 700ms cubic-bezier(.22,.61,.36,1), opacity 700ms ease';
-
-    prev.style.transform = 'translateX(-100%)';
-    prev.style.opacity = '0';
-
-    next.style.transform = 'translateX(0%)';
-    next.style.opacity = '1';
-
-    pageIdx = i;
+    from.classList.remove('is-active'); from.classList.add('is-leaving');
+    to.classList.remove('is-leaving'); to.classList.add('is-active');
+    idx = i;
   }
-
   function next() {
     if (pageEls.length <= 1) return;
-    const i = (pageIdx + 1) % pageEls.length;
+    const i = (idx + 1) % pageEls.length;
     show(i, false);
   }
-
   return { show, next };
 }
 
@@ -361,9 +300,9 @@ function chunk(arr, size) {
   for (let i=0;i<arr.length;i+=size) out.push(arr.slice(i, i+size));
   return out;
 }
-function perPageForRoom(){ return 1; }
+function perPageForRoom(){ return 1; } // identical everywhere
 
-// ---------- Room routing ----------
+// ---------- routing ----------
 function normalizeRoomTargets(roomIdRaw) {
   const raw = String(roomIdRaw||'').trim();
   const s = raw.toUpperCase().replace(/\s+/g,'');
@@ -384,7 +323,6 @@ function normalizeRoomTargets(roomIdRaw) {
   }
   return [];
 }
-
 function dedupeByKey(arr) {
   const seen = new Set();
   const out = [];
@@ -395,7 +333,7 @@ function dedupeByKey(arr) {
   return out;
 }
 
-// ---------- Init ----------
+// ---------- run ----------
 async function init() {
   ensureStageFit();
   headerClock();
@@ -414,23 +352,7 @@ async function init() {
     targets.forEach(t => { if (buckets.has(t)) buckets.get(t).push(s); });
   }
 
-  const counts = {};
-  for (const k of wanted) counts[k] = buckets.get(k).length;
-  console.log('Room fill counts:', counts);
-
-  // Build pagers
-  const GLOBAL_PAGERS = [];
-  function registerPager(p) { GLOBAL_PAGERS.push(p); }
-  function startGlobalPager(intervalMs=8000) {
-    if (window.__GP_TIMER) { clearInterval(window.__GP_TIMER); window.__GP_TIMER = null; }
-    GLOBAL_PAGERS.forEach(p => p.show(0, true));
-    if (GLOBAL_PAGERS.length > 0) {
-      window.__GP_TIMER = setInterval(() => {
-        GLOBAL_PAGERS.forEach(p => p.next());
-      }, intervalMs);
-    }
-  }
-
+  const pagers = [];
   for (const [roomId, arrRaw] of buckets.entries()) {
     const card = findRoomCard(roomId);
     if (!card) continue;
@@ -440,9 +362,12 @@ async function init() {
 
     const pages = chunk(arr, perPageForRoom(roomId));
     const pager = createPager(card._pagerHost, pages);
-    registerPager(pager);
+    pagers.push(pager);
   }
-  startGlobalPager(8000);
+
+  // start all pagers in sync
+  pagers.forEach(p => p.show(0, true));
+  setInterval(() => pagers.forEach(p => p.next()), 8000);
 }
 
 document.addEventListener('DOMContentLoaded', init);
