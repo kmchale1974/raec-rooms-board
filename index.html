@@ -87,7 +87,7 @@
       border:1px solid var(--grid); border-radius:14px; padding:14px;
       background:linear-gradient(180deg, rgba(255,255,255,0.02), rgba(0,0,0,0));
       display:flex; flex-direction:column;
-      min-height:0; height:100%; /* <<< keeps from collapsing */
+      min-height:0; height:100%;
     }
     .roomHeader{
       display:flex; align-items:center; justify-content:space-between; gap:12px;
@@ -101,7 +101,7 @@
       position:relative; overflow:hidden; flex:1 1 auto; min-height:0;
     }
 
-    /* A single page of events (we inject) */
+    /* Event tile */
     .event{
       background:var(--chip); border:1px solid var(--grid); border-radius:12px;
       padding:10px 12px; display:flex; flex-direction:column; gap:6px; min-height:0;
@@ -111,6 +111,13 @@
     .event .when{ font-size:14px; color:#b7c0cf; font-weight:600; }
 
     .who,.what{ word-wrap:break-word; overflow-wrap:anywhere; }
+
+    /* Tighten ONLY for half-court boxes (1A/1B/2A/2B/9A/9B/10A/10B) */
+    .room.half .roomHeader .id{ font-size:24px; }
+    .room.half .event{ padding:8px 10px; gap:4px; }
+    .room.half .event .who{ font-size:16px; line-height:1.05; }
+    .room.half .event .what{ font-size:14px; line-height:1.15; }
+    .room.half .event .when{ font-size:13px; }
 
     .legend{ position:absolute; right:24px; bottom:18px; color:var(--muted); font-size:12px; }
   </style>
