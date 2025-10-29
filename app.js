@@ -6,6 +6,7 @@ function to12h(mins) {
   let h = h24 % 12; if (h === 0) h = 12;
   return `${h}:${m.toString().padStart(2,'0')}${ampm}`;
 }
+const to12Range = s => `${to12h(s.startMin)}–${to12h(s.endMin)}`;
 
 // ===== name/org detection =====
 const ORG_HINTS = [
@@ -102,6 +103,7 @@ function renderRoomsShell() {
     north.appendChild(roomCard('10A')); north.appendChild(roomCard('10B'));
   }
 }
+
 function roomCard(id) {
   const card = document.createElement('div');
   card.className = 'room';
@@ -131,6 +133,7 @@ function roomCard(id) {
   card._pagerHost = pagerHost;
   return card;
 }
+
 function findRoomCard(id) {
   return Array.from(document.querySelectorAll('.room'))
     .find(r => r.querySelector('.roomHeader .id')?.textContent === id) || null;
@@ -176,6 +179,7 @@ function renderEventsPage(events) {
   wrap.appendChild(inner);
   return wrap;
 }
+
 function createPager(container, pages) {
   container.innerHTML = '';
 
@@ -185,7 +189,7 @@ function createPager(container, pages) {
     return el;
   });
 
-  // 🔧 Ensure something is visible immediately
+  // Ensure immediate visibility to prevent “empty looking” cells
   if (pageEls[0]) pageEls[0].classList.add('is-active');
 
   let idx = 0;
@@ -215,20 +219,19 @@ function createPager(container, pages) {
   }
   return { show, next };
 }
+
 function chunk(arr, size) {
   const out = [];
   for (let i=0;i<arr.length;i+=size) out.push(arr.slice(i, i+size));
   return out;
 }
 
-// One-at-a-time for A/B rooms; allow more in Fieldhouse if you want
+// A/B rooms show 1 at a time; fieldhouse may show 2
 function perPageForRoom(roomId){
   return /^(1|2|9|10)[AB]$/.test(roomId) ? 1 : 2;
 }
 
 // ===== display formatting =====
-function to12Range(s){ return `${to12h(s.startMin)}–${to12h(s.endMin)}`; }
-
 function formatDisplay(slot) {
   const pb = pickleballOverride(slot);
   if (pb) return { title: pb.title, subtitle: '', when: to12Range(slot) };
@@ -238,6 +241,7 @@ function formatDisplay(slot) {
   let title = (slot.title||'').trim();
   let subtitle = (slot.subtitle||'').trim();
 
+  // derive org/contact from title if needed
   if (!org && !contact && title.includes(',')) {
     const parts = title.split(',').map(s=>s.trim()).filter(Boolean);
     if (parts.length >= 2) {
@@ -254,6 +258,7 @@ function formatDisplay(slot) {
   org = flipIfPerson(org);
   contact = flipIfPerson(contact);
 
+  // Catch Corner cleanup
   if (org && org.toLowerCase().includes('catch corner')) {
     org = 'Catch Corner';
     const detail = tidyCatch(contact || subtitle);
@@ -348,7 +353,10 @@ async function init() {
     pagers.push(pager);
   }
 
+  // first paint visible
   pagers.forEach(p => p.show(0, true));
+
+  // rotate in sync
   setInterval(() => pagers.forEach(p => p.next()), 8000);
 }
 
