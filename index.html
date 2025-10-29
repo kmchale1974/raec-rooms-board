@@ -16,7 +16,7 @@
       --chip:#263043;
       --chip-text:#e7eaf1;
       --ok:#1f9d6a;
-      --safe-pad: 24px; /* extra space around scaled stage */
+      --safe-pad: 24px; /* edge padding when auto-scaling */
     }
 
     html, body {
@@ -28,14 +28,12 @@
       overflow: hidden;
     }
 
-    /* Centers the stage and applies scale with edge padding */
     .fit-viewport {
       position: fixed; inset: 0;
       display: flex; align-items: center; justify-content: center;
       overflow: hidden; padding: var(--safe-pad);
     }
 
-    /* Fixed canvas 1920×1080 */
     .stage{
       width:1920px; height:1080px;
       box-sizing:border-box;
@@ -45,7 +43,7 @@
       will-change: transform;
     }
 
-    /* Header row */
+    /* Header */
     .header{
       display:grid; grid-template-columns: 360px 1fr 360px; align-items:center;
       min-height:0;
@@ -65,7 +63,7 @@
     .wifi .row span:first-child{ color:var(--muted); }
     .wifi .row span:last-child{ font-weight:700; }
 
-    /* Grid columns: South | Fieldhouse | North */
+    /* Columns: South | Fieldhouse | North */
     .grid{
       display:grid; grid-template-columns: 1fr 1.5fr 1fr; gap:24px;
       min-height:0; height:100%;
@@ -82,19 +80,19 @@
       white-space:nowrap;
     }
 
-    /* South/North (two rows) */
+    /* South/North stacks */
     .rooms-stack{
       display:grid; grid-template-rows: 1fr 1fr; gap:12px;
       min-height:0; height:100%;
     }
 
-    /* Fieldhouse (3×2) */
+    /* Fieldhouse 3x2 */
     .rooms-fieldhouse{
       display:grid; grid-template-columns: repeat(3, 1fr); grid-template-rows: repeat(2, 1fr);
       gap:12px; min-height:0; height:100%;
     }
 
-    /* Room card: header 60px fixed + events area */
+    /* Room card: fixed header + flexible events area */
     .room{
       border:1px solid var(--grid); border-radius:14px; padding:14px;
       display:grid; grid-template-rows: 60px 1fr; gap:10px; min-height:0; overflow:hidden;
@@ -114,23 +112,26 @@
       max-width:50%; text-align:right;
     }
 
-    /* Events (pager host) */
+    /* Events area must fill! */
     .events{
-      position:relative; overflow:hidden; min-height:0;
-      display:grid; /* ensures each page pins to top-left */
+      position:relative;
+      overflow:hidden;
+      min-height:0;
+      height:100%;          /* <— ensures the pager has space in every card */
     }
 
-    /* Page occupies full area; slide-left animation */
+    /* Full-size sliding pages */
     .page{
       position:absolute; inset:0;
-      display:flex; flex-direction:column; gap:10px; justify-content:flex-start; align-items:stretch;
+      display:flex; flex-direction:column; gap:10px;
+      justify-content:flex-start; align-items:stretch;
+      width:100%; height:100%;
       transition: transform 500ms ease, opacity 500ms ease;
       transform: translateX(100%); opacity:0;
     }
     .page.is-active{ transform: translateX(0%); opacity:1; }
     .page.is-leaving{ transform: translateX(-100%); opacity:0; }
 
-    /* Event pill */
     .event{
       background:var(--chip); border:1px solid var(--grid); border-radius:12px;
       padding:12px; display:flex; flex-direction:column; gap:6px;
@@ -161,19 +162,16 @@
       </div>
 
       <div class="grid">
-        <!-- South: 1A/1B/2A/2B -->
         <section class="group" id="group-south">
           <div class="title">South Gym</div>
           <div class="rooms-stack" id="southRooms"></div>
         </section>
 
-        <!-- Fieldhouse: 3..8 -->
         <section class="group" id="group-fieldhouse">
           <div class="title">Fieldhouse</div>
           <div class="rooms-fieldhouse" id="fieldhouseRooms"></div>
         </section>
 
-        <!-- North: 9A/9B/10A/10B -->
         <section class="group" id="group-north">
           <div class="title">North Gym</div>
           <div class="rooms-stack" id="northRooms"></div>
@@ -184,7 +182,6 @@
 
   <script type="module" src="./app.js"></script>
 
-  <!-- Fit-to-screen with safe padding -->
   <script>
     (function fitStage(){
       const STAGE_W = 1920, STAGE_H = 1080;
