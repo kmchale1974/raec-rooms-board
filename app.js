@@ -125,10 +125,6 @@ function roomCard(id) {
 
   const pagerHost = document.createElement('div');
   pagerHost.className = 'events';
-  pagerHost.style.flex = '1 1 auto';
-  pagerHost.style.minHeight = '0';
-  pagerHost.style.position = 'relative';
-  pagerHost.style.overflow = 'hidden';
 
   card.appendChild(hdr);
   card.appendChild(pagerHost);
@@ -146,7 +142,7 @@ function findRoomCard(id) {
 function renderEventsPage(events) {
   const wrap = document.createElement('div');
   wrap.className = 'page';
-  // contents
+
   const inner = document.createElement('div');
   inner.style.display = 'flex';
   inner.style.flexDirection = 'column';
@@ -238,7 +234,7 @@ function formatDisplay(slot) {
   let title = (slot.title||'').trim();
   let subtitle = (slot.subtitle||'').trim();
 
-  // derive org/contact from title when needed
+  // derive org/contact from title when needed (e.g., "Org, Person")
   if (!org && !contact && title.includes(',')) {
     const parts = title.split(',').map(s=>s.trim()).filter(Boolean);
     if (parts.length >= 2) {
@@ -262,7 +258,7 @@ function formatDisplay(slot) {
     return { title: org, subtitle: detail, when: `${to12h(slot.startMin)}–${to12h(slot.endMin)}` };
   }
 
-  // If we are confident it's a person: show "First Last" in bold, purpose under
+  // If clearly a person, show "First Last" bold, purpose below
   if (
     org && contact &&
     isSingleToken(org) && isSingleToken(contact) &&
@@ -279,7 +275,7 @@ function formatDisplay(slot) {
     return { title: contact, subtitle: subtitle || '', when: `${to12h(slot.startMin)}–${to12h(slot.endMin)}` };
   }
 
-  // Default: organization in bold; purpose or contact below
+  // Default: organization bold; purpose/contact under
   return {
     title: org || (title && title.includes(',') ? flipName(title) : title) || '—',
     subtitle: subtitle || contact || '',
@@ -290,32 +286,31 @@ function formatDisplay(slot) {
 // ---------- robust room routing ----------
 function normalizeRoomTargets(roomIdRaw) {
   const raw = String(roomIdRaw||'').trim();
-  const s = raw.toUpperCase().replace(/\s+/g,'');      // collapse spaces
+  const s = raw.toUpperCase().replace(/\s+/g,'');
   const low = raw.toLowerCase();
 
   // Championship Court => 1A,1B,2A,2B
   if (low.includes('championship court')) return ['1A','1B','2A','2B'];
 
-  // "Full Gym 9 & 10", "Court 9 & 10", "9-10"
+  // "Full Gym 9 & 10", "Court 9-10"
   if (/(^|[^0-9])9\s*(&|-)\s*10([^0-9]|$)/i.test(raw)) return ['9A','9B','10A','10B'];
   if (/(^|[^0-9])1\s*(&|-)\s*2([^0-9]|$)/i.test(raw))  return ['1A','1B','2A','2B'];
 
-  // Explicit half-court A/B (allow "10 A", "10A")
+  // Half-court explicit A/B (allow spaces)
   const halfAB = raw.match(/\b(1|2|9|10)\s*([AB])\b/i);
   if (halfAB) return [`${halfAB[1]}${halfAB[2].toUpperCase()}`];
 
-  // Variants like "Half Court 10A", "Half Court 10 B"
   const halfABTight = raw.match(/half\s*court[^0-9]*\b(1|2|9|10)\s*([AB])\b/i);
   if (halfABTight) return [`${halfABTight[1]}${halfABTight[2].toUpperCase()}`];
 
-  // "Court 10-AB", "10AB", "Court 9 AB"
+  // "Court 10-AB" / "10AB" / "Court 9 AB"
   const abWide = raw.match(/\b(?:court\s*)?(1|2|9|10)\s*[- ]?\s*AB\b/i);
   if (abWide) {
     const base = abWide[1];
     return [`${base}A`, `${base}B`];
   }
 
-  // Plain “Court 10”, “Gym 2”, etc. → split to A+B for 1/2/9/10
+  // Plain “Court 10” → show in A and B
   const justNum = raw.match(/\b(1|2|9|10)\b/);
   if (justNum) {
     const base = justNum[1];
@@ -326,7 +321,7 @@ function normalizeRoomTargets(roomIdRaw) {
   const fh = raw.match(/\b([3-8])\b/);
   if (fh) return [fh[1]];
 
-  // Already exact (e.g., incoming is "10A")
+  // Already exact (e.g. "10A")
   if (/^(1|2|9|10)[AB]$/.test(s)) return [s];
 
   return [];
@@ -368,7 +363,7 @@ async function init() {
     const arr = dedupeByKey(arrRaw).sort((a,b) => (a.startMin||0) - (b.startMin||0));
     card._setCount(arr.length);
 
-    const pages = chunk(arr, perPageForRoom(roomId));
+    const pages = chunk(arr, 1); // one-at-a-time
     const pager = createPager(card._pagerHost, pages);
     pagers.push(pager);
   }
