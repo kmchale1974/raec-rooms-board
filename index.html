@@ -5,9 +5,8 @@
   <title>RAEC Rooms Board</title>
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <link rel="icon" href="data:,">
-  <style>
-    *, *::before, *::after { box-sizing: border-box; }
 
+  <style>
     :root{
       --bg:#0f1115;
       --panel:#12151c;
@@ -18,168 +17,179 @@
       --chip:#263043;
       --chip-text:#e7eaf1;
       --ok:#1f9d6a;
-      --safe-pad: 36px;
     }
 
-    html, body {
-      height: 100%;
-      margin: 0;
-      background: var(--bg);
-      color: var(--ink);
+    /* Page scaffold */
+    html,body{
+      margin:0; height:100%;
+      background:var(--bg); color:var(--ink);
       font-family: Inter, "SF Pro Text", Segoe UI, Roboto, Arial, sans-serif;
-      overflow: hidden;
+      overflow:hidden; /* signage: no scrollbars */
     }
 
-    .fit-viewport {
-      position: fixed; inset: 0;
-      display: flex; align-items: center; justify-content: center;
-      overflow: hidden; padding: var(--safe-pad);
+    /* We center and scale the 1920×1080 stage inside this viewport */
+    .viewport{
+      position:fixed; inset:0;
+      display:flex; align-items:flex-start; justify-content:center;
+      padding:16px; /* outer breathing room on real screens */
+      box-sizing:border-box;
     }
 
+    /* Fixed 1920×1080 canvas we auto-scale */
     .stage{
       width:1920px; height:1080px;
-      padding:28px;
-      display:grid; grid-template-rows: 112px 1fr; gap:20px;
-      transform-origin: center center;
-      will-change: transform;
+      padding:32px; box-sizing:border-box;
+      display:grid; grid-template-rows: 120px 1fr; gap:24px;
+      background:var(--bg);
+      border-radius:16px;
     }
 
-    /* Header */
+    /* Header row */
     .header{
-      display:grid; grid-template-columns: 340px 1fr 340px; align-items:center;
-      min-height:0;
+      display:grid; grid-template-columns: 360px 1fr 360px; align-items:center;
+      gap:16px;
     }
-    .brand{ display:flex; align-items:center; gap:16px; min-width:0; }
-    .brand img{ height:76px; width:auto; object-fit:contain; }
-    .dateclock{ justify-self:center; text-align:center; min-width:0; }
-    #headerDate{ font-size:40px; font-weight:800; letter-spacing:.02em; white-space:nowrap; }
-    #headerClock{ font-size:26px; color:var(--muted); margin-top:4px; font-weight:600; }
+    .brand{ display:flex; align-items:center; gap:16px; }
+    .brand img{ height:80px; width:auto; object-fit:contain; }
+
+    .dateclock{ justify-self:center; text-align:center; }
+    #headerDate{ font-size:44px; font-weight:800; letter-spacing:.02em; }
+    #headerClock{ font-size:28px; color:var(--muted); margin-top:6px; font-weight:600; }
 
     .wifi{
       justify-self:end; background:var(--panel); border:1px solid var(--grid);
-      border-radius:14px; padding:12px 14px; min-width:300px;
+      border-radius:14px; padding:14px 16px; min-width:320px;
     }
-    .wifi .title{ font-size:15px; color:var(--muted); letter-spacing:.08em; text-transform:uppercase; }
-    .wifi .row{ display:flex; justify-content:space-between; gap:10px; margin-top:6px; }
+    .wifi .title{ font-size:16px; color:var(--muted); letter-spacing:.08em; text-transform:uppercase; }
+    .wifi .row{ display:flex; justify-content:space-between; gap:12px; margin-top:6px; }
     .wifi .row span:first-child{ color:var(--muted); }
     .wifi .row span:last-child{ font-weight:700; }
 
-    /* Columns: South | Fieldhouse | North */
+    /* Three-column grid: South | Fieldhouse | North */
     .grid{
-      display:grid; grid-template-columns: 1fr 1.5fr 1fr; gap:20px;
-      min-height:0; height:100%;
+      display:grid; grid-template-columns: 1fr 1.5fr 1fr; gap:24px;
+      height:100%; min-height:0;
     }
 
     .group{
       background:var(--panel); border:1px solid var(--grid); border-radius:18px;
-      padding:14px; display:grid; grid-template-rows: 40px 1fr; gap:10px;
+      padding:16px; display:grid; grid-template-rows: 44px 1fr; gap:12px;
       overflow:hidden; min-height:0;
     }
     .group .title{
-      font-size:16px; color:var(--muted); letter-spacing:.1em; text-transform:uppercase;
+      font-size:18px; color:var(--muted); letter-spacing:.1em; text-transform:uppercase;
       border-bottom:1px solid var(--grid); display:flex; align-items:center; padding-bottom:6px;
-      white-space:nowrap;
     }
 
-    /* South/North stacks */
+    /* South/North: 2 rows (1..2) and (9..10) stacked */
     .rooms-stack{
-      display:grid; grid-template-rows: 1fr 1fr; gap:10px;
-      min-height:0; height:100%;
+      display:grid; grid-template-rows: 1fr 1fr; gap:12px; min-height:0;
     }
 
-    /* Fieldhouse 3x2 */
+    /* Fieldhouse: 2 rows × 3 cols for 3..8 */
     .rooms-fieldhouse{
-      display:grid; grid-template-columns: repeat(3, 1fr); grid-template-rows: repeat(2, 1fr);
-      gap:10px; min-height:0; height:100%;
+      position:relative; /* for pager absolute children */
+      min-height:0;
     }
-
-    /* Room card */
-    .room{
-      border:1px solid var(--grid); border-radius:14px; padding:12px;
-      display:grid; grid-template-rows: 56px 1fr; gap:8px; min-height:0; overflow:hidden;
-      background:linear-gradient(180deg, rgba(255,255,255,0.02), rgba(0,0,0,0));
-      height:100%;
-    }
-    .room.compact{ grid-template-rows: 50px 1fr; padding:10px; }
-
-    .roomHeader{
-      min-height:56px; max-height:56px;
-      display:flex; align-items:center; justify-content:space-between; gap:10px;
-      border-bottom:1px dashed var(--grid); padding-bottom:6px; overflow:hidden;
-    }
-    .room.compact .roomHeader{ min-height:50px; max-height:50px; }
-
-    .roomHeader .id{
-      font-size:26px; font-weight:800; letter-spacing:.04em; white-space:nowrap;
-    }
-    .room.compact .roomHeader .id{ font-size:24px; }
-
-    .roomHeader .count{
-      font-size:12px; color:var(--muted);
-      white-space:nowrap; text-overflow:ellipsis; overflow:hidden;
-      max-width:55%; text-align:right;
-    }
-
-    /* Events containers */
-    .events{
-      position:relative; min-height:0; height:100%; overflow:hidden;
-    }
-
-    /* A/B: single rotator (no absolute overlays) */
-    .single-rotor{
-      height:100%;
-      display:flex; flex-direction:column; justify-content:flex-start; align-items:stretch;
-    }
-    .single-rotor .event{
-      margin-top:0; /* always top aligned */
-      transition: opacity 450ms ease, transform 450ms ease;
-    }
-    .fade-enter { opacity:0; transform:translateX(12px); }
-    .fade-enter-active { opacity:1; transform:translateX(0); }
-    .fade-exit { opacity:1; transform:translateX(0); }
-    .fade-exit-active { opacity:0; transform:translateX(-12px); }
-
-    /* Fieldhouse pager (absolute pages) */
-    .page{
+    .rooms-fieldhouse .page{
       position:absolute; inset:0;
-      display:flex; flex-direction:column; gap:8px;
-      justify-content:flex-start; align-items:stretch;
-      width:100%; height:100%;
-      padding-bottom:2px;
+      display:grid; grid-template-columns: repeat(3, 1fr);
+      grid-template-rows: 1fr 1fr;
+      gap:12px; padding:0; box-sizing:border-box;
+      /* animation default state */
+      transform: translateX(100%);
+      opacity: 0;
       transition: transform 500ms ease, opacity 500ms ease;
-      transform: translateX(100%); opacity:0;
       will-change: transform, opacity;
     }
-    .page.is-active{ transform: translateX(0%); opacity:1; }
-    .page.is-leaving{ transform: translateX(-100%); opacity:0; }
-
-    .event{
-      background:var(--chip); border:1px solid var(--grid); border-radius:12px;
-      padding:10px; display:flex; flex-direction:column; gap:4px;
-      flex: 0 0 auto;
+    .rooms-fieldhouse .page.is-active{
+      transform: translateX(0);
+      opacity: 1;
+      z-index: 2;
     }
-    .room.compact .event{ padding:9px; gap:4px; }
+    .rooms-fieldhouse .page.is-leaving{
+      transform: translateX(-100%);
+      opacity: 0;
+      z-index: 1;
+    }
 
-    .event .who{ font-size:19px; font-weight:800; line-height:1.15; }
-    .event .what{ font-size:15px; color:var(--muted); line-height:1.2; }
-    .event .when{ font-size:14px; color:#b7c0cf; font-weight:600; line-height:1.15; }
+    /* Individual room card */
+    .room{
+      border:1px solid var(--grid); border-radius:14px; padding:14px;
+      display:flex; flex-direction:column; gap:10px; min-height:0; overflow:hidden;
+      background:linear-gradient(180deg, rgba(255,255,255,0.02), rgba(0,0,0,0));
+    }
+    .roomHeader{
+      display:flex; align-items:center; justify-content:space-between; gap:12px;
+      border-bottom:1px dashed var(--grid); padding-bottom:8px;
+    }
+    .roomHeader .id{ font-size:28px; font-weight:800; letter-spacing:.04em; }
+    .roomHeader .count{
+      font-size:13px; color:var(--muted);
+    }
+    .roomHeader .count em{
+      font-style:normal; color:var(--ink); font-weight:700;
+    }
+    .events{
+      position:relative; flex:1 1 auto; min-height:0; overflow:hidden;
+    }
 
-    .room.compact .event .who{ font-size:18px; }
-    .room.compact .event .what{ font-size:14px; }
-    .room.compact .event .when{ font-size:13.5px; }
+    /* A/B single-rotor (one reservation visible at a time) */
+    .single-rotor{ position:relative; height:100%; }
+    .single-rotor .event{
+      position:absolute; inset:0;
+      display:flex; flex-direction:column; gap:6px;
+      background:var(--chip); border:1px solid var(--grid); border-radius:12px;
+      padding:10px 12px; box-sizing:border-box;
+    }
+
+    /* Fieldhouse static multi-list cell */
+    .events-list{
+      display:flex; flex-direction:column; gap:10px; height:100%;
+      overflow:hidden; /* signage: we manage layout to avoid scrollbars */
+    }
+    .events-list .event{
+      background:var(--chip); border:1px solid var(--grid); border-radius:12px;
+      padding:10px 12px; display:flex; flex-direction:column; gap:6px;
+    }
+
+    /* Text styles */
+    .who{ font-size:18px; font-weight:800; line-height:1.1; }
+    .what{ font-size:15px; color:var(--muted); line-height:1.2; }
+    .when{ font-size:14px; color:#b7c0cf; font-weight:600; }
+
+    .who, .what{ word-wrap:break-word; overflow-wrap:anywhere; }
+
+    /* Smooth cross-fade/slide for single-rotor */
+    .fade-enter{ opacity:0; transform:translateX(24px); }
+    .fade-enter-active{ transition:opacity 450ms ease, transform 450ms ease; }
+    .fade-exit{ opacity:1; transform:translateX(0); }
+    .fade-exit-active{
+      opacity:0; transform:translateX(-24px);
+      transition:opacity 450ms ease, transform 450ms ease;
+    }
+
+    /* Tiny corner legend (optional) */
+    .legend{
+      position:absolute; right:24px; bottom:18px; color:var(--muted); font-size:12px;
+    }
   </style>
 </head>
 <body>
-  <div class="fit-viewport">
+  <div class="viewport">
     <div class="stage">
+      <!-- Header -->
       <div class="header">
         <div class="brand">
+          <!-- Place your mark as logo.png in the repo root -->
           <img src="./logo.png" alt="Romeoville Athletic & Event Center">
         </div>
+
         <div class="dateclock">
           <div id="headerDate">—</div>
           <div id="headerClock">—</div>
         </div>
+
         <div class="wifi">
           <div class="title">Guest Wi-Fi</div>
           <div class="row"><span>Network</span><span id="wifiSsid">RAEC-Public</span></div>
@@ -187,36 +197,53 @@
         </div>
       </div>
 
+      <!-- 3-column board -->
       <div class="grid">
+        <!-- South Gym (1A/1B, 2A/2B) -->
         <section class="group" id="group-south">
           <div class="title">South Gym</div>
-          <div class="rooms-stack" id="southRooms"></div>
+          <div class="rooms-stack" id="southRooms"><!-- filled by app.js --></div>
         </section>
 
+        <!-- Fieldhouse (3..8) with pager -->
         <section class="group" id="group-fieldhouse">
           <div class="title">Fieldhouse</div>
-          <div class="rooms-fieldhouse" id="fieldhouseRooms"></div>
+          <div class="rooms-fieldhouse" id="fieldhouseRooms"><!-- pages injected by app.js --></div>
         </section>
 
+        <!-- North Gym (9A/9B, 10A/10B) -->
         <section class="group" id="group-north">
           <div class="title">North Gym</div>
-          <div class="rooms-stack" id="northRooms"></div>
+          <div class="rooms-stack" id="northRooms"><!-- filled by app.js --></div>
         </section>
       </div>
     </div>
   </div>
 
+  <!-- App logic -->
   <script type="module" src="./app.js"></script>
+
+  <!-- Auto-scale the fixed 1920×1080 stage to any screen without clipping -->
   <script>
-    (function fitStage(){
+    (function fitStageSetup(){
       const STAGE_W = 1920, STAGE_H = 1080;
-      const stage = document.querySelector('.stage');
       function fit() {
-        const pad = parseInt(getComputedStyle(document.documentElement).getPropertyValue('--safe-pad')) || 36;
-        const availW = Math.max(0, window.innerWidth  - pad*2);
-        const availH = Math.max(0, window.innerHeight - pad*2);
-        const s = Math.min(availW / STAGE_W, availH / STAGE_H);
+        const vp = document.querySelector('.viewport');
+        const stage = document.querySelector('.stage');
+        if (!vp || !stage) return;
+
+        const availW = Math.max(1, vp.clientWidth  - 0);  /* viewport padding already applied */
+        const availH = Math.max(1, vp.clientHeight - 0);
+
+        const sx = availW / STAGE_W;
+        const sy = availH / STAGE_H;
+        const s  = Math.min(sx, sy);
+
         stage.style.transform = `scale(${s})`;
+        stage.style.transformOrigin = 'top left';
+
+        /* Keep enough min-height so the viewport can center it nicely */
+        vp.style.minHeight = (STAGE_H * s) + 'px';
       }
       window.addEventListener('resize', fit);
       window.addEventListener('orientationchange', fit);
