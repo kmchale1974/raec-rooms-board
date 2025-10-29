@@ -39,10 +39,16 @@ function flipName(lastCommaFirst) {
   if (first && last) return `${first} ${last}`;
   return lastCommaFirst;
 }
-const tidyCatch = (s) => (s||'')
-  .replace(/\binternal holds?\b/ig,'')
-  .replace(/^\s*[-–,:]\s*/,'')
-  .trim();
+
+// Helpers for cleanup
+const stripInternalNotes = (s='') =>
+  s.replace(/\binternal holds?\b/ig,'')
+   .replace(/\binternal hold per nm\b/ig,'')
+   .replace(/^\s*[-–,:]\s*/,'')
+   .trim();
+
+const stripLeadingCatchCorner = (s='') =>
+  s.replace(/^\s*catch\s*corner\s*\(?\)?\s*:?/i,'').trim();
 
 // ---------- special cases ----------
 function pickleballOverride(slot) {
@@ -129,7 +135,8 @@ function roomCard(id, compact=false) {
   card.appendChild(hdr);
   card.appendChild(eventsWrap);
 
-  card._setCount = (n) => { countEl.textContent = n ? `${n} event${n>1?'s':''}` : ''; };
+  // <<< label now says "reservations" >>>
+  card._setCount = (n) => { countEl.textContent = n ? `${n} reservation${n>1?'s':''}` : ''; };
   card._eventsWrap = eventsWrap;
   return card;
 }
@@ -231,7 +238,6 @@ function createSingleRotator(container, items) {
     }
     // exit current
     current.classList.add('fade-exit','fade-exit-active');
-    // after transition, swap
     setTimeout(() => {
       host.innerHTML = '';
       nextEl.classList.add('fade-enter','fade-enter-active');
@@ -252,15 +258,31 @@ function perPageForRoom(roomId){ return /^(1|2|9|10)[AB]$/.test(roomId) ? 1 : 2;
 
 // ---------- display logic ----------
 function formatDisplay(slot) {
+  // Pickleball override
   const pb = pickleballOverride(slot);
   if (pb) return { title: pb.title, subtitle: '', when: to12Range(slot) };
 
+  // Extract base fields
   let org = (slot.org||'').trim();
   let contact = (slot.contact||'').trim();
   let title = (slot.title||'').trim();
   let subtitle = (slot.subtitle||'').trim();
 
-  // derive org/contact from title if needed
+  // ---- Catch Corner special rule ----
+  // Bold "Catch Corner"; subtitle = Reservation Purpose (from subtitle), cleaned.
+  if (
+    (org && /catch\s*corner/i.test(org)) ||
+    (title && /catch\s*corner/i.test(title))
+  ) {
+    const purpose = stripLeadingCatchCorner(stripInternalNotes(subtitle || ''));
+    return {
+      title: 'Catch Corner',
+      subtitle: purpose,
+      when: to12Range(slot)
+    };
+  }
+
+  // Derive org/contact if missing from title "Org, Person"
   if (!org && !contact && title.includes(',')) {
     const parts = title.split(',').map(s=>s.trim()).filter(Boolean);
     if (parts.length >= 2) {
@@ -273,23 +295,37 @@ function formatDisplay(slot) {
     }
   }
 
+  // Flip "Last, First" to "First Last" where appropriate
   const flipIfPerson = (s) => (s && s.includes(',') && isLikelyPersonName(s)) ? flipName(s) : s;
   org = flipIfPerson(org);
   contact = flipIfPerson(contact);
 
-  // Catch Corner cleanup
-  if (org && org.toLowerCase().includes('catch corner')) {
-    org = 'Catch Corner';
-    const detail = tidyCatch(contact || subtitle);
-    return { title: org, subtitle: detail, when: to12Range(slot) };
+  // ---- Person-only two-token join: "Isabel" + "Vazquez" -> "Isabel Vazquez" in bold ----
+  if (
+    org && contact &&
+    /^[A-Za-z'.-]+$/.test(org) && /^[A-Za-z'.-]+(?: [A-Za-z'.-]+)*$/.test(contact) &&
+    !looksOrg(org) && !looksOrg(contact)
+  ) {
+    // If org is a single token (likely last name) and contact looks like a first name (or first+middle),
+    // construct full person name.
+    const orgParts = org.split(/\s+/);
+    const contactParts = contact.split(/\s+/);
+    if (orgParts.length === 1 && contactParts.length >= 1) {
+      const fullName = `${contact} ${org}`.replace(/\s+/g,' ').trim();
+      return { title: fullName, subtitle: subtitle || '', when: to12Range(slot) };
+    }
   }
 
+  // If org itself looks like a person name, use it as bold line
   if (isLikelyPersonName(org)) {
     return { title: org, subtitle: subtitle || '', when: to12Range(slot) };
   }
+  // If no org but contact is a person name, bold that
   if (!org && isLikelyPersonName(contact)) {
     return { title: contact, subtitle: subtitle || '', when: to12Range(slot) };
   }
+
+  // Default org/title/subtitle mapping
   return {
     title: org || (title && title.includes(',') ? flipName(title) : title) || '—',
     subtitle: subtitle || contact || '',
@@ -366,7 +402,7 @@ async function init() {
 
     const isAB = /^(1|2|9|10)[AB]$/.test(roomId);
     if (isAB) {
-      // A/B: single rotator
+      // A/B: single rotator (one reservation visible at a time)
       if (arr.length === 0) { card._eventsWrap.innerHTML = ''; continue; }
       const rotor = createSingleRotator(card._eventsWrap, arr);
       controllers.push(rotor);
