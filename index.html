@@ -16,7 +16,7 @@
       --chip:#263043;
       --chip-text:#e7eaf1;
       --ok:#1f9d6a;
-      --safe-pad: 16px; /* extra pixels around the stage after scaling */
+      --safe-pad: 20px; /* safe padding around scaled stage */
     }
 
     html, body {
@@ -25,10 +25,10 @@
       background: var(--bg);
       color: var(--ink);
       font-family: Inter, "SF Pro Text", Segoe UI, Roboto, Arial, sans-serif;
-      overflow: hidden; /* avoid any scrollbars on signage */
+      overflow: hidden; /* signage: no scrollbars */
     }
 
-    /* Fit wrapper: centers the stage and applies the scale */
+    /* Centers the fixed stage and applies scale */
     .fit-viewport {
       position: fixed;
       inset: 0;
@@ -36,20 +36,21 @@
       align-items: center;
       justify-content: center;
       overflow: hidden;
+      padding: var(--safe-pad);
+      box-sizing: border-box;
     }
 
-    /* The fixed 1920×1080 canvas */
+    /* Fixed 1920×1080 canvas */
     .stage{
       width:1920px; height:1080px;
-      box-sizing:border-box;
-      padding:32px;
+      padding:32px; box-sizing:border-box;
       display:grid; grid-template-rows: 120px 1fr; gap:24px;
-      background:transparent;
       transform-origin: center center;
       will-change: transform;
+      background: transparent;
     }
 
-    /* Header row */
+    /* Header */
     .header{
       display:grid; grid-template-columns: 360px 1fr 360px; align-items:center;
       min-height:0;
@@ -69,7 +70,7 @@
     .wifi .row span:first-child{ color:var(--muted); }
     .wifi .row span:last-child{ font-weight:700; }
 
-    /* Grid columns: South | Fieldhouse | North */
+    /* Main 3 columns */
     .grid{
       display:grid; grid-template-columns: 1fr 1.5fr 1fr; gap:24px;
       min-height:0; height:100%;
@@ -86,131 +87,30 @@
       white-space:nowrap;
     }
 
-    /* South/North (two rows) */
+    /* South/North: force both rows to share height and never collapse */
     .rooms-stack{
-      display:grid; grid-template-rows: 1fr 1fr; gap:12px;
+      display:grid; grid-template-rows: repeat(2, minmax(0, 1fr)); gap:12px;
       min-height:0; height:100%;
     }
 
-    /* Fieldhouse (3×2) */
+    /* Fieldhouse: 2 rows x 3 cols, rows can’t collapse */
     .rooms-fieldhouse{
-      display:grid; grid-template-columns: repeat(3, 1fr); grid-template-rows: repeat(2, 1fr);
+      display:grid; grid-template-columns: repeat(3, 1fr); grid-template-rows: repeat(2, minmax(0,1fr));
       gap:12px; min-height:0; height:100%;
     }
 
-    /* Room card: fixed header 60px + flexible events */
+    /* Room card: fixed header + flexible body */
     .room{
       border:1px solid var(--grid); border-radius:14px; padding:14px;
-      display:grid; grid-template-rows: 60px 1fr; gap:10px; min-height:0; overflow:hidden;
+      display:grid; grid-template-rows: 60px minmax(0, 1fr); gap:10px;
+      min-height:0; overflow:hidden;
       background:linear-gradient(180deg, rgba(255,255,255,0.02), rgba(0,0,0,0));
     }
 
     .roomHeader{
-      min-height:60px; max-height:60px; /* lock header height */
+      min-height:60px; max-height:60px;
       display:flex; align-items:center; justify-content:space-between; gap:12px;
       border-bottom:1px dashed var(--grid); padding-bottom:8px; overflow:hidden;
     }
     .roomHeader .id{
-      font-size:28px; font-weight:800; letter-spacing:.04em; white-space:nowrap;
-    }
-    .roomHeader .count{
-      font-size:13px; color:var(--muted); white-space:nowrap; text-overflow:ellipsis; overflow:hidden;
-      max-width:50%; text-align:right;
-    }
-
-    /* Pager host uses grid to pin content to top-left */
-    .events{
-      position:relative; overflow:hidden; min-height:0;
-      display:grid; /* ensures children (pages) align top-left */
-    }
-
-    /* Page occupies full area; slide-left animation */
-    .page{
-      position:absolute; inset:0;
-      display:flex; flex-direction:column; gap:10px; justify-content:flex-start; align-items:stretch;
-      transition: transform 500ms ease, opacity 500ms ease;
-      transform: translateX(100%); opacity:0;
-    }
-    .page.is-active{ transform: translateX(0%); opacity:1; }
-    .page.is-leaving{ transform: translateX(-100%); opacity:0; }
-
-    /* Event pill */
-    .event{
-      background:var(--chip); border:1px solid var(--grid); border-radius:12px;
-      padding:10px 12px; display:flex; flex-direction:column; gap:6px;
-      min-height:0;
-    }
-    .event .who{ font-size:18px; font-weight:800; line-height:1.15; }
-    .event .what{ font-size:15px; color:var(--muted); line-height:1.2; }
-    .event .when{ font-size:14px; color:#b7c0cf; font-weight:600; }
-    .who, .what{ word-wrap:break-word; overflow-wrap:anywhere; }
-  </style>
-</head>
-<body>
-  <div class="fit-viewport">
-    <div class="stage">
-      <div class="header">
-        <div class="brand">
-          <img src="./logo.png" alt="Romeoville Athletic & Event Center">
-        </div>
-        <div class="dateclock">
-          <div id="headerDate">—</div>
-          <div id="headerClock">—</div>
-        </div>
-        <div class="wifi">
-          <div class="title">Guest Wi-Fi</div>
-          <div class="row"><span>Network</span><span id="wifiSsid">RAEC-Public</span></div>
-          <div class="row"><span>Password</span><span id="wifiPass">Publ!c00</span></div>
-        </div>
-      </div>
-
-      <div class="grid">
-        <!-- South: 1A/1B/2A/2B -->
-        <section class="group" id="group-south">
-          <div class="title">South Gym</div>
-          <div class="rooms-stack" id="southRooms"></div>
-        </section>
-
-        <!-- Fieldhouse: 3..8 -->
-        <section class="group" id="group-fieldhouse">
-          <div class="title">Fieldhouse</div>
-          <div class="rooms-fieldhouse" id="fieldhouseRooms"></div>
-        </section>
-
-        <!-- North: 9A/9B/10A/10B -->
-        <section class="group" id="group-north">
-          <div class="title">North Gym</div>
-          <div class="rooms-stack" id="northRooms"></div>
-        </section>
-      </div>
-    </div>
-  </div>
-
-  <script type="module" src="./app.js"></script>
-
-  <!-- Robust fit-to-screen with safe padding on all sides -->
-  <script>
-    (function fitStage(){
-      const STAGE_W = 1920, STAGE_H = 1080;
-      const wrapper = document.querySelector('.fit-viewport');
-      const stage = document.querySelector('.stage');
-      function fit() {
-        if (!wrapper || !stage) return;
-        const pad = parseInt(getComputedStyle(document.documentElement).getPropertyValue('--safe-pad')) || 16;
-        const availW = Math.max(0, window.innerWidth  - pad*2);
-        const availH = Math.max(0, window.innerHeight - pad*2);
-        const sx = availW / STAGE_W;
-        const sy = availH / STAGE_H;
-        const s = Math.min(sx, sy);
-
-        stage.style.transform = `scale(${s})`;
-        // Ensure the wrapper keeps some padding around the scaled stage
-        wrapper.style.padding = pad + 'px';
-      }
-      window.addEventListener('resize', fit);
-      window.addEventListener('orientationchange', fit);
-      document.addEventListener('DOMContentLoaded', fit);
-    })();
-  </script>
-</body>
-</html>
+      font-size:28
