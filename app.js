@@ -1,4 +1,4 @@
-// ===== time helpers =====
+// ---------- time ----------
 function to12h(mins) {
   const h24 = Math.floor(mins / 60);
   const m = mins % 60;
@@ -8,7 +8,7 @@ function to12h(mins) {
 }
 const to12Range = s => `${to12h(s.startMin)}–${to12h(s.endMin)}`;
 
-// ===== name/org detection =====
+// ---------- org/name detection ----------
 const ORG_HINTS = [
   'club','athletic','athletics','basketball','volleyball','elite','academy',
   'flight','omona','empower','chicago sport','pink elite','catch corner','training',
@@ -44,7 +44,7 @@ const tidyCatch = (s) => (s||'')
   .replace(/^\s*[-–,:]\s*/,'')
   .trim();
 
-// ===== special-case display rules =====
+// ---------- special cases ----------
 function pickleballOverride(slot) {
   const t = `${slot.title||''} ${slot.subtitle||''} ${slot.org||''} ${slot.contact||''}`.toLowerCase();
   if (
@@ -57,7 +57,7 @@ function pickleballOverride(slot) {
   return null;
 }
 
-// ===== fetch data =====
+// ---------- fetch ----------
 async function loadData() {
   const resp = await fetch(`./events.json?ts=${Date.now()}`, { cache:'no-store' });
   if (!resp.ok) throw new Error(`Failed to fetch events.json: ${resp.status} ${resp.statusText}`);
@@ -66,7 +66,7 @@ async function loadData() {
   return data;
 }
 
-// ===== header clock =====
+// ---------- header clock ----------
 function headerClock() {
   const dateEl = document.getElementById('headerDate');
   const clockEl = document.getElementById('headerClock');
@@ -82,7 +82,7 @@ function headerClock() {
   setInterval(tick, 1000);
 }
 
-// ===== shells =====
+// ---------- shells ----------
 function renderRoomsShell() {
   const south = document.getElementById('southRooms');
   const field = document.getElementById('fieldhouseRooms');
@@ -123,14 +123,14 @@ function roomCard(id, compact=false) {
   hdr.appendChild(idEl);
   hdr.appendChild(countEl);
 
-  const pagerHost = document.createElement('div');
-  pagerHost.className = 'events';
+  const eventsWrap = document.createElement('div');
+  eventsWrap.className = 'events';
 
   card.appendChild(hdr);
-  card.appendChild(pagerHost);
+  card.appendChild(eventsWrap);
 
   card._setCount = (n) => { countEl.textContent = n ? `${n} event${n>1?'s':''}` : ''; };
-  card._pagerHost = pagerHost;
+  card._eventsWrap = eventsWrap;
   return card;
 }
 
@@ -139,11 +139,33 @@ function findRoomCard(id) {
     .find(r => r.querySelector('.roomHeader .id')?.textContent === id) || null;
 }
 
-// ===== pager =====
+// ---------- rendering helpers ----------
+function eventNode(slot) {
+  const { title, subtitle, when } = formatDisplay(slot);
+  const card = document.createElement('div');
+  card.className = 'event';
+
+  const who = document.createElement('div');
+  who.className = 'who';
+  who.textContent = title;
+
+  const what = document.createElement('div');
+  what.className = 'what';
+  what.textContent = subtitle || '';
+
+  const whenEl = document.createElement('div');
+  whenEl.className = 'when';
+  whenEl.textContent = when;
+
+  card.appendChild(who);
+  if (what.textContent) card.appendChild(what);
+  card.appendChild(whenEl);
+  return card;
+}
+
 function renderEventsPage(events) {
   const wrap = document.createElement('div');
   wrap.className = 'page';
-
   const inner = document.createElement('div');
   inner.style.display = 'flex';
   inner.style.flexDirection = 'column';
@@ -151,44 +173,19 @@ function renderEventsPage(events) {
   inner.style.height = '100%';
   inner.style.justifyContent = 'flex-start';
   inner.style.alignItems = 'stretch';
-
-  events.forEach(ev => {
-    const { title, subtitle, when } = formatDisplay(ev);
-
-    const card = document.createElement('div');
-    card.className = 'event';
-
-    const who = document.createElement('div');
-    who.className = 'who';
-    who.textContent = title;
-
-    const what = document.createElement('div');
-    what.className = 'what';
-    what.textContent = subtitle || '';
-
-    const whenEl = document.createElement('div');
-    whenEl.className = 'when';
-    whenEl.textContent = when;
-
-    card.appendChild(who);
-    if (what.textContent) card.appendChild(what);
-    card.appendChild(whenEl);
-    inner.appendChild(card);
-  });
-
+  events.forEach(ev => inner.appendChild(eventNode(ev)));
   wrap.appendChild(inner);
   return wrap;
 }
 
+// Pager for fieldhouse rooms (2 per page)
 function createPager(container, pages) {
   container.innerHTML = '';
-
   const pageEls = pages.map(evs => {
     const el = renderEventsPage(evs);
     container.appendChild(el);
     return el;
   });
-
   if (pageEls[0]) pageEls[0].classList.add('is-active');
 
   let idx = 0;
@@ -196,41 +193,64 @@ function createPager(container, pages) {
     if (!pageEls.length) return;
     const from = pageEls[idx];
     const to = pageEls[i];
-
     if (immediate) {
       pageEls.forEach(p => p.classList.remove('is-active','is-leaving'));
       to.classList.add('is-active');
-      idx = i;
-      return;
-    }
-    if (from === to) {
-      to.classList.add('is-active'); to.classList.remove('is-leaving');
       idx = i; return;
     }
-    from.classList.remove('is-active'); from.classList.add('is-leaving');
-    to.classList.remove('is-leaving'); to.classList.add('is-active');
+    if (from !== to) {
+      from.classList.remove('is-active'); from.classList.add('is-leaving');
+      to.classList.remove('is-leaving'); to.classList.add('is-active');
+    }
     idx = i;
   }
-  function next() {
-    if (pageEls.length <= 1) return;
-    const i = (idx + 1) % pageEls.length;
-    show(i, false);
-  }
+  function next(){ if (pageEls.length>1) show((idx+1)%pageEls.length); }
   return { show, next };
 }
 
-function chunk(arr, size) {
-  const out = [];
-  for (let i=0;i<arr.length;i+=size) out.push(arr.slice(i, i+size));
-  return out;
+// Single rotator for A/B rooms (exactly one event rendered at a time)
+function createSingleRotator(container, items) {
+  container.innerHTML = '';
+  const host = document.createElement('div');
+  host.className = 'single-rotor';
+  container.appendChild(host);
+
+  let idx = 0;
+  let current = null;
+
+  function paint(i, immediate=false) {
+    const item = items[i];
+    const nextEl = eventNode(item);
+    if (!current) {
+      nextEl.classList.add('fade-enter','fade-enter-active');
+      host.innerHTML = '';
+      host.appendChild(nextEl);
+      requestAnimationFrame(()=> nextEl.classList.remove('fade-enter'));
+      current = nextEl;
+      return;
+    }
+    // exit current
+    current.classList.add('fade-exit','fade-exit-active');
+    // after transition, swap
+    setTimeout(() => {
+      host.innerHTML = '';
+      nextEl.classList.add('fade-enter','fade-enter-active');
+      host.appendChild(nextEl);
+      requestAnimationFrame(()=> nextEl.classList.remove('fade-enter'));
+      current = nextEl;
+    }, immediate ? 0 : 250);
+  }
+
+  function show(i, immediate=false){ idx = i; paint(i, immediate); }
+  function next(){ if (items.length>1) show((idx+1)%items.length); }
+  return { show, next };
 }
 
-// A/B rooms show 1 at a time; fieldhouse may show 2
-function perPageForRoom(roomId){
-  return /^(1|2|9|10)[AB]$/.test(roomId) ? 1 : 2;
-}
+// utilities
+function chunk(arr, size) { const out=[]; for (let i=0;i<arr.length;i+=size) out.push(arr.slice(i, i+size)); return out; }
+function perPageForRoom(roomId){ return /^(1|2|9|10)[AB]$/.test(roomId) ? 1 : 2; }
 
-// ===== display formatting =====
+// ---------- display logic ----------
 function formatDisplay(slot) {
   const pb = pickleballOverride(slot);
   if (pb) return { title: pb.title, subtitle: '', when: to12Range(slot) };
@@ -277,7 +297,7 @@ function formatDisplay(slot) {
   };
 }
 
-// ===== routing to rooms =====
+// ---------- room routing ----------
 function normalizeRoomTargets(roomIdRaw) {
   const raw = String(roomIdRaw||'').trim();
   const s = raw.toUpperCase().replace(/\s+/g,'');
@@ -318,7 +338,7 @@ function dedupeByKey(arr) {
   return out;
 }
 
-// ===== main =====
+// ---------- main ----------
 async function init() {
   headerClock();
   renderRoomsShell();
@@ -336,7 +356,7 @@ async function init() {
     targets.forEach(t => { if (buckets.has(t)) buckets.get(t).push(s); });
   }
 
-  const pagers = [];
+  const controllers = [];
   for (const [roomId, arrRaw] of buckets.entries()) {
     const card = findRoomCard(roomId);
     if (!card) continue;
@@ -344,16 +364,24 @@ async function init() {
     const arr = dedupeByKey(arrRaw).sort((a,b) => (a.startMin||0) - (b.startMin||0));
     card._setCount(arr.length);
 
-    const pages = chunk(arr, perPageForRoom(roomId));
-    const pager = createPager(card._pagerHost, pages);
-    pagers.push(pager);
+    const isAB = /^(1|2|9|10)[AB]$/.test(roomId);
+    if (isAB) {
+      // A/B: single rotator
+      if (arr.length === 0) { card._eventsWrap.innerHTML = ''; continue; }
+      const rotor = createSingleRotator(card._eventsWrap, arr);
+      controllers.push(rotor);
+    } else {
+      // Fieldhouse: 2 per page pager
+      const pages = chunk(arr, 2);
+      const pager = createPager(card._eventsWrap, pages);
+      controllers.push(pager);
+    }
   }
 
-  // first paint visible
-  pagers.forEach(p => p.show(0, true));
-
-  // rotate in sync
-  setInterval(() => pagers.forEach(p => p.next()), 8000);
+  // First paint
+  controllers.forEach(c => c.show(0, true));
+  // Rotate in sync
+  setInterval(() => controllers.forEach(c => c.next()), 8000);
 }
 
 document.addEventListener('DOMContentLoaded', init);
