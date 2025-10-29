@@ -268,19 +268,21 @@ function formatDisplay(slot) {
   let title = (slot.title||'').trim();
   let subtitle = (slot.subtitle||'').trim();
 
-  // ---- Catch Corner special rule ----
-  // Bold "Catch Corner"; subtitle = Reservation Purpose (from subtitle), cleaned.
-  if (
-    (org && /catch\s*corner/i.test(org)) ||
-    (title && /catch\s*corner/i.test(title))
-  ) {
-    const purpose = stripLeadingCatchCorner(stripInternalNotes(subtitle || ''));
-    return {
-      title: 'Catch Corner',
-      subtitle: purpose,
-      when: to12Range(slot)
-    };
-  }
+ // ---- Catch Corner special rule ----
+if (
+  (org && /catch\s*corner/i.test(org)) ||
+  (title && /catch\s*corner/i.test(title))
+) {
+  let purpose = stripLeadingCatchCorner(stripInternalNotes(subtitle || ''));
+  // Remove any dangling parens like " ... Basketball)"
+  purpose = purpose.replace(/^\(\s*/,'').replace(/\)\s*$/,'').trim();
+
+  return {
+    title: 'Catch Corner',
+    subtitle: purpose,
+    when: to12Range(slot)
+  };
+}
 
   // Derive org/contact if missing from title "Org, Person"
   if (!org && !contact && title.includes(',')) {
