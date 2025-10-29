@@ -27,24 +27,21 @@
       overflow:hidden; /* signage: no scrollbars */
     }
 
-    /* We center and scale the 1920×1080 stage inside this viewport */
+    /* Center + scale the fixed 1920×1080 stage */
     .viewport{
       position:fixed; inset:0;
       display:flex; align-items:flex-start; justify-content:center;
-      padding:16px; /* outer breathing room on real screens */
-      box-sizing:border-box;
+      padding:16px; box-sizing:border-box;
     }
 
-    /* Fixed 1920×1080 canvas we auto-scale */
     .stage{
       width:1920px; height:1080px;
       padding:32px; box-sizing:border-box;
       display:grid; grid-template-rows: 120px 1fr; gap:24px;
-      background:var(--bg);
-      border-radius:16px;
+      background:var(--bg); border-radius:16px;
     }
 
-    /* Header row */
+    /* Header */
     .header{
       display:grid; grid-template-columns: 360px 1fr 360px; align-items:center;
       gap:16px;
@@ -65,76 +62,72 @@
     .wifi .row span:first-child{ color:var(--muted); }
     .wifi .row span:last-child{ font-weight:700; }
 
-    /* Three-column grid: South | Fieldhouse | North */
+    /* Three-column board */
     .grid{
       display:grid; grid-template-columns: 1fr 1.5fr 1fr; gap:24px;
       height:100%; min-height:0;
     }
 
+    /* Group panels: make the content area flex so it can grow */
     .group{
       background:var(--panel); border:1px solid var(--grid); border-radius:18px;
-      padding:16px; display:grid; grid-template-rows: 44px 1fr; gap:12px;
-      overflow:hidden; min-height:0;
+      padding:16px; display:flex; flex-direction:column; gap:12px;
+      overflow:hidden; min-height:0; /* allow flex child to shrink */
     }
     .group .title{
       font-size:18px; color:var(--muted); letter-spacing:.1em; text-transform:uppercase;
       border-bottom:1px solid var(--grid); display:flex; align-items:center; padding-bottom:6px;
+      flex:0 0 auto;
+    }
+    .group .body{
+      flex:1 1 auto; min-height:0; /* critical: so children can use 100% height */
+      display:block;
     }
 
-    /* South/North: 2 rows (1..2) and (9..10) stacked */
+    /* South/North: 2 rows */
     .rooms-stack{
-      display:grid; grid-template-rows: 1fr 1fr; gap:12px; min-height:0;
+      height:100%; min-height:0; /* critical */
+      display:grid; grid-template-rows: 1fr 1fr; gap:12px;
     }
 
-    /* Fieldhouse: 2 rows × 3 cols for 3..8 */
+    /* Fieldhouse with pager pages */
     .rooms-fieldhouse{
-      position:relative; /* for pager absolute children */
-      min-height:0;
+      position:relative; height:100%; min-height:0; /* critical */
     }
     .rooms-fieldhouse .page{
       position:absolute; inset:0;
       display:grid; grid-template-columns: repeat(3, 1fr);
       grid-template-rows: 1fr 1fr;
       gap:12px; padding:0; box-sizing:border-box;
-      /* animation default state */
-      transform: translateX(100%);
-      opacity: 0;
+      transform: translateX(100%); opacity:0;
       transition: transform 500ms ease, opacity 500ms ease;
       will-change: transform, opacity;
     }
-    .rooms-fieldhouse .page.is-active{
-      transform: translateX(0);
-      opacity: 1;
-      z-index: 2;
-    }
-    .rooms-fieldhouse .page.is-leaving{
-      transform: translateX(-100%);
-      opacity: 0;
-      z-index: 1;
-    }
+    .rooms-fieldhouse .page.is-active{ transform:translateX(0); opacity:1; z-index:2; }
+    .rooms-fieldhouse .page.is-leaving{ transform:translateX(-100%); opacity:0; z-index:1; }
 
-    /* Individual room card */
+    /* Room card */
     .room{
       border:1px solid var(--grid); border-radius:14px; padding:14px;
-      display:flex; flex-direction:column; gap:10px; min-height:0; overflow:hidden;
+      display:flex; flex-direction:column; gap:10px;
+      min-height:0; /* critical */
+      overflow:hidden;
       background:linear-gradient(180deg, rgba(255,255,255,0.02), rgba(0,0,0,0));
     }
     .roomHeader{
       display:flex; align-items:center; justify-content:space-between; gap:12px;
-      border-bottom:1px dashed var(--grid); padding-bottom:8px;
+      border-bottom:1px dashed var(--grid); padding-bottom:8px; flex:0 0 auto;
     }
     .roomHeader .id{ font-size:28px; font-weight:800; letter-spacing:.04em; }
-    .roomHeader .count{
-      font-size:13px; color:var(--muted);
-    }
-    .roomHeader .count em{
-      font-style:normal; color:var(--ink); font-weight:700;
-    }
+    .roomHeader .count{ font-size:13px; color:var(--muted); }
+    .roomHeader .count em{ font-style:normal; color:var(--ink); font-weight:700; }
+
     .events{
-      position:relative; flex:1 1 auto; min-height:0; overflow:hidden;
+      position:relative; flex:1 1 auto; min-height:0; /* critical */
+      overflow:hidden;
     }
 
-    /* A/B single-rotor (one reservation visible at a time) */
+    /* Single-rotor (A/B rooms) */
     .single-rotor{ position:relative; height:100%; }
     .single-rotor .event{
       position:absolute; inset:0;
@@ -143,35 +136,29 @@
       padding:10px 12px; box-sizing:border-box;
     }
 
-    /* Fieldhouse static multi-list cell */
+    /* Fieldhouse list items */
     .events-list{
-      display:flex; flex-direction:column; gap:10px; height:100%;
-      overflow:hidden; /* signage: we manage layout to avoid scrollbars */
+      display:flex; flex-direction:column; gap:10px;
+      height:100%; min-height:0; overflow:hidden;
     }
     .events-list .event{
       background:var(--chip); border:1px solid var(--grid); border-radius:12px;
       padding:10px 12px; display:flex; flex-direction:column; gap:6px;
     }
 
-    /* Text styles */
+    /* Text */
     .who{ font-size:18px; font-weight:800; line-height:1.1; }
     .what{ font-size:15px; color:var(--muted); line-height:1.2; }
     .when{ font-size:14px; color:#b7c0cf; font-weight:600; }
-
     .who, .what{ word-wrap:break-word; overflow-wrap:anywhere; }
 
-    /* Smooth cross-fade/slide for single-rotor */
+    /* Rotor animation (always slide left) */
     .fade-enter{ opacity:0; transform:translateX(24px); }
     .fade-enter-active{ transition:opacity 450ms ease, transform 450ms ease; }
     .fade-exit{ opacity:1; transform:translateX(0); }
     .fade-exit-active{
       opacity:0; transform:translateX(-24px);
       transition:opacity 450ms ease, transform 450ms ease;
-    }
-
-    /* Tiny corner legend (optional) */
-    .legend{
-      position:absolute; right:24px; bottom:18px; color:var(--muted); font-size:12px;
     }
   </style>
 </head>
@@ -181,7 +168,6 @@
       <!-- Header -->
       <div class="header">
         <div class="brand">
-          <!-- Place your mark as logo.png in the repo root -->
           <img src="./logo.png" alt="Romeoville Athletic & Event Center">
         </div>
 
@@ -199,22 +185,28 @@
 
       <!-- 3-column board -->
       <div class="grid">
-        <!-- South Gym (1A/1B, 2A/2B) -->
+        <!-- South Gym -->
         <section class="group" id="group-south">
           <div class="title">South Gym</div>
-          <div class="rooms-stack" id="southRooms"><!-- filled by app.js --></div>
+          <div class="body">
+            <div class="rooms-stack" id="southRooms"></div>
+          </div>
         </section>
 
-        <!-- Fieldhouse (3..8) with pager -->
+        <!-- Fieldhouse -->
         <section class="group" id="group-fieldhouse">
           <div class="title">Fieldhouse</div>
-          <div class="rooms-fieldhouse" id="fieldhouseRooms"><!-- pages injected by app.js --></div>
+          <div class="body">
+            <div class="rooms-fieldhouse" id="fieldhouseRooms"></div>
+          </div>
         </section>
 
-        <!-- North Gym (9A/9B, 10A/10B) -->
+        <!-- North Gym -->
         <section class="group" id="group-north">
           <div class="title">North Gym</div>
-          <div class="rooms-stack" id="northRooms"><!-- filled by app.js --></div>
+          <div class="body">
+            <div class="rooms-stack" id="northRooms"></div>
+          </div>
         </section>
       </div>
     </div>
@@ -223,7 +215,7 @@
   <!-- App logic -->
   <script type="module" src="./app.js"></script>
 
-  <!-- Auto-scale the fixed 1920×1080 stage to any screen without clipping -->
+  <!-- Auto-scale the fixed 1920×1080 stage -->
   <script>
     (function fitStageSetup(){
       const STAGE_W = 1920, STAGE_H = 1080;
@@ -232,8 +224,8 @@
         const stage = document.querySelector('.stage');
         if (!vp || !stage) return;
 
-        const availW = Math.max(1, vp.clientWidth  - 0);  /* viewport padding already applied */
-        const availH = Math.max(1, vp.clientHeight - 0);
+        const availW = Math.max(1, vp.clientWidth);
+        const availH = Math.max(1, vp.clientHeight);
 
         const sx = availW / STAGE_W;
         const sy = availH / STAGE_H;
@@ -241,8 +233,6 @@
 
         stage.style.transform = `scale(${s})`;
         stage.style.transformOrigin = 'top left';
-
-        /* Keep enough min-height so the viewport can center it nicely */
         vp.style.minHeight = (STAGE_H * s) + 'px';
       }
       window.addEventListener('resize', fit);
