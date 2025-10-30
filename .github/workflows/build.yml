@@ -3,50 +3,36 @@ name: Build RAEC events.json
 on:
   workflow_dispatch:
   schedule:
-    # 08:02 AM America/Chicago daily (13:02 UTC during standard time)
-    - cron: "2 13 * * *"
+    - cron: "2 13 * * *"   # 08:02 AM America/Chicago
 
 jobs:
   build:
     runs-on: ubuntu-latest
-
-    # <<< IMPORTANT: Put the env at the *job* level so every step can see it
     env:
-      # Email login
-      IMAP_USER: raecroominfo.board@gmail.com         # <-- set it here
-      IMAP_PASS: ${{ secrets.IMAP_PASS }}             # <-- set this Secret in: Repo → Settings → Secrets → Actions
-
-      # Optional filters to match your RecTrac report
+      # Make sure the key is EXACTLY this case: IMAP_USER
+      IMAP_USER: raecroominfo.board@gmail.com
+      IMAP_PASS: ${{ secrets.IMAP_PASS }}   # set this Secret in repo settings
       FROM_SENDER: "romeovillerecreation@rectrac.com"
       SUBJECT: "AC Daily Facility Report"
-
-      # Paths
       OUT_CSV: data/inbox/latest.csv
       OUT_JSON: events.json
-
       NODE_VERSION: 20
 
     steps:
-      - name: Check out repository
-        uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
+      - uses: actions/checkout@v4
+        with: { fetch-depth: 0 }
 
-      - name: Use Node ${{ env.NODE_VERSION }}
-        uses: actions/setup-node@v4
-        with:
-          node-version: ${{ env.NODE_VERSION }}
-          cache: npm
+      - uses: actions/setup-node@v4
+        with: { node-version: ${{ env.NODE_VERSION }}, cache: npm }
 
-      - name: Install dependencies
+      - name: Install deps
         run: npm ci
 
-      - name: Sanity check env
+      - name: Verify IMAP envs
         run: |
           echo "IMAP_USER=${IMAP_USER}"
-          if [ -z "$IMAP_USER" ]; then echo "IMAP_USER missing"; exit 1; fi
-          if [ -z "$IMAP_PASS" ]; then echo "IMAP_PASS missing"; exit 1; fi
-          echo "Env OK."
+          test -n "$IMAP_USER" || (echo "IMAP_USER missing"; exit 1)
+          test -n "$IMAP_PASS" || (echo "IMAP_PASS missing"; exit 1)
 
       - name: Fetch latest CSV from email
         run: node scripts/fetch_email.js
@@ -59,15 +45,12 @@ jobs:
           set -e
           git config user.name  "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
-
           git add "${OUT_JSON}"
           if git diff --cached --quiet; then
             echo "No changes to ${OUT_JSON}; skipping commit/push."
             exit 0
           fi
-
           git commit -m "Update ${OUT_JSON} [skip ci]"
-
           git fetch origin main
           git -c rebase.autostash=true pull --rebase origin main
           git push origin HEAD:main
