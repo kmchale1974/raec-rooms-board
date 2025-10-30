@@ -1,362 +1,351 @@
+#!/usr/bin/env node
 // scripts/transform.mjs
-import fs from "fs";
-import path from "path";
+// Transform latest CSV -> events.json with RAEC rules
 
-// ---- config
-const CSV_PATH = process.env.CSV_PATH || "data/inbox/latest.csv";
-const JSON_OUT = process.env.JSON_OUT || "events.json";
+import fs from 'fs';
+import path from 'path';
+import { fileURLToPath } from 'url';
 
-// fieldhouse floor/turf season (US Central rules you gave)
-function isBasketballFloorInstalled(d) {
-  // Basketball floor: from 3rd Monday in March through the day before 2nd Monday in November
-  const y = d.getFullYear();
-  const thirdMonMar = nthWeekdayOfMonth(y, 2, 1, 3);   // 2=March, Monday=1, nth=3
-  const secondMonNov = nthWeekdayOfMonth(y, 10, 1, 2); // 10=Nov, Monday=1, nth=2
-  return d >= thirdMonMar && d < secondMonNov;
-}
-function nthWeekdayOfMonth(year, monthIndex, weekday, nth) {
-  // weekday: 0..6 (Sun..Sat). You gave Monday, so 1.
-  const first = new Date(year, monthIndex, 1);
-  const firstW = first.getDay();
-  const delta = (weekday - firstW + 7) % 7;
-  const day = 1 + delta + (nth - 1) * 7;
-  return new Date(year, monthIndex, day);
-}
+// ---------- Utilities ----------
+const __filename = fileURLToPath(import.meta.url);
+const __dirname  = path.dirname(__filename);
 
-// ---- tiny CSV parser (handles quotes & commas)
-function parseCSV(text) {
-  const rows = [];
-  let i = 0, field = "", row = [], inQ = false;
-  while (i <= text.length) {
-    const c = text[i++] || "\n";
-    if (inQ) {
-      if (c === '"') {
-        if (text[i] === '"') { field += '"'; i++; }
-        else inQ = false;
-      } else field += c;
-    } else {
-      if (c === '"') inQ = true;
-      else if (c === ",") { row.push(field.trim()); field = ""; }
-      else if (c === "\n" || c === "\r") {
-        if (field || row.length) { row.push(field.trim()); rows.push(row); field = ""; row = []; }
-      } else field += c;
-    }
-  }
-  return rows;
-}
+const INPUT_CSV  = process.env.IN_CSV  || path.join(__dirname, '..', 'data', 'inbox', 'latest.csv');
+const OUTPUT_JSON= path.join(__dirname, '..', 'events.json');
 
-// minutes since midnight from "h:mmam - h:mmpm"
-function parseRange(s) {
-  if (!s) return null;
-  const t = s.replace(/\s+/g, " ").trim();
-  const m = t.match(/(\d{1,2}):?(\d{2})?\s*(am|pm)\s*-\s*(\d{1,2}):?(\d{2})?\s*(am|pm)/i);
+// Minutes from "h:mmam - h:mmpm"
+function parseRangeToMinutes(text) {
+  if (!text) return null;
+  const m = String(text).trim().match(/(\d{1,2}:\d{2}\s*[ap]m)\s*-\s*(\d{1,2}:\d{2}\s*[ap]m)/i);
   if (!m) return null;
-  const sh = parseInt(m[1], 10), sm = parseInt(m[2] || "0", 10), sampm = m[3].toLowerCase();
-  const eh = parseInt(m[4], 10), em = parseInt(m[5] || "0", 10), eampm = m[6].toLowerCase();
-  const toMin = (h, m, ap) => {
-    let H = h % 12; if (ap === "pm") H += 12; return H * 60 + m;
-  };
-  return { startMin: toMin(sh, sm, sampm), endMin: toMin(eh, em, eampm) };
+  return { startMin: toMin(m[1]), endMin: toMin(m[2]) };
 }
 
-// Map facility to implied room set (numbers only)
-function facilityToRooms(fac) {
-  const f = fac.toLowerCase();
+function toMin(hhmmampm) {
+  const s = String(hhmmampm).trim().toLowerCase();
+  const m = s.match(/^(\d{1,2}):(\d{2})\s*([ap])m$/);
+  if (!m) return null;
+  let h = parseInt(m[1], 10), min = parseInt(m[2], 10);
+  const mer = m[3];
+  if (h === 12) h = 0;
+  if (mer === 'p') h += 12;
+  return h * 60 + min;
+}
 
-  // South & North gym numerics
-  const mCourtAB = f.match(/ac gym\s*-\s*court\s*(\d+)-ab/);
-  if (mCourtAB) {
-    const n = mCourtAB[1];
-    if (n === "1") return ["1", "2"]; // 1-AB implies 1 & 2
-    if (n === "2") return ["1", "2"];
-    if (n === "9") return ["9"]; // 9-AB implies 9 (we collapse A/B to just the number)
-    if (n === "10") return ["10"];
-  }
-
-  const mFull = f.match(/ac gym\s*-\s*full gym\s*(\d+).*?(\d+)?/);
-  if (mFull) {
-    const a = mFull[1], b = mFull[2];
-    if ((a === "1" && b === "2") || a === "1") return ["1", "2"];
-    if ((a === "9" && b === "10") || a === "9") return ["9", "10"];
-  }
-
-  const mHalf = f.match(/ac gym\s*-\s*half court\s*(\d+)[ab]?/);
-  if (mHalf) return [mHalf[1]];
-
-  // Championship Court == 1 & 2
-  if (f.includes("championship court")) return ["1", "2"];
-
-  // Fieldhouse — basketball floor mode: 3..8, otherwise turf sets
-  if (f.includes("fieldhouse")) {
-    if (f.includes("court ") && f.match(/court\s*[3-8](?:-?[3-8])?/)) {
-      // "AC Fieldhouse - Court 7" -> ["7"]
-      const m = f.match(/court\s*(\d)(?:-(\d))?/);
-      if (m) {
-        if (m[2]) {
-          const a = +m[1], b = +m[2];
-          const arr = [];
-          for (let k = Math.min(a, b); k <= Math.max(a, b); k++) arr.push(String(k));
-          return arr;
-        }
-        return [m[1]];
-      }
+// Date helpers for “court vs turf season”
+function nthWeekdayOfMonth(year, monthIdx, weekday, n) {
+  // weekday: 0=Sun..6=Sat; monthIdx: 0..11
+  const d = new Date(year, monthIdx, 1);
+  let count = 0;
+  while (d.getMonth() === monthIdx) {
+    if (d.getDay() === weekday) {
+      count++;
+      if (count === n) return new Date(d);
     }
-    if (f.includes("court 3-8")) return ["3","4","5","6","7","8"];
-    // Turf labels (we return placeholders; they will be ignored when floor installed)
-    if (f.includes("full turf")) return ["FH_FULL_TURF"];
-    if (f.includes("half turf north")) return ["FH_HALF_N"];
-    if (f.includes("half turf south")) return ["FH_HALF_S"];
-    if (f.includes("quarter turf")) return ["FH_Q"];
+    d.setDate(d.getDate() + 1);
   }
-
-  return []; // unknown facility => drop later
+  return null;
 }
 
-// Name normalization
-function parseReservee(raw) {
-  const s = (raw || "").trim();
-  if (!s) return { title: "" };
+function isCourtSeason(d = new Date()) {
+  const y = d.getFullYear();
+  // Court season: from 3rd Monday in March through **day before** 2nd Monday in November
+  const thirdMonMar = nthWeekdayOfMonth(y, 2, 1, 3);   // March (2), Monday(1)
+  const secondMonNov= nthWeekdayOfMonth(y,10, 1, 2);   // November (10)
+  // If we’re in Jan/Feb before Mar season starts, we’re not court season.
+  if (!thirdMonMar || !secondMonNov) return true; // safety fallback
+  return (d >= thirdMonMar && d < secondMonNov);
+}
 
-  // Pattern: "Org, Person Name"
-  const parts = s.split(",").map(v => v.trim()).filter(Boolean);
+// Cleaners
+function cleanWhitespace(s) {
+  return String(s || '').replace(/\s+/g, ' ').trim();
+}
+
+function normalizeReservee(raw) {
+  const s = cleanWhitespace(raw);
+
+  // Catch Corner normalization early
+  if (/^catch\s*corner/i.test(s) || /^catchcorner/i.test(s)) {
+    return { type: 'catch', org: 'Catch Corner', contact: '' };
+  }
+
+  // “RAEC Front Desk, Rentals - On Hold” → treat as system/Open Pickleball (handled later with purpose)
+  if (/raec\s*front\s*desk/i.test(s)) {
+    return { type: 'system', org: 'RAEC Front Desk', contact: '' };
+  }
+
+  // Pattern "Org, Contact"
+  const parts = s.split(',').map(x => x.trim());
   if (parts.length >= 2) {
-    // If first looks like an org (contains a keyword or multiple words w/o comma in second)
-    const org = parts[0];
-    const rest = parts.slice(1).join(", ");
-    // If rest is a person "Last First" OR "First Last" — just present as-is
-    return { org, contact: rest };
+    const left = parts[0];       // could be org or last name
+    const right = parts.slice(1).join(', '); // contact or remainder
+
+    // Heuristic: if left contains words like "Club|Elite|Training|Athletics|Sport|Basketball|Volleyball|Flight"
+    // we treat it as an organization.
+    if (/\b(Club|Elite|Training|Athletics|Sport|Sports|Basketball|Volleyball|Flight|Academy|United|Pink)\b/i.test(left)) {
+      return { type: 'org+contact', org: left, contact: right };
+    }
+
+    // If the right side looks like a person (First Last) and left has no spaces (Last),
+    // presume "Last, First" person format
+    if (/^[A-Za-z'.-]+\s+[A-Za-z'.-]+/.test(right) && /^[A-Za-z'.-]+$/.test(left)) {
+      const firstLast = `${right} ${left}`.replace(/\s+/g, ' ').trim();
+      return { type: 'person', person: firstLast, org: '', contact: '' };
+    }
+
+    // Fallback: treat as org + contact
+    return { type: 'org+contact', org: left, contact: right };
   }
 
-  // Pattern: "Last, First" (exactly one comma) — (handled by >=2 above)
-  // If single token with comma present (unlikely), fall through.
-  // If "Last, First" actually came through as one comma split -> handled.
-
-  // Maybe "Last, First" didn’t split earlier? (no comma) -> try "Last First"
-  const nameFlip = s.match(/^([^,]+),\s*([^,]+)$/);
-  if (nameFlip) return { title: `${nameFlip[2]} ${nameFlip[1]}` };
-
-  // Plain
-  return { title: s };
+  // “Single token” — likely org or single last name; treat as org by default
+  return { type: 'org', org: s, contact: '' };
 }
 
-// Reservation purpose cleanup for Pickleball
-function prettifyPurpose(purpose, reservee) {
-  const p = (purpose || "").toLowerCase();
-  const r = (reservee || "").toLowerCase();
-  if (p.includes("pickleball")) return "Open Pickleball";
-  if (r.includes("pickleball")) return "Open Pickleball";
-  return purpose || "";
+function cleanPurpose(purpose) {
+  let s = cleanWhitespace(purpose);
+  if (!s) return '';
+  // remove leading/trailing parentheses and trailing ')'
+  s = s.replace(/^\(+/, '').replace(/\)+$/, '');
+  // Drop “Internal Hold per NM”
+  s = s.replace(/internal hold per nm/i, '').replace(/\s{2,}/g, ' ').trim();
+  return s;
 }
 
-// Dedup key
-function slotKey(roomId, startMin, endMin, org, contact, title, subtitle) {
-  return [roomId, startMin, endMin, org||"", contact||"", title||"", subtitle||""].join("|");
+function isPickleball(purpose, reservee) {
+  return /pickleball/i.test(purpose) || /pickleball/i.test(reservee || '');
 }
 
+function mapFacilityToRooms(facility) {
+  const f = cleanWhitespace(facility).toLowerCase();
+
+  // South gym 1/2
+  if (/^ac gym - half court 1a$/i.test(facility)) return ['1A'];
+  if (/^ac gym - half court 1b$/i.test(facility)) return ['1B'];
+  if (/^ac gym - court 1-ab$/i.test(facility))    return ['1A','1B'];
+
+  if (/^ac gym - half court 2a$/i.test(facility)) return ['2A'];
+  if (/^ac gym - half court 2b$/i.test(facility)) return ['2B'];
+  if (/^ac gym - court 2-ab$/i.test(facility))    return ['2A','2B'];
+
+  // “Full Gym 1AB & 2AB” / Championship Court → cover 1A,1B,2A,2B
+  if (/full gym 1ab & 2ab/i.test(facility))       return ['1A','1B','2A','2B'];
+  if (/championship court/i.test(facility))       return ['1A','1B','2A','2B'];
+
+  // North gym 9/10
+  if (/^ac gym - half court 9a$/i.test(facility)) return ['9A'];
+  if (/^ac gym - half court 9b$/i.test(facility)) return ['9B'];
+  if (/^ac gym - court 9-ab$/i.test(facility))    return ['9A','9B'];
+
+  if (/^ac gym - half court 10a$/i.test(facility)) return ['10A'];
+  if (/^ac gym - half court 10b$/i.test(facility)) return ['10B'];
+  if (/^ac gym - court 10-ab$/i.test(facility))    return ['10A','10B'];
+
+  if (/full court 9 & 10/i.test(facility))         return ['9A','9B','10A','10B'];
+
+  // Fieldhouse (court season)
+  if (/^ac fieldhouse - court\s*([3-8])$/i.test(facility)) {
+    const n = parseInt(RegExp.$1, 10);
+    return [String(n)];
+  }
+  if (/^ac fieldhouse - court 3-8$/i.test(facility)) return ['3','4','5','6','7','8'];
+
+  // Fieldhouse (turf): handled by season check; map anyway for completeness
+  if (/^ac fieldhouse - full turf$/i.test(facility)) return ['3','4','5','6','7','8'];
+  if (/^ac fieldhouse - half turf north$/i.test(facility)) return ['6','7','8'];
+  if (/^ac fieldhouse - half turf south$/i.test(facility)) return ['3','4','5'];
+  if (/^ac fieldhouse - quarter turf n[ab]$/i.test(facility)) return ['7','8']; // coarse map
+  if (/^ac fieldhouse - quarter turf s[ab]$/i.test(facility)) return ['3','4']; // coarse map
+
+  // As a safe fallback, return empty (we’ll drop)
+  return [];
+}
+
+// Format for app.json slot
+function makeSlot(roomId, startMin, endMin, title, subtitle, org = '', contact = '') {
+  return { roomId, startMin, endMin, title, subtitle, org, contact };
+}
+
+// ---------- Main ----------
 async function main() {
-  if (!fs.existsSync(CSV_PATH) || fs.statSync(CSV_PATH).size === 0) {
-    console.log("Empty CSV; writing empty scaffold.");
-    writeOut({ rooms: defaultRooms(), slots: [] });
+  // Empty CSV → scaffold
+  if (!fs.existsSync(INPUT_CSV) || fs.statSync(INPUT_CSV).size === 0) {
+    console.log('Empty CSV; writing empty scaffold.');
+    const scaffold = {
+      dayStartMin: 360,
+      dayEndMin: 1380,
+      rooms: [
+        { id: '1A', label: '1A', group: 'south' },
+        { id: '1B', label: '1B', group: 'south' },
+        { id: '2A', label: '2A', group: 'south' },
+        { id: '2B', label: '2B', group: 'south' },
+        { id: '3',  label: '3',  group: 'fieldhouse' },
+        { id: '4',  label: '4',  group: 'fieldhouse' },
+        { id: '5',  label: '5',  group: 'fieldhouse' },
+        { id: '6',  label: '6',  group: 'fieldhouse' },
+        { id: '7',  label: '7',  group: 'fieldhouse' },
+        { id: '8',  label: '8',  group: 'fieldhouse' },
+        { id: '9A', label: '9A', group: 'north' },
+        { id: '9B', label: '9B', group: 'north' },
+        { id: '10A',label: '10A',group: 'north' },
+        { id: '10B',label: '10B',group: 'north' }
+      ],
+      slots: []
+    };
+    fs.writeFileSync(OUTPUT_JSON, JSON.stringify(scaffold, null, 2));
     return;
   }
 
-  const raw = fs.readFileSync(CSV_PATH, "utf8");
-  const rows = parseCSV(raw);
-  if (!rows.length) {
-    writeOut({ rooms: defaultRooms(), slots: [] });
-    return;
+  const raw = fs.readFileSync(INPUT_CSV, 'utf8');
+  const lines = raw.split(/\r?\n/).filter(l => l.trim().length > 0);
+  if (!lines.length) {
+    console.log('No rows; wrote empty scaffold.');
+    return main(); // same scaffold block above
   }
 
-  // header detection
-  const header = rows[0].map(h => h.toLowerCase().trim());
-  const idx = {
-    location: header.findIndex(h => h.startsWith("location")),
-    facility: header.findIndex(h => h.startsWith("facility")),
-    time: header.findIndex(h => h.startsWith("reserved time")),
-    reservee: header.findIndex(h => h.startsWith("reservee")),
-    purpose: header.findIndex(h => h.startsWith("reservation purpose")),
-    qa: header.findIndex(h => h.startsWith("questionanswerall")),
-  };
+  // Header parse
+  const header = lines[0].split(',');
+  const idx = (name) => header.findIndex(h => h.trim().toLowerCase() === name.toLowerCase());
+  const iLocation  = idx('Location:');
+  const iFacility  = idx('Facility');
+  const iTime      = idx('Reserved Time');
+  const iReservee  = idx('Reservee');
+  const iPurpose   = idx('Reservation Purpose');
 
-  const today = new Date();
-  const floorOn = isBasketballFloorInstalled(today);
+  const courtMode = isCourtSeason(new Date());
 
-  // First pass: collect raw claims
-  const claims = []; // {rooms[], startMin, endMin, reservee, purpose}
-  for (let i = 1; i < rows.length; i++) {
-    const r = rows[i];
-    if (!r || !r.length) continue;
-    const location = idx.location >= 0 ? r[idx.location] : "";
-    if (location && location.toLowerCase().indexOf("athletic & event center") === -1) continue;
+  // First pass: raw rows -> items
+  const items = [];
+  for (let i=1; i<lines.length; i++) {
+    const row = lines[i].split(',');
 
-    const fac = idx.facility >= 0 ? r[idx.facility] : "";
-    const range = idx.time >= 0 ? r[idx.time] : "";
-    const reservee = idx.reservee >= 0 ? r[idx.reservee] : "";
-    const purpose  = idx.purpose >= 0 ? r[idx.purpose] : "";
+    const location  = cleanWhitespace(row[iLocation]  || '');
+    const facility  = cleanWhitespace(row[iFacility]  || '');
+    const timeText  = cleanWhitespace(row[iTime]      || '');
+    const reservee  = cleanWhitespace(row[iReservee]  || '');
+    const purpose   = cleanWhitespace(row[iPurpose]   || '');
 
-    const mins = parseRange(range);
-    if (!mins) continue;
-
-    // Turf ignoring rule when floor installed
-    const facLower = (fac || "").toLowerCase();
-    const isTurf = /full turf|half turf|quarter turf|turf/.test(facLower);
-    if (floorOn && facLower.includes("fieldhouse") && isTurf) {
-      // ignore turf rows while basketball floor is down
+    if (!facility || !timeText) continue;
+    if (location && !/athletic\s*&\s*event\s*center/i.test(location)) {
+      // Only RAEC
       continue;
     }
 
-    const rooms = facilityToRooms(fac);
+    // court vs turf: ignore turf in court season for fieldhouse (3..8)
+    if (courtMode && /fieldhouse.*turf/i.test(facility)) {
+      continue;
+    }
+
+    const range = parseRangeToMinutes(timeText);
+    if (!range) continue;
+
+    const rooms = mapFacilityToRooms(facility);
     if (!rooms.length) continue;
 
-    claims.push({
+    const who = normalizeReservee(reservee);
+    const pur = cleanPurpose(purpose);
+
+    // Pickleball override
+    let title = '', subtitle = '';
+    let org = '', contact = '';
+
+    if (isPickleball(purpose, reservee)) {
+      title = 'Open Pickleball';
+      subtitle = ''; // keep it clean
+      org = 'Open Pickleball'; contact = '';
+    } else if (who.type === 'catch') {
+      title = 'Catch Corner';
+      subtitle = pur; // show only purpose
+      org = 'Catch Corner'; contact = '';
+    } else if (who.type === 'person') {
+      title = who.person; // First Last
+      subtitle = pur;
+      org = who.person; contact = '';
+    } else if (who.type === 'org+contact') {
+      title = who.org;
+      subtitle = pur || who.contact;
+      org = who.org; contact = who.contact;
+    } else {
+      title = who.org || 'Reservation';
+      subtitle = pur;
+      org = who.org || ''; contact = who.contact || '';
+    }
+
+    items.push({
       rooms,
-      startMin: mins.startMin,
-      endMin: mins.endMin,
-      reservee,
-      purpose,
-      facility: fac
+      startMin: range.startMin,
+      endMin:   range.endMin,
+      title, subtitle, org, contact,
+      rawFacility: facility,
+      rawReservee: reservee
     });
   }
 
-  // Second pass: narrow Fieldhouse “3-8” using specific court rows by same org/time
-  // For each org/time window, if it has "3-8" and also specific courts subset -> use the specific subset
-  function orgKeyForClaim(c) {
-    // normalize reservee for matching (org + contact + cleaned)
-    return (c.reservee || "").toLowerCase().replace(/\s+/g," ");
+  // Deduplicate Fieldhouse “Court 3-8” blanket vs specific courts for SAME ORG/time overlap
+  const resultSlots = [];
+
+  // Build quick lookup for specific court bookings per org/time
+  function overlaps(a, b) {
+    return a.startMin < b.endMin && b.startMin < a.endMin;
   }
-  const groupedByOrgTime = new Map(); // key => array of claims
-  for (const c of claims) {
-    const k = [orgKeyForClaim(c), c.startMin, c.endMin].join("|");
-    if (!groupedByOrgTime.has(k)) groupedByOrgTime.set(k, []);
-    groupedByOrgTime.get(k).push(c);
-  }
-  const refined = [];
-  for (const arr of groupedByOrgTime.values()) {
-    const has38 = arr.filter(x => x.rooms.length === 6 && x.rooms.join(",") === "3,4,5,6,7,8");
-    const specifics = new Set(arr.flatMap(x => x.rooms.filter(r => /^[3-8]$/.test(r))));
-    if (has38.length && specifics.size) {
-      // drop 3-8 rows, keep specifics
-      for (const c of arr) {
-        if (c.rooms.length === 6 && c.rooms.join(",") === "3,4,5,6,7,8") continue;
-        refined.push(c);
+
+  const fieldhouseBlankets = items.filter(it => it.rooms.length >= 4 && it.rooms.every(r => /^[3-8]$/.test(r)));
+  const specifics          = items.filter(it => it.rooms.length <= 2 || it.rooms.some(r => /^[3-8]$/.test(r)));
+
+  // For each item, we will push room by room. For blankets, skip rooms that a same-org overlapping “specific” already covers.
+  for (const it of items) {
+    if (it.rooms.every(r => /^[3-8]$/.test(r)) && it.rooms.length >= 4) {
+      // blanket 3..8 style
+      const keepRooms = it.rooms.filter(r => {
+        // If a specific item from same org overlaps time and targets this exact room, drop it here
+        const conflict = specifics.some(sp =>
+          sp !== it &&
+          sp.org.toLowerCase() === it.org.toLowerCase() &&
+          overlaps(sp, it) &&
+          sp.rooms.includes(r)
+        );
+        return !conflict;
+      });
+      for (const r of keepRooms) {
+        resultSlots.push(makeSlot(r, it.startMin, it.endMin, it.title, it.subtitle, it.org, it.contact));
       }
-    } else {
-      refined.push(...arr);
+      continue;
+    }
+
+    // Non-blanket or non-fieldhouse
+    for (const r of it.rooms) {
+      resultSlots.push(makeSlot(r, it.startMin, it.endMin, it.title, it.subtitle, it.org, it.contact));
     }
   }
 
-  // Third pass: collapse “both courts” for (1,2) and (9,10) families
-  // If within the same org/time window the union implies full coverage, emit only {1,2} or {9,10}
-  const collapsed = [];
-  const groupedByOrgTime2 = new Map();
-  for (const c of refined) {
-    const fam = familyOfRooms(c.rooms);
-    const k = [orgKeyForClaim(c), c.startMin, c.endMin, fam].join("|");
-    if (!groupedByOrgTime2.has(k)) groupedByOrgTime2.set(k, []);
-    groupedByOrgTime2.get(k).push(c);
-  }
-  for (const arr of groupedByOrgTime2.values()) {
-    const union = new Set(arr.flatMap(a => a.rooms));
-    const fam = familyOfRooms([...union]);
-    if (fam === "1-2" && union.has("1") && union.has("2")) {
-      collapsed.push(mergeRooms(arr, ["1","2"]));
-    } else if (fam === "9-10" && union.has("9") && union.has("10")) {
-      collapsed.push(mergeRooms(arr, ["9","10"]));
-    } else {
-      // keep individuals
-      for (const r of arr) collapsed.push(r);
-    }
-  }
-
-  // Build final slots
-  const seen = new Set();
-  const slots = [];
-  for (const c of collapsed) {
-    const titleBits = parseReservee(c.reservee);
-    const subtitle = prettifyPurpose(c.purpose, c.reservee);
-
-    for (const rid of c.rooms) {
-      if (!/^\d+$/.test(rid)) continue; // ignore turf placeholders
-
-      const slot = {
-        roomId: rid,
-        startMin: c.startMin,
-        endMin: c.endMin,
-        title: titleBits.title || (titleBits.org ? titleBits.org : ""),
-        subtitle: subtitle,
-        org: titleBits.org || undefined,
-        contact: titleBits.contact || undefined
-      };
-
-      // if title is empty but org exists, set display title to org
-      if (!slot.title && slot.org) slot.title = slot.org;
-
-      // Deduplicate
-      const key = slotKey(slot.roomId, slot.startMin, slot.endMin, slot.org, slot.contact, slot.title, slot.subtitle);
-      if (seen.has(key)) continue;
-      seen.add(key);
-
-      slots.push(slot);
-    }
-  }
-
-  // Output
-  const out = {
+  // Final JSON structure: with A/B courts added to rooms list
+  const json = {
     dayStartMin: 360,
     dayEndMin: 1380,
     rooms: [
-      { id:"1",  label:"1",  group:"south"      },
-      { id:"2",  label:"2",  group:"south"      },
-      { id:"3",  label:"3",  group:"fieldhouse" },
-      { id:"4",  label:"4",  group:"fieldhouse" },
-      { id:"5",  label:"5",  group:"fieldhouse" },
-      { id:"6",  label:"6",  group:"fieldhouse" },
-      { id:"7",  label:"7",  group:"fieldhouse" },
-      { id:"8",  label:"8",  group:"fieldhouse" },
-      { id:"9",  label:"9",  group:"north"      },
-      { id:"10", label:"10", group:"north"      }
+      { id: '1A', label: '1A', group: 'south' },
+      { id: '1B', label: '1B', group: 'south' },
+      { id: '2A', label: '2A', group: 'south' },
+      { id: '2B', label: '2B', group: 'south' },
+      { id: '3',  label: '3',  group: 'fieldhouse' },
+      { id: '4',  label: '4',  group: 'fieldhouse' },
+      { id: '5',  label: '5',  group: 'fieldhouse' },
+      { id: '6',  label: '6',  group: 'fieldhouse' },
+      { id: '7',  label: '7',  group: 'fieldhouse' },
+      { id: '8',  label: '8',  group: 'fieldhouse' },
+      { id: '9A', label: '9A', group: 'north' },
+      { id: '9B', label: '9B', group: 'north' },
+      { id: '10A',label: '10A',group: 'north' },
+      { id: '10B',label: '10B',group: 'north' }
     ],
-    slots
+    slots: resultSlots
   };
 
-  writeOut(out);
-}
-
-// family classifier for collapsing
-function familyOfRooms(rooms) {
-  const set = new Set(rooms);
-  if (set.has("1") || set.has("2")) return "1-2";
-  if (set.has("9") || set.has("10")) return "9-10";
-  return "other";
-}
-function mergeRooms(arr, roomsOut) {
-  // Keep any one claim as skeleton
-  const base = { ...arr[0] };
-  base.rooms = roomsOut;
-  return base;
-}
-
-function defaultRooms() {
-  return [
-    { id:"1",  label:"1",  group:"south"      },
-    { id:"2",  label:"2",  group:"south"      },
-    { id:"3",  label:"3",  group:"fieldhouse" },
-    { id:"4",  label:"4",  group:"fieldhouse" },
-    { id:"5",  label:"5",  group:"fieldhouse" },
-    { id:"6",  label:"6",  group:"fieldhouse" },
-    { id:"7",  label:"7",  group:"fieldhouse" },
-    { id:"8",  label:"8",  group:"fieldhouse" },
-    { id:"9",  label:"9",  group:"north"      },
-    { id:"10", label:"10", group:"north"      }
-  ];
-}
-
-function writeOut(obj) {
-  fs.writeFileSync(JSON_OUT, JSON.stringify(obj, null, 2));
-  console.log(`Wrote ${JSON_OUT} • rooms=${obj.rooms?.length||0} • slots=${obj.slots?.length||0}`);
+  fs.writeFileSync(OUTPUT_JSON, JSON.stringify(json, null, 2));
+  console.log(`Wrote events.json • rooms=${json.rooms.length} • slots=${json.slots.length}`);
 }
 
 main().catch(err => {
-  console.error("transform failed:", err);
+  console.error('transform.mjs failed:', err);
   process.exit(1);
 });
