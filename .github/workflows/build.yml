@@ -39,19 +39,24 @@ jobs:
           test -n "$IMAP_USER" || (echo "IMAP_USER missing"; exit 1)
           test -n "$IMAP_PASS" || (echo "IMAP_PASS missing"; exit 1)
 
+      # IMPORTANT: sync BEFORE generating files so the working tree is clean
+      - name: Sync with remote (rebase & autostash)
+        run: |
+          git config user.name  "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git fetch origin main
+          git -c rebase.autoStash=true pull --rebase origin main
+
       - name: Fetch latest CSV from email
         run: node scripts/fetch_email.js
 
       - name: Transform CSV -> events.json
         run: node scripts/transform.mjs
 
-      - name: Commit events.json (rebase-safe)
+      - name: Commit events.json (if changed)
         run: |
           set -e
-          git config user.name  "github-actions[bot]"
-          git config user.email "github-actions[bot]@users.noreply.github.com"
-          git fetch origin main
-          git pull --rebase origin main
+          # Only commit the JSON (CSV stays untracked; see .gitignore note below)
           git add "${OUT_JSON}"
           if git diff --cached --quiet; then
             echo "No changes to ${OUT_JSON}; skipping commit/push."
