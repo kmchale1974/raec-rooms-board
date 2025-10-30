@@ -1,1 +1,286 @@
 
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <title>RAEC Rooms Board</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <link rel="icon" href="data:,">
+
+  <style>
+    :root{
+      --bg:#0f1115;
+      --panel:#12151c;
+      --ink:#e7eaf1;
+      --muted:#9aa3b2;
+      --accent:#2b87ff;
+      --grid:#1b202a;
+      --chip:#263043;
+      --chip-text:#e7eaf1;
+    }
+
+    /* Whole page */
+    html,body{
+      margin:0; height:100%;
+      background:var(--bg); color:var(--ink);
+      font-family: Inter, "SF Pro Text", Segoe UI, Roboto, Arial, sans-serif;
+      overflow:hidden;
+    }
+
+    /* Fixed canvas (1920×1080) centered and auto-scaled */
+    .viewport{
+      position:fixed; inset:0;
+      display:flex; align-items:flex-start; justify-content:center;
+      padding:16px; box-sizing:border-box;
+    }
+    .stage{
+      width:1920px; height:1080px;
+      padding:32px; box-sizing:border-box;
+      display:grid; grid-template-rows: 120px 1fr; gap:24px;
+      background:var(--bg);
+      border-radius:16px;
+    }
+
+    /* Header */
+    .header{
+      display:grid; grid-template-columns: 360px 1fr 360px; align-items:center;
+      gap:16px;
+    }
+    .brand{ display:flex; align-items:center; gap:16px; }
+    .brand img{ height:80px; width:auto; object-fit:contain; }
+
+    .dateclock{ justify-self:center; text-align:center; }
+    #headerDate{ font-size:44px; font-weight:800; letter-spacing:.02em; }
+    #headerClock{ font-size:28px; color:var(--muted); margin-top:6px; font-weight:600; }
+
+    .wifi{
+      justify-self:end; background:var(--panel); border:1px solid var(--grid);
+      border-radius:14px; padding:14px 16px; min-width:320px;
+    }
+    .wifi .title{ font-size:16px; color:var(--muted); letter-spacing:.08em; text-transform:uppercase; }
+    .wifi .row{ display:flex; justify-content:space-between; gap:12px; margin-top:6px; }
+    .wifi .row span:first-child{ color:var(--muted); }
+    .wifi .row span:last-child{ font-weight:700; }
+
+    /* Board: South | Fieldhouse | North */
+    .grid{
+      height:100%; min-height:0;  /* critical */
+      display:grid; grid-template-columns: 1fr 1.5fr 1fr; gap:24px;
+    }
+
+    /* Group panels use flex so their body can stretch */
+    .group{
+      background:var(--panel); border:1px solid var(--grid); border-radius:18px;
+      padding:16px; display:flex; flex-direction:column; gap:12px;
+      overflow:hidden; min-height:0;  /* critical */
+    }
+    .group .title{
+      font-size:18px; color:var(--muted); letter-spacing:.1em; text-transform:uppercase;
+      border-bottom:1px solid var(--grid); padding-bottom:6px;
+      flex:0 0 auto;
+    }
+    .group .body{
+      flex:1 1 auto; min-height:0; /* critical */
+    }
+
+    /* South/North stacks: exactly 4 cards (A/B, A/B) */
+    .rooms-stack{
+      height:100%; min-height:0; /* critical */
+      display:grid; grid-template-rows: 1fr 1fr; gap:12px;
+    }
+    .row-2cols{
+      height:100%; min-height:0;
+      display:grid; grid-template-columns: 1fr 1fr; gap:12px;
+    }
+
+    /* Fieldhouse (3..8) in 2×3 grid within pager pages */
+    .rooms-fieldhouse{
+      position:relative; height:100%; min-height:0; /* critical */
+    }
+    .rooms-fieldhouse .page{
+      position:absolute; inset:0;
+      display:grid; grid-template-columns: repeat(3, 1fr);
+      grid-template-rows: 1fr 1fr;
+      gap:12px; padding:0; box-sizing:border-box;
+      transform:translateX(100%); opacity:0;
+      transition: transform 480ms ease, opacity 480ms ease;
+      will-change: transform, opacity;
+    }
+    .rooms-fieldhouse .page.is-active{ transform:translateX(0); opacity:1; z-index:2; }
+    .rooms-fieldhouse .page.is-leaving{ transform:translateX(-100%); opacity:0; z-index:1; }
+
+    /* Room card */
+    .room{
+      border:1px solid var(--grid); border-radius:14px; padding:14px;
+      display:flex; flex-direction:column; gap:10px;
+      min-height:0; overflow:hidden;  /* critical */
+      background:linear-gradient(180deg, rgba(255,255,255,0.02), rgba(0,0,0,0));
+    }
+    .roomHeader{
+      display:flex; align-items:center; justify-content:space-between; gap:12px;
+      border-bottom:1px dashed var(--grid); padding-bottom:8px; flex:0 0 auto;
+    }
+    .roomHeader .id{ font-size:28px; font-weight:800; letter-spacing:.04em; }
+    .roomHeader .count{ font-size:13px; color:var(--muted); }
+    .roomHeader .count em{ font-style:normal; color:var(--ink); font-weight:700; }
+
+    /* Events area must have real height for the absolute slide to fill */
+    .events{
+      position:relative; flex:1 1 auto; min-height:0; height:100%;
+      overflow:hidden;
+    }
+
+    /* A/B rooms: single rotor, 1 event at a time */
+    .single-rotor{
+      position:relative; height:100%; width:100%;
+    }
+    .single-rotor .event{
+      position:absolute; inset:0;
+      display:flex; flex-direction:column; gap:6px;
+      background:var(--chip); border:1px solid var(--grid); border-radius:12px;
+      padding:10px 12px; box-sizing:border-box;
+    }
+
+    /* Fieldhouse static list (no rotors here, one page shows many cards) */
+    .events-list{
+      display:flex; flex-direction:column; gap:10px;
+      height:100%; min-height:0; overflow:hidden;
+    }
+    .events-list .event{
+      background:var(--chip); border:1px solid var(--grid); border-radius:12px;
+      padding:10px 12px; display:flex; flex-direction:column; gap:6px;
+    }
+
+    /* Text */
+    .who{ font-size:18px; font-weight:800; line-height:1.1; }
+    .what{ font-size:15px; color:var(--muted); line-height:1.2; }
+    .when{ font-size:14px; color:#b7c0cf; font-weight:600; }
+    .who,.what{ word-wrap:break-word; overflow-wrap:anywhere; }
+
+    /* Slide-left for rotors (AB rooms) */
+    .fade-enter{ opacity:0; transform:translateX(24px); }
+    .fade-enter-active{ transition:opacity 420ms ease, transform 420ms ease; }
+    .fade-exit{ opacity:1; transform:translateX(0); }
+    .fade-exit-active{
+      opacity:0; transform:translateX(-24px);
+      transition:opacity 420ms ease, transform 420ms ease;
+    }
+  </style>
+</head>
+<body>
+  <div class="viewport">
+    <div class="stage">
+      <!-- Header -->
+      <div class="header">
+        <div class="brand">
+          <img src="./logo.png" alt="Romeoville Athletic & Event Center">
+        </div>
+
+        <div class="dateclock">
+          <div id="headerDate">—</div>
+          <div id="headerClock">—</div>
+        </div>
+
+        <div class="wifi">
+          <div class="title">Guest Wi-Fi</div>
+          <div class="row"><span>Network</span><span id="wifiSsid">RAEC-Public</span></div>
+          <div class="row"><span>Password</span><span id="wifiPass">Publ!c00</span></div>
+        </div>
+      </div>
+
+      <!-- Board -->
+      <div class="grid">
+        <!-- South Gym -->
+        <section class="group">
+          <div class="title">South Gym</div>
+          <div class="body">
+            <div class="rooms-stack">
+              <div class="row-2cols">
+                <div class="room" id="room-1A">
+                  <div class="roomHeader"><div class="id">1A</div><div class="count">reservations: <em>—</em></div></div>
+                  <div class="events"><div class="single-rotor"></div></div>
+                </div>
+                <div class="room" id="room-1B">
+                  <div class="roomHeader"><div class="id">1B</div><div class="count">reservations: <em>—</em></div></div>
+                  <div class="events"><div class="single-rotor"></div></div>
+                </div>
+              </div>
+              <div class="row-2cols">
+                <div class="room" id="room-2A">
+                  <div class="roomHeader"><div class="id">2A</div><div class="count">reservations: <em>—</em></div></div>
+                  <div class="events"><div class="single-rotor"></div></div>
+                </div>
+                <div class="room" id="room-2B">
+                  <div class="roomHeader"><div class="id">2B</div><div class="count">reservations: <em>—</em></div></div>
+                  <div class="events"><div class="single-rotor"></div></div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <!-- Fieldhouse 3..8 -->
+        <section class="group">
+          <div class="title">Fieldhouse</div>
+          <div class="body">
+            <div class="rooms-fieldhouse" id="fieldhousePager"><!-- pages injected --></div>
+          </div>
+        </section>
+
+        <!-- North Gym -->
+        <section class="group">
+          <div class="title">North Gym</div>
+          <div class="body">
+            <div class="rooms-stack">
+              <div class="row-2cols">
+                <div class="room" id="room-9A">
+                  <div class="roomHeader"><div class="id">9A</div><div class="count">reservations: <em>—</em></div></div>
+                  <div class="events"><div class="single-rotor"></div></div>
+                </div>
+                <div class="room" id="room-9B">
+                  <div class="roomHeader"><div class="id">9B</div><div class="count">reservations: <em>—</em></div></div>
+                  <div class="events"><div class="single-rotor"></div></div>
+                </div>
+              </div>
+              <div class="row-2cols">
+                <div class="room" id="room-10A">
+                  <div class="roomHeader"><div class="id">10A</div><div class="count">reservations: <em>—</em></div></div>
+                  <div class="events"><div class="single-rotor"></div></div>
+                </div>
+                <div class="room" id="room-10B">
+                  <div class="roomHeader"><div class="id">10B</div><div class="count">reservations: <em>—</em></div></div>
+                  <div class="events"><div class="single-rotor"></div></div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </section>
+
+      </div>
+    </div>
+  </div>
+
+  <script type="module" src="./app.js"></script>
+
+  <!-- Auto-scale -->
+  <script>
+    (function fitStageSetup(){
+      const W = 1920, H = 1080;
+      function fit() {
+        const vp = document.querySelector('.viewport');
+        const stage = document.querySelector('.stage');
+        if (!vp || !stage) return;
+        const sx = vp.clientWidth / W;
+        const sy = vp.clientHeight / H;
+        const s  = Math.min(sx, sy);
+        stage.style.transform = `scale(${s})`;
+        stage.style.transformOrigin = 'top left';
+        vp.style.minHeight = (H * s) + 'px';
+      }
+      window.addEventListener('resize', fit);
+      window.addEventListener('orientationchange', fit);
+      document.addEventListener('DOMContentLoaded', fit);
+    })();
+  </script>
+</body>
+</html>
