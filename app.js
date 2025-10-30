@@ -1,15 +1,15 @@
-// app.js  — stable layout, AB rotors (1 event), fieldhouse pager, slide-left sync
+// Smoother slide + robust person-name handling using org/contact if present.
 
 const WIFI_SSID = 'RAEC-Public';
 const WIFI_PASS = 'Publ!c00';
 
-// ---------- time helpers ----------
+// ---------- time ----------
 function nowMinutesLocal() {
   const d = new Date();
   return d.getHours() * 60 + d.getMinutes();
 }
 function isCurrentOrUpcoming(slot, now = nowMinutesLocal()) {
-  return slot.endMin > now; // drop ended
+  return slot.endMin > now;
 }
 function fmt12h(min) {
   let h = Math.floor(min / 60);
@@ -20,23 +20,21 @@ function fmt12h(min) {
 }
 function range12h(a,b){ return `${fmt12h(a)} - ${fmt12h(b)}`; }
 
-// ---------- name/label rules ----------
+// ---------- label rules ----------
 const PICKLE_RE = /pickleball/i;
 const CATCH_RE  = /^catch\s*corner/i;
 
 function cleanSubtitle(sub) {
   if (!sub) return '';
-  // remove “Internal Hold per ...” / stray trailing parens
-  let s = sub.replace(/internal\s*hold.*$/i,'').trim();
-  s = s.replace(/\)\s*$/,'').trim();
+  let s = sub.replace(/internal\s*hold.*$/i,'').trim(); // remove “Internal Hold …”
+  s = s.replace(/\)\s*$/,'').trim();                    // trailing )
   return s;
 }
 
-function splitOrgContact(titleRaw) {
+function splitOrgContactFromTitle(titleRaw) {
   if (!titleRaw) return { org:'', contact:'' };
   if (CATCH_RE.test(titleRaw)) return { org:'Catch Corner', contact:'' };
 
-  // Pattern: "Org, First Last"  (two commas is still Org, First Last)
   const parts = titleRaw.split(',').map(s=>s.trim()).filter(Boolean);
   if (parts.length >= 2) {
     const org = parts[0];
@@ -46,16 +44,29 @@ function splitOrgContact(titleRaw) {
   return { org: titleRaw.trim(), contact:'' };
 }
 
-function isLikelyPerson(text) {
-  // e.g., "Vazquez, Isabel" or "Doe, J"
-  if (!text) return false;
-  return /^[A-Za-z]+,\s*[A-Za-z]/.test(text) && !CATCH_RE.test(text) && !PICKLE_RE.test(text);
+function isLikelyPersonComma(text) {
+  // "Last, First" style
+  return /^[A-Za-z]+,\s*[A-Za-z]/.test(text || '');
+}
+function personNameFromComma(text) {
+  const [last, first = ''] = (text||'').split(',').map(s=>s.trim());
+  if (!last) return text || '';
+  return `${first} ${last}`.trim();
 }
 
-function personNameFromComma(text) {
-  const [last, first = ''] = text.split(',').map(s=>s.trim());
-  if (!last) return text;
-  return `${first} ${last}`.trim();
+function looksLikeSingleWordName(s){
+  return /^[A-Za-z]+$/.test(s || '');
+}
+
+// Use org/contact in slot if present; fallback to parsing title.
+function deriveOrgContact(slot){
+  // prefer explicit fields from transform if provided
+  const org = (slot.org || '').trim();
+  const contact = (slot.contact || '').trim();
+  if (org || contact) return { org, contact };
+
+  // else parse from title
+  return splitOrgContactFromTitle(slot.title || '');
 }
 
 function buildEventDOM(whoBold, whatLine, whenLine) {
@@ -84,7 +95,7 @@ async function loadData() {
   return resp.json();
 }
 
-// ---------- render ----------
+// ---------- header ----------
 function renderHeader() {
   document.getElementById('wifiSsid').textContent = WIFI_SSID;
   document.getElementById('wifiPass').textContent = WIFI_PASS;
@@ -100,146 +111,128 @@ function renderHeader() {
   tick(); setInterval(tick, 1000);
 }
 
-function attachRotor(container, items, periodMs=8000) {
-  // One-at-a-time, always slide left. All rooms tick in sync by same intervals.
-  let idx = 0;
-  let currentEl = null;
+// ---------- payload builder ----------
+function makePayload(slot){
+  const now = nowMinutesLocal();
+  if (!isCurrentOrUpcoming(slot, now)) return null;
 
-  const mount = (i) => {
-    const data = items[i];
-    const el = buildEventDOM(data.who, data.what, data.when);
-    el.classList.add('fade-enter','event');
-    container.appendChild(el);
-    // enter
-    requestAnimationFrame(()=>{
-      el.classList.add('fade-enter-active');
-      el.classList.remove('fade-enter');
-    });
-    currentEl = el;
-  };
+  const subtitle = cleanSubtitle(slot.subtitle || '');
 
-  const swap = () => {
-    if (!items.length) return;
-    const outEl = currentEl;
-    idx = (idx + 1) % items.length;
-    const nextData = items[idx];
-    const inEl = buildEventDOM(nextData.who, nextData.what, nextData.when);
-    inEl.classList.add('fade-enter','event');
-    container.appendChild(inEl);
-
-    // animate both
-    requestAnimationFrame(()=>{
-      // outgoing -> exit left
-      if (outEl){
-        outEl.classList.add('fade-exit');
-        // next frame to activate
-        requestAnimationFrame(()=> outEl.classList.add('fade-exit-active'));
-      }
-      // incoming -> slide from right to center
-      inEl.classList.add('fade-enter-active');
-      inEl.classList.remove('fade-enter');
-    });
-
-    // clean old after animation
-    setTimeout(()=>{
-      if (outEl && outEl.parentNode) outEl.parentNode.removeChild(outEl);
-      currentEl = inEl;
-    }, 460);
-  };
-
-  // seed
-  if (items.length){
-    mount(0);
-    if (items.length > 1){
-      setInterval(swap, periodMs);
-    }
-  } else {
-    container.innerHTML = '';
+  // Pickleball special
+  if (PICKLE_RE.test(slot.title || '') || PICKLE_RE.test(subtitle)) {
+    return { who:'Open Pickleball', what:'', when: range12h(slot.startMin, slot.endMin) };
   }
+
+  // Catch Corner special
+  if (CATCH_RE.test(slot.title || '') || CATCH_RE.test(slot.org || '')) {
+    // Use reservation purpose/details from subtitle (stripped), no leading "Catch Corner"
+    const detail = subtitle.replace(/^Catch *Corner\s*/i,'').trim();
+    return { who:'Catch Corner', what: detail, when: range12h(slot.startMin, slot.endMin) };
+  }
+
+  // If original title is “Last, First”
+  if (isLikelyPersonComma(slot.title)) {
+    return {
+      who: personNameFromComma(slot.title),
+      what: subtitle,
+      when: range12h(slot.startMin, slot.endMin)
+    };
+  }
+
+  // If transform already split org/contact, try to detect a person:
+  // person if org is single surname and contact is single given name
+  const { org, contact } = deriveOrgContact(slot);
+  if (looksLikeSingleWordName(org) && looksLikeSingleWordName(contact)) {
+    // Display "First Last" in bold
+    return {
+      who: `${contact} ${org}`.trim(),
+      what: subtitle,
+      when: range12h(slot.startMin, slot.endMin)
+    };
+  }
+
+  // Otherwise: org bold, contact (if present) as what; else subtitle
+  return {
+    who: (org || slot.title || '').trim(),
+    what: (contact || subtitle).trim(),
+    when: range12h(slot.startMin, slot.endMin)
+  };
 }
 
+// ---------- rotors ----------
 function setCount(roomEl, n){
   const em = roomEl.querySelector('.roomHeader .count em');
   if (em) em.textContent = String(n);
 }
 
-// Prepare event payloads per room
-function makePayload(slot){
-  // Pickleball rule
-  const subt = cleanSubtitle(slot.subtitle || '');
-  if (PICKLE_RE.test(slot.title) || PICKLE_RE.test(subt)) {
-    return {
-      who: 'Open Pickleball',
-      what: '',
-      when: range12h(slot.startMin, slot.endMin)
-    };
+// more stable timing than setInterval when animating
+function startRotor(container, items, periodMs=8000){
+  container.innerHTML = '';
+  if (!items.length) return;
+
+  let idx = 0;
+  let current = buildEventDOM(items[0].who, items[0].what, items[0].when);
+  current.classList.add('fade-enter');
+  container.appendChild(current);
+  requestAnimationFrame(()=>{
+    current.classList.add('fade-enter-active');
+    current.classList.remove('fade-enter');
+  });
+
+  if (items.length === 1) return;
+
+  function tick(){
+    const outgoing = current;
+    idx = (idx + 1) % items.length;
+    const nextData = items[idx];
+
+    const incoming = buildEventDOM(nextData.who, nextData.what, nextData.when);
+    incoming.classList.add('fade-enter');
+    container.appendChild(incoming);
+
+    requestAnimationFrame(()=>{
+      // outgoing -> exit left
+      outgoing.classList.add('fade-exit');
+      requestAnimationFrame(()=> outgoing.classList.add('fade-exit-active'));
+
+      // incoming -> slide from right
+      incoming.classList.add('fade-enter-active');
+      incoming.classList.remove('fade-enter');
+    });
+
+    // cleanup after CSS dur (~740ms) + margin
+    setTimeout(()=>{
+      if (outgoing && outgoing.parentNode) outgoing.parentNode.removeChild(outgoing);
+      current = incoming;
+      setTimeout(tick, periodMs); // schedule next after period (prevents drift)
+    }, 780);
   }
 
-  // Catch Corner rule
-  const { org, contact } = splitOrgContact(slot.title);
-  if (CATCH_RE.test(org)) {
-    const detail = cleanSubtitle(slot.subtitle || '').replace(/^Catch *Corner\s*/i,'').trim();
-    return {
-      who: 'Catch Corner',
-      what: detail || '',
-      when: range12h(slot.startMin, slot.endMin)
-    };
-  }
-
-  // Person name: "Last, First" -> bold "First Last"
-  if (isLikelyPerson(slot.title)) {
-    const full = personNameFromComma(slot.title);
-    return {
-      who: full,
-      what: (slot.subtitle || '').trim(),
-      when: range12h(slot.startMin, slot.endMin)
-    };
-  }
-
-  // Org + optional contact (e.g., "Illinois Flight, Brandon Brown")
-  const whoBold = org || (slot.title || '').trim();
-  const what = (contact ? contact : cleanSubtitle(slot.subtitle || '')).trim();
-
-  return {
-    who: whoBold,
-    what,
-    when: range12h(slot.startMin, slot.endMin)
-  };
+  setTimeout(tick, periodMs);
 }
 
-function renderABRoom(roomIdBase, slotsAll){
-  // Duplicate base room’s slots into A and B identically (per your current rule)
-  const aEl = document.getElementById(`room-${roomIdBase}A`);
-  const bEl = document.getElementById(`room-${roomIdBase}B`);
+// ---------- renders ----------
+function renderABRoom(baseId, slots){
+  const aEl = document.getElementById(`room-${baseId}A`);
+  const bEl = document.getElementById(`room-${baseId}B`);
   if (!aEl || !bEl) return;
 
-  const now = nowMinutesLocal();
-  const filtered = slotsAll.filter(s => s.roomId === String(roomIdBase) && isCurrentOrUpcoming(s, now));
+  const upcoming = slots.filter(s => String(s.roomId) === String(baseId) && isCurrentOrUpcoming(s));
+  const items = upcoming.map(makePayload).filter(Boolean);
 
-  const items = filtered.map(makePayload);
-
-  // counts show total distinct upcoming reservations on that base court
   setCount(aEl, items.length);
   setCount(bEl, items.length);
 
-  const rotorA = aEl.querySelector('.single-rotor');
-  const rotorB = bEl.querySelector('.single-rotor');
-  rotorA.innerHTML = '';
-  rotorB.innerHTML = '';
-
-  attachRotor(rotorA, items, 8000);
-  attachRotor(rotorB, items, 8000);
+  startRotor(aEl.querySelector('.single-rotor'), items, 8000);
+  startRotor(bEl.querySelector('.single-rotor'), items, 8000);
 }
 
-function renderFieldhouse(slotsAll){
-  // Rooms 3..8, lay them across one pager page (no rotation here for now)
+function renderFieldhouse(slots){
   const pager = document.getElementById('fieldhousePager');
   pager.innerHTML = '';
 
   const page = document.createElement('div');
   page.className = 'page is-active';
-
-  const now = nowMinutesLocal();
 
   for (let id = 3; id <= 8; id++){
     const card = document.createElement('div');
@@ -252,20 +245,16 @@ function renderFieldhouse(slotsAll){
 
     const eventsWrap = document.createElement('div');
     eventsWrap.className = 'events';
+
     const list = document.createElement('div');
     list.className = 'events-list';
 
-    const filtered = slotsAll.filter(s => s.roomId === String(id) && isCurrentOrUpcoming(s, now));
-    const items = filtered.map(makePayload);
+    const upcoming = slots.filter(s => String(s.roomId) === String(id) && isCurrentOrUpcoming(s));
+    const items = upcoming.map(makePayload).filter(Boolean);
 
-    items.forEach(it => {
-      const ev = buildEventDOM(it.who, it.what, it.when);
-      list.appendChild(ev);
-    });
+    items.forEach(it => list.appendChild(buildEventDOM(it.who, it.what, it.when)));
 
-    const em = header.querySelector('.count em');
-    em.textContent = String(items.length);
-
+    header.querySelector('.count em').textContent = String(items.length);
     eventsWrap.appendChild(list);
     card.append(header, eventsWrap);
     page.appendChild(card);
@@ -277,14 +266,11 @@ function renderFieldhouse(slotsAll){
 function renderAll(data){
   const slots = Array.isArray(data.slots) ? data.slots : [];
 
-  // South: 1A/1B + 2A/2B
   renderABRoom(1, slots);
   renderABRoom(2, slots);
 
-  // Fieldhouse: 3..8
   renderFieldhouse(slots);
 
-  // North: 9A/9B + 10A/10B
   renderABRoom(9, slots);
   renderABRoom(10, slots);
 }
@@ -297,7 +283,7 @@ async function init(){
     console.log('Loaded events.json', data);
     renderAll(data);
 
-    // refresh clock/content every minute to drop ended items
+    // refresh every minute to drop ended items
     setInterval(async ()=>{
       try{
         const d = await loadData();
