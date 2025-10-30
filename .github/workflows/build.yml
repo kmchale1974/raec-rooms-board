@@ -3,35 +3,34 @@ name: Build RAEC events.json
 on:
   workflow_dispatch:
   schedule:
-    # Run daily at 08:02 AM America/Chicago (13:02 UTC during standard time)
+    # 08:02 AM America/Chicago daily (13:02 UTC during standard time)
     - cron: "2 13 * * *"
 
 jobs:
   build:
     runs-on: ubuntu-latest
 
+    # <<< IMPORTANT: Put the env at the *job* level so every step can see it
     env:
-      # ---- Email credentials & filters ----
-      # Keep the user here (non-secret). If you prefer, store as a repo Variable and use: ${{ vars.IMAP_USER }}
-      IMAP_USER: raecroominfo.board@gmail.com
-      # Keep the password as a Secret named IMAP_PASS
-      IMAP_PASS: ${{ secrets.IMAP_PASS }}
-      # Optional: filter to only process the RecTrac report messages
+      # Email login
+      IMAP_USER: raecroominfo.board@gmail.com         # <-- set it here
+      IMAP_PASS: ${{ secrets.IMAP_PASS }}             # <-- set this Secret in: Repo → Settings → Secrets → Actions
+
+      # Optional filters to match your RecTrac report
       FROM_SENDER: "romeovillerecreation@rectrac.com"
       SUBJECT: "AC Daily Facility Report"
 
-      # ---- I/O paths ----
+      # Paths
       OUT_CSV: data/inbox/latest.csv
       OUT_JSON: events.json
 
-      # Lock Node version
       NODE_VERSION: 20
 
     steps:
       - name: Check out repository
         uses: actions/checkout@v4
         with:
-          fetch-depth: 0  # we need full history for safe rebase/push
+          fetch-depth: 0
 
       - name: Use Node ${{ env.NODE_VERSION }}
         uses: actions/setup-node@v4
@@ -42,16 +41,12 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
-      # (Optional) quick sanity check that IMAP_USER is present
-      - name: Verify env
+      - name: Sanity check env
         run: |
-          if [ -z "$IMAP_USER" ]; then
-            echo "IMAP_USER missing"; exit 1
-          fi
-          if [ -z "$IMAP_PASS" ]; then
-            echo "IMAP_PASS missing (set Actions secret)"; exit 1
-          fi
-          echo "Env looks good."
+          echo "IMAP_USER=${IMAP_USER}"
+          if [ -z "$IMAP_USER" ]; then echo "IMAP_USER missing"; exit 1; fi
+          if [ -z "$IMAP_PASS" ]; then echo "IMAP_PASS missing"; exit 1; fi
+          echo "Env OK."
 
       - name: Fetch latest CSV from email
         run: node scripts/fetch_email.js
@@ -59,38 +54,20 @@ jobs:
       - name: Transform CSV -> events.json
         run: node scripts/transform.mjs
 
-      - name: Show diff (debug)
-        run: |
-          echo "Changed files (if any):"
-          git status --porcelain
-          echo
-          if [ -f "${OUT_JSON}" ]; then
-            echo "events.json preview:"
-            head -n 60 "${OUT_JSON}" || true
-          fi
-
       - name: Commit events.json (rebase-safe)
         run: |
           set -e
           git config user.name  "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
 
-          # Stage only events.json
           git add "${OUT_JSON}"
-
-          # If nothing staged, bail early
           if git diff --cached --quiet; then
             echo "No changes to ${OUT_JSON}; skipping commit/push."
             exit 0
           fi
 
-          # Commit locally
           git commit -m "Update ${OUT_JSON} [skip ci]"
 
-          # Make sure remote changes are integrated safely
           git fetch origin main
-          # Autostash lets us carry our commit through the rebase if needed
           git -c rebase.autostash=true pull --rebase origin main
-
-          # Push rebased HEAD back to main
           git push origin HEAD:main
