@@ -1,9 +1,10 @@
 // RAEC Rooms Board — smooth always-left slide via Web Animations API
+// FIX: rotor registry to prevent overlapping timers => consistent 8s cadence
 
 const WIFI_SSID = 'RAEC-Public';
 const WIFI_PASS = 'Publ!c00';
 
-const SLIDE_MS = 780; // slide duration
+const SLIDE_MS = 780;   // slide duration
 const PERIOD_MS = 8000; // how long each card stays before sliding
 
 // ---------- time ----------
@@ -48,15 +49,13 @@ function splitOrgContactFromTitle(titleRaw) {
 }
 
 function isLikelyPersonComma(text) {
-  // "Last, First" style
-  return /^[A-Za-z]+,\s*[A-Za-z]/.test(text || '');
+  return /^[A-Za-z]+,\s*[A-Za-z]/.test(text || ''); // "Last, First"
 }
 function personNameFromComma(text) {
   const [last, first = ''] = (text||'').split(',').map(s=>s.trim());
   if (!last) return text || '';
   return `${first} ${last}`.trim();
 }
-
 function looksLikeSingleWordName(s){
   return /^[A-Za-z]+$/.test(s || '');
 }
@@ -124,16 +123,20 @@ async function loadData() {
 
 // ---------- header ----------
 function renderHeader() {
-  document.getElementById('wifiSsid').textContent = WIFI_SSID;
-  document.getElementById('wifiPass').textContent = WIFI_PASS;
+  const ssidEl = document.getElementById('wifiSsid');
+  const passEl = document.getElementById('wifiPass');
+  if (ssidEl) ssidEl.textContent = WIFI_SSID;
+  if (passEl) passEl.textContent = WIFI_PASS;
 
   function tick(){
     const d = new Date();
     const dow = d.toLocaleDateString(undefined,{weekday:'long'});
     const date = d.toLocaleDateString(undefined,{month:'long', day:'numeric', year:'numeric'});
     const time = d.toLocaleTimeString(undefined,{hour:'numeric', minute:'2-digit'});
-    document.getElementById('headerDate').textContent = `${dow}, ${date}`;
-    document.getElementById('headerClock').textContent = time;
+    const hd = document.getElementById('headerDate');
+    const hc = document.getElementById('headerClock');
+    if (hd) hd.textContent = `${dow}, ${date}`;
+    if (hc) hc.textContent = time;
   }
   tick(); setInterval(tick, 1000);
 }
@@ -156,7 +159,7 @@ function makePayload(slot){
     return { who:'Catch Corner', what: detail, when: range12h(slot.startMin, slot.endMin) };
   }
 
-  // If original title is “Last, First”
+  // "Last, First"
   if (isLikelyPersonComma(slot.title)) {
     return {
       who: personNameFromComma(slot.title),
@@ -165,10 +168,9 @@ function makePayload(slot){
     };
   }
 
-  // If transform already split org/contact, try to detect a person:
+  // org/contact heuristic
   const { org, contact } = deriveOrgContact(slot);
   if (looksLikeSingleWordName(org) && looksLikeSingleWordName(contact)) {
-    // Display "First Last" in bold
     return {
       who: `${contact} ${org}`.trim(),
       what: subtitle,
@@ -176,7 +178,6 @@ function makePayload(slot){
     };
   }
 
-  // Otherwise: org bold, contact (if present) as what; else subtitle
   return {
     who: (org || slot.title || '').trim(),
     what: (contact || subtitle).trim(),
@@ -184,18 +185,27 @@ function makePayload(slot){
   };
 }
 
-// ---------- Web Animations rotor (always slide left) ----------
-function setCount(roomEl, n){
-  const em = roomEl.querySelector('.roomHeader .count em');
-  if (em) em.textContent = String(n);
+// ---------- Rotor registry (prevents overlapping loops) ----------
+const rotorRegistry = new WeakMap(); // container -> {stop: fn}
+
+function stopRotor(container) {
+  const state = rotorRegistry.get(container);
+  if (state && state.stop) {
+    state.stop();
+    rotorRegistry.delete(container);
+  }
 }
 
 /**
  * Smooth, always-left slide using Web Animations API
  * container: .single-rotor (position:relative; height:100%)
  * items: [{who, what, when}]
+ * Ensures only ONE rotor per container.
  */
 function startRotor(container, items, periodMs = PERIOD_MS, slideMs = SLIDE_MS){
+  // Cancel any previous rotor on this container
+  stopRotor(container);
+
   container.innerHTML = '';
   container.style.position = 'relative';
   container.style.height = '100%';
@@ -203,54 +213,77 @@ function startRotor(container, items, periodMs = PERIOD_MS, slideMs = SLIDE_MS){
 
   let idx = 0;
   let current = buildEventDOM(items[0].who, items[0].what, items[0].when);
-  // First card fades in quickly from slight right so it feels consistent
-  current.style.transform = 'translateX(0)';
   container.appendChild(current);
 
-  if (items.length === 1) return;
+  if (items.length === 1) {
+    // Register a no-op stopper to keep semantics consistent
+    rotorRegistry.set(container, { stop: () => {} });
+    return;
+  }
 
   const easing = 'cubic-bezier(.22,.61,.36,1)';
+  let timerId = null;
+  let cancelled = false;
+
+  function scheduleNext() {
+    if (cancelled) return;
+    timerId = setTimeout(cycle, periodMs);
+  }
 
   function cycle(){
+    if (cancelled) return;
+
     const outgoing = current;
     idx = (idx + 1) % items.length;
     const next = buildEventDOM(items[idx].who, items[idx].what, items[idx].when);
-    next.style.transform = 'translateX(60px)'; // start slightly to the right
+    next.style.transform = 'translateX(60px)';
+    next.style.opacity = '0';
     container.appendChild(next);
 
-    // Animate: outgoing 0 -> -60px; incoming +60px -> 0
     const outAnim = outgoing.animate(
       [
         { transform: 'translateX(0)', opacity: 1 },
-        { transform: 'translateX(-60px)', opacity: 0.0 }
+        { transform: 'translateX(-60px)', opacity: 0 }
       ],
       { duration: slideMs, easing, fill: 'forwards' }
     );
 
     const inAnim = next.animate(
       [
-        { transform: 'translateX(60px)', opacity: 0.0 },
+        { transform: 'translateX(60px)', opacity: 0 },
         { transform: 'translateX(0)', opacity: 1 }
       ],
       { duration: slideMs, easing, fill: 'forwards' }
     );
 
     Promise.all([outAnim.finished, inAnim.finished]).then(() => {
-      // Clean up outgoing
+      if (cancelled) return;
       if (outgoing && outgoing.parentNode) outgoing.parentNode.removeChild(outgoing);
       current = next;
-      // Schedule next rotation after period
-      setTimeout(cycle, periodMs);
+      scheduleNext();
     }).catch(() => {
-      // On any error, attempt to recover next tick
       if (outgoing && outgoing.parentNode) outgoing.parentNode.removeChild(outgoing);
       current = next;
-      setTimeout(cycle, periodMs);
+      scheduleNext();
     });
   }
 
+  // Expose stopper
+  rotorRegistry.set(container, {
+    stop: () => {
+      cancelled = true;
+      if (timerId) { clearTimeout(timerId); timerId = null; }
+      // No need to cancel animations explicitly; they’ll be GC’d with DOM removal
+    }
+  });
+
   // start the loop
-  setTimeout(cycle, periodMs);
+  scheduleNext();
+}
+
+function setCount(roomEl, n){
+  const em = roomEl.querySelector('.roomHeader .count em');
+  if (em) em.textContent = String(n);
 }
 
 // ---------- renders ----------
@@ -271,6 +304,7 @@ function renderABRoom(baseId, slots){
 
 function renderFieldhouse(slots){
   const pager = document.getElementById('fieldhousePager');
+  if (!pager) return;
   pager.innerHTML = '';
 
   const page = document.createElement('div');
@@ -337,7 +371,7 @@ async function init(){
     console.log('Loaded events.json', data);
     renderAll(data);
 
-    // refresh every minute to drop ended items
+    // refresh every minute to drop ended items (rotors are rebuilt safely)
     setInterval(async ()=>{
       try{
         const d = await loadData();
