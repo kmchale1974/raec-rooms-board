@@ -1,68 +1,76 @@
-name: Build RAEC events.json
+name: Build RAEC events json
 
 on:
   workflow_dispatch:
   schedule:
-    - cron: '2 13 * * *'   # 08:02 AM America/Chicago daily
+    # Every day at 08:03 AM America/Chicago (adjust if you want)
+    - cron: "3 13 * * *"
 
 jobs:
   build:
     runs-on: ubuntu-latest
-
-    # >>> Job-level env so every step (including fetch_email.js) gets these <<<
     env:
-      IMAP_USER: "raecroominfo.board@gmail.com"            # your Gmail address (not a secret)
-      IMAP_PASS: "${{ secrets.IMAP_PASS }}"                 # set this in Settings → Secrets and variables → Actions
-      FROM_SENDER: "romeovillerecreation@rectrac.com"       # filter sender
-      SUBJECT: "AC Daily Facility Report"                   # filter subject
-      OUT_CSV: "data/inbox/latest.csv"
-      OUT_JSON: "events.json"
-      NODE_VERSION: "20"
+      # Plain email is fine as a non-secret; password stays in Secrets.
+      IMAP_USER: raecroominfo.board@gmail.com
+      # Where the CSV will be saved by fetch_email.js
+      OUT_CSV: data/inbox/latest.csv
+      # Where the final JSON must live for the web app
+      OUT_JSON: events.json
 
     steps:
       - name: Checkout
         uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
 
-      - name: Setup Node
+      - name: Use Node.js 20
         uses: actions/setup-node@v4
         with:
-          node-version: ${{ env.NODE_VERSION }}
-          cache: npm
+          node-version: "20"
 
       - name: Install deps
         run: npm ci
 
-      - name: Show IMAP env (debug)
+      - name: Ensure data folders exist
         run: |
-          echo "IMAP_USER=${IMAP_USER}"
-          if [ -z "${IMAP_PASS}" ]; then echo "IMAP_PASS is missing"; exit 1; fi
+          mkdir -p data/inbox
+          mkdir -p data/tmp
 
-      # Keep working tree clean *before* generating files
-      - name: Sync with remote (rebase & autostash)
-        run: |
-          git config user.name  "github-actions[bot]"
-          git config user.email "github-actions[bot]@users.noreply.github.com"
-          git fetch origin main
-          git -c rebase.autoStash=true pull --rebase origin main
-
-      - name: Ensure data folder exists
-        run: mkdir -p data/inbox
-
-      - name: Fetch latest CSV from email
-        run: node scripts/fetch_email.js
-
-      - name: Transform CSV → events.json
-        run: node scripts/transform.mjs
-
-      - name: Commit events.json (if changed)
+      - name: Fetch latest CSV from Gmail
+        env:
+          # Pull the Gmail App Password from repo Secrets
+          IMAP_PASS: ${{ secrets.IMAP_PASS }}
+          IMAP_USER: ${{ env.IMAP_USER }}
+          OUT_CSV: ${{ env.OUT_CSV }}
         run: |
           set -e
-          git add "${OUT_JSON}"
+          node scripts/fetch_email.js
+          ls -l "$OUT_CSV" || (echo "No CSV downloaded" && exit 1)
+
+      - name: Transform CSV → events.json
+        env:
+          IN_CSV: ${{ env.OUT_CSV }}
+          OUT_JSON: ${{ env.OUT_JSON }}
+        run: |
+          set -e
+          node scripts/transform.mjs
+          test -s "$OUT_JSON" || (echo "events.json was not written" && exit 1)
+          echo "Wrote $(wc -c < $OUT_JSON) bytes to $OUT_JSON"
+
+      - name: Commit events.json (rebase-safe)
+        run: |
+          set -e
+          git config user.name  "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+
+          # Make sure we’re up to date with remote main
+          git fetch origin main
+          git pull --rebase origin main
+
+          # Stage and commit only if there are changes
+          git add events.json
           if git diff --cached --quiet; then
-            echo "No changes to ${OUT_JSON}; skipping commit/push."
+            echo "No changes to commit."
             exit 0
           fi
-          git commit -m "Update ${OUT_JSON} [skip ci]"
+
+          git commit -m "Update events.json [skip ci]"
           git push origin HEAD:main
