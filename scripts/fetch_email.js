@@ -1,112 +1,195 @@
+#!/usr/bin/env node
+/**
+ * Robust IMAP CSV fetcher for RAEC Daily Facility Report
+ * Env:
+ *   IMAP_USER  - Gmail address
+ *   IMAP_PASS  - Gmail App Password
+ *   OUT_CSV    - output file path (default: data/inbox/latest.csv)
+ */
+
 import fs from 'fs';
 import path from 'path';
+import { fileURLToPath } from 'url';
+import { once } from 'events';
+import { pipeline } from 'stream';
+import { promisify } from 'util';
 import { ImapFlow } from 'imapflow';
-import { simpleParser } from 'mailparser';
 
-const host   = process.env.IMAP_HOST || 'imap.gmail.com';
-const user   = process.env.IMAP_USER || 'raecroominfo.board@gmail.com'; // baked-in
-const pass   = process.env.IMAP_PASS; // GitHub Secret
-const folder = process.env.IMAP_FOLDER || 'INBOX'; // force INBOX
-const outCsv = process.env.OUT_CSV || 'data/inbox/latest.csv';
+const streamPipeline = promisify(pipeline);
 
-if (!pass) {
+const __filename = fileURLToPath(import.meta.url);
+const __dirname  = path.dirname(__filename);
+
+const IMAP_USER = process.env.IMAP_USER || process.env.GMAIL_USER || '';
+const IMAP_PASS = process.env.IMAP_PASS || '';
+const OUT_CSV   = process.env.OUT_CSV || path.join(__dirname, '..', 'data', 'inbox', 'latest.csv');
+
+// ---- Guard env ----
+if (!IMAP_USER) {
+  console.error('Missing IMAP_USER env var (Gmail address).');
+  process.exit(1);
+}
+if (!IMAP_PASS) {
   console.error('Missing IMAP_PASS env var (Gmail App Password).');
   process.exit(1);
 }
 
-fs.mkdirSync(path.dirname(outCsv), { recursive: true });
+// ---- Helpers ----
+function ensureDirFor(filePath) {
+  const dir = path.dirname(filePath);
+  fs.mkdirSync(dir, { recursive: true });
+}
 
-const client = new ImapFlow({ host, secure: true, auth: { user, pass } });
+function looksLikeCsvPart(part) {
+  // Gmail often reports CSV as text/plain with a filename ending .csv
+  const type = (part.type || '').toLowerCase();
+  const subtype = (part.subtype || '').toLowerCase();
+  const params = part.params || {};
+  const disp = part.disposition || {};
+  const filename =
+    (disp.params && (disp.params.filename || disp.params.name)) ||
+    params.name ||
+    '';
 
-(async () => {
+  const hasCsvName = /\.csv$/i.test(filename);
+  const isCsvMime = (type === 'text' && subtype === 'csv') ||
+                    (type === 'application' && (subtype === 'vnd.ms-excel' || subtype === 'octet-stream')) ||
+                    (type === 'text' && subtype === 'plain'); // fallback
+
+  // prefer real csv extension if available
+  return hasCsvName || isCsvMime;
+}
+
+function walkBodystructure(bstruct) {
+  // Flatten parts and annotate with path number like "1.2"
+  const out = [];
+  const walk = (node, prefix = '') => {
+    if (!node) return;
+    if (Array.isArray(node)) {
+      node.forEach((child, i) => walk(child, prefix ? `${prefix}.${i+1}` : `${i+1}`));
+      return;
+    }
+    const partId = prefix || '1';
+    out.push({ partId, ...node });
+    if (node.childNodes && node.childNodes.length) {
+      node.childNodes.forEach((child, i) => walk(child, `${partId}.${i+1}`));
+    } else if (node.parts && node.parts.length) {
+      node.parts.forEach((child, i) => walk(child, `${partId}.${i+1}`));
+    }
+  };
+  walk(bstruct, '');
+  return out;
+}
+
+// Download a part with timeout+retry
+async function downloadPartWithRetry(client, uid, partId, destPath, { retries = 2, timeoutMs = 60000 } = {}) {
+  let attempt = 0;
+  let lastErr;
+
+  ensureDirFor(destPath);
+
+  while (attempt <= retries) {
+    try {
+      const controller = new AbortController();
+      const timer = setTimeout(() => controller.abort(new Error('Download timeout')), timeoutMs);
+
+      // imapflow returns { content: stream, meta: {...} }
+      const { content } = await client.download(uid, partId, { signal: controller.signal });
+
+      const tmpPath = destPath + '.part';
+      const write = fs.createWriteStream(tmpPath);
+      await streamPipeline(content, write);
+      clearTimeout(timer);
+
+      // atomically replace
+      fs.renameSync(tmpPath, destPath);
+
+      const size = fs.statSync(destPath).size;
+      console.log(`Saved CSV -> ${destPath} (${size} bytes)`);
+      return;
+    } catch (err) {
+      lastErr = err;
+      attempt++;
+      console.warn(`Download attempt ${attempt} failed: ${err && err.message ? err.message : err}`);
+      if (attempt > retries) break;
+
+      // short backoff
+      await new Promise(r => setTimeout(r, 1500 * attempt));
+    }
+  }
+
+  throw lastErr || new Error('Failed to download part');
+}
+
+(async function main() {
+  const client = new ImapFlow({
+    host: 'imap.gmail.com',
+    port: 993,
+    secure: true,
+    auth: { user: IMAP_USER, pass: IMAP_PASS },
+    // Be generous with timeouts; Gmail can be slow delivering attachment streams
+    socketTimeout: 120000,     // 120s
+    greetingTimeout: 20000,
+    authTimeout: 30000,
+    disableCompression: false, // you can set true if you suspect COMPRESS issues
+    logger: false
+  });
+
   try {
     await client.connect();
-    const lock = await client.getMailboxLock(folder);
-    try {
-      // list basic metadata so we can pick the truly latest by INTERNALDATE
-      const metas = [];
-      for await (const msg of client.fetch({ seq: '1:*' }, { uid:true, envelope:true, internalDate:true })) {
-        metas.push({
-          uid: msg.uid,
-          when: msg.internalDate,
-          subj: msg.envelope?.subject || '(no subject)',
-          from: msg.envelope?.from?.map(a=>a.address).join(',') || ''
-        });
-      }
-      if (!metas.length) {
-        console.log('No emails in folder:', folder);
-        process.exit(0);
-      }
-      metas.sort((a,b)=> b.when - a.when);
-      const newest = metas[0];
-      console.log('Newest email →', newest.when.toISOString(), '|', newest.subj, '| uid', newest.uid);
+    await client.mailboxOpen('INBOX');
 
-      // fetch BODYSTRUCTURE first so we can locate attachments without downloading whole message
-      const bsIt = client.fetch({ uid: newest.uid }, { uid:true, bodyStructure:true }, { uid:true });
-      const first = (await bsIt.next()).value;
-      if (!first?.bodyStructure) {
-        console.log('No BODYSTRUCTURE on newest message.');
-        process.exit(0);
-      }
+    // Get UIDs of messages we care about (fetch last ~100 and filter by subject)
+    // Faster approach: search by SUBJECT
+    const uids = await client.search({
+      header: ['subject', 'AC Daily Facility Report']
+    });
 
-      // flatten structure to parts
-      function flatten(struct, path='') {
-        if (!struct) return [];
-        if (Array.isArray(struct)) {
-          return struct.flatMap((s, i)=> flatten(s, path ? `${path}.${i+1}` : `${i+1}`));
-        }
-        const me = [{ struct, path }];
-        if (Array.isArray(struct.childNodes)) {
-          return me.concat(flatten(struct.childNodes, path));
-        }
-        return me;
-      }
-
-      const parts = flatten(first.bodyStructure);
-      // prefer .csv attachments
-      const csvPart = parts.find(p => {
-        const s = p.struct;
-        const name = (s.parameters?.name || s.dispositionParameters?.filename || '').toLowerCase();
-        const ct = `${(s.type||'')}/${(s.subtype||'')}`.toLowerCase();
-        return name.endsWith('.csv') || ct.includes('csv');
-      });
-
-      if (!csvPart) {
-        console.log('No CSV attachment found on newest email.');
-        process.exit(0);
-      }
-
-      const nameGuess = csvPart.struct.parameters?.name || csvPart.struct.dispositionParameters?.filename || 'attachment.csv';
-      console.log(`Downloading CSV part ${csvPart.path} (${nameGuess})…`);
-
-      const dl = await client.download(newest.uid, csvPart.path, { uid:true });
-      const bufs = [];
-      for await (const ch of dl.content) bufs.push(ch);
-      const rawPart = Buffer.concat(bufs);
-
-      // If it’s base64 in a message/rfc822 part, we’ll let mailparser normalize
-      // but usually ImapFlow gives decoded content already. Try parse; if fail, just write.
-      try {
-        const parsed = await simpleParser(rawPart);
-        // find first csv attachment in parsed
-        const att = (parsed.attachments || []).find(a => (a.filename||'').toLowerCase().endsWith('.csv'));
-        if (att?.content) {
-          fs.writeFileSync(outCsv, att.content);
-        } else {
-          // fallback: write the rawPart as-is
-          fs.writeFileSync(outCsv, rawPart);
-        }
-      } catch {
-        fs.writeFileSync(outCsv, rawPart);
-      }
-
-      console.log('Saved CSV to', outCsv, '(', nameGuess, ')');
-    } finally {
-      lock.release();
+    if (!uids || !uids.length) {
+      console.log('No "AC Daily Facility Report" emails found.');
+      process.exit(0);
     }
-    await client.logout();
-  } catch (e) {
-    console.error('fetch_email failed:', e.message || e);
+
+    // newest UID
+    const uid = uids[uids.length - 1];
+
+    // Fetch BODYSTRUCTURE to locate csv part
+    const { bodyStructure, envelope, internalDate } = await client.fetchOne(uid, { uid: true, bodyStructure: true, envelope: true, internalDate: true });
+
+    const when = internalDate ? new Date(internalDate).toISOString() : 'unknown';
+    const subj = envelope && envelope.subject || '(no subject)';
+    console.log(`Newest email → ${when} | ${subj} | uid ${uid}`);
+
+    if (!bodyStructure) {
+      throw new Error('No BODYSTRUCTURE on newest message.');
+    }
+
+    // Flatten and find CSV-looking parts
+    const parts = walkBodystructure(bodyStructure);
+    const csvPart = parts.find(looksLikeCsvPart);
+
+    if (!csvPart) {
+      throw new Error('Could not find a CSV attachment on the newest message.');
+    }
+
+    const partId = csvPart.partId || '2';
+    const disp = csvPart.disposition || {};
+    const params = csvPart.params || {};
+    const filename =
+      (disp.params && (disp.params.filename || disp.params.name)) ||
+      params.name ||
+      'daily.csv';
+
+    const outPath = OUT_CSV || path.join(__dirname, '..', 'data', 'inbox', 'latest.csv');
+    console.log(`Downloading CSV part ${partId} (${filename})…`);
+
+    await downloadPartWithRetry(client, uid, partId, outPath, { retries: 3, timeoutMs: 90000 });
+
+    console.log('fetch_email complete.');
+  } catch (err) {
+    console.error('fetch_email failed:', err && err.stack ? err.stack : err);
     process.exit(1);
+  } finally {
+    try { await client.logout(); } catch {}
   }
 })();
