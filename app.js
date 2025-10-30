@@ -1,267 +1,236 @@
 // app.js
-// Renders RAEC board (A/B courts + fieldhouse) with synced, smooth slide-left carousel (8s)
+// Defensive renderer that (1) loads events.json, (2) builds the skeleton into .grid,
+// then (3) renders reservations. Avoids "Cannot set properties of null" by not
+// assuming containers exist ahead of time.
 
-const TICK_MS = 1000;
-const SLIDE_MS = 600;          // CSS-like transition timing (ms)
-const ROTATE_MS = 8000;        // time per slide
-const NOW_PAD = 0;             // no pad; events fall off exactly at end
+const QS  = (sel, el = document) => el.querySelector(sel);
+const QSA = (sel, el = document) => Array.from(el.querySelectorAll(sel));
 
-const STATE = {
-  data: null,
-  perRoom: new Map(),   // roomId -> { list:[], idx:0, nextAt:ts }
-  timer: null
+const fmtTime12 = (mins) => {
+  const h24 = Math.floor(mins / 60);
+  const m = mins % 60;
+  const h12 = ((h24 + 11) % 12) + 1;
+  const ampm = h24 >= 12 ? "PM" : "AM";
+  return `${h12}:${m.toString().padStart(2,"0")}${ampm.toLowerCase()}`;
 };
 
-// 12h display
-function fmtMinTo12h(m) {
-  let h = Math.floor(m / 60);
-  const mm = String(m % 60).padStart(2, '0');
-  const ap = h >= 12 ? 'pm' : 'am';
-  h = h % 12; if (h === 0) h = 12;
-  return `${h}:${mm}${ap}`;
-}
+const NOW_MIN = (() => {
+  const d = new Date();
+  return d.getHours() * 60 + d.getMinutes();
+})();
 
-function fmtRange(a, b) {
-  return `${fmtMinTo12h(a)} - ${fmtMinTo12h(b)}`;
-}
-
-// Fetch JSON (no cache)
-async function loadEvents() {
-  const resp = await fetch(`./events.json?ts=${Date.now()}`, { cache: 'no-store' });
-  if (!resp.ok) throw new Error(`Failed to fetch events.json: ${resp.status}`);
+async function loadData() {
+  const url = `./events.json?ts=${Date.now()}`;
+  const resp = await fetch(url, { cache: 'no-store' });
   const data = await resp.json();
-  console.log('Loaded events.json', data);
-  return data;
+  console.log('Loaded events.json', data && typeof data === 'object' ? data : {});
+  return data || {};
 }
 
-// Grouping helpers for layout
-function buildLayout(data) {
-  const south = ['1A','1B','2A','2B'];
-  const north = ['9A','9B','10A','10B'];
-  const field = ['3','4','5','6','7','8'];
-  return { south, north, field };
+function safeSetText(id, val) {
+  const el = document.getElementById(id);
+  if (el) el.textContent = val;
 }
 
-// Build DOM cards (uses containers from index.html)
-function renderSkeleton(layout) {
-  const southEl = document.getElementById('southRooms');
-  const northEl = document.getElementById('northRooms');
-  const fieldEl = document.getElementById('fieldhouseRooms');
+function updateHeaderClock() {
+  const d = new Date();
+  const dateStr = d.toLocaleDateString(undefined, { weekday:'long', month:'long', day:'numeric' });
+  const timeStr = d.toLocaleTimeString(undefined, { hour: 'numeric', minute:'2-digit' });
+  safeSetText('headerDate', dateStr);
+  safeSetText('headerClock', timeStr);
+}
 
-  southEl.innerHTML = '';
-  northEl.innerHTML = '';
-  fieldEl.innerHTML = '';
+function buildSkeletonFromData(data) {
+  // Build the entire board into .grid, based on data.rooms[].group and id/label
+  const gridRoot = QS('.grid');
+  if (!gridRoot) return;
 
-  // helpers
-  const mkRoom = (id) => {
-    const wrap = document.createElement('div');
-    wrap.className = 'room';
-    wrap.dataset.room = id;
-
-    const header = document.createElement('div');
-    header.className = 'roomHeader';
-    const idEl = document.createElement('div');
-    idEl.className = 'id';
-    idEl.textContent = id;
-    const countEl = document.createElement('div');
-    countEl.className = 'count';
-    countEl.textContent = 'reservations';
-    header.appendChild(idEl);
-    header.appendChild(countEl);
-
-    const viewport = document.createElement('div');
-    viewport.className = 'viewport'; // sliding container
-    const slide = document.createElement('div');
-    slide.className = 'slide';
-    viewport.appendChild(slide);
-
-    wrap.appendChild(header);
-    wrap.appendChild(viewport);
-    return wrap;
+  const rooms = Array.isArray(data.rooms) ? data.rooms : [];
+  const byGroup = {
+    south: rooms.filter(r => r.group === 'south'),
+    fieldhouse: rooms.filter(r => r.group === 'fieldhouse'),
+    north: rooms.filter(r => r.group === 'north')
   };
 
-  // south (stacked 1A 1B / 2A 2B)
-  const sRows = [
-    ['1A','1B'],
-    ['2A','2B']
-  ];
-  sRows.forEach(row => {
-    const rowWrap = document.createElement('div');
-    rowWrap.className = 'row2';
-    row.forEach(r => rowWrap.appendChild(mkRoom(r)));
-    southEl.appendChild(rowWrap);
-  });
+  // Return block for a single room card
+  const roomCard = (room) => {
+    const rid = String(room.id);
+    return `
+      <div class="room" data-room-id="${rid}">
+        <div class="roomHeader">
+          <div class="id">${room.label || rid}</div>
+          <div class="count" id="count-${rid}" aria-live="polite"></div>
+        </div>
+        <div class="events" id="events-${rid}"></div>
+      </div>
+    `;
+  };
 
-  // fieldhouse 3x2 grid (3..8)
-  layout.field.forEach(r => fieldEl.appendChild(mkRoom(r)));
-
-  // north (stacked 9A 9B / 10A 10B)
-  const nRows = [
-    ['9A','9B'],
-    ['10A','10B']
-  ];
-  nRows.forEach(row => {
-    const rowWrap = document.createElement('div');
-    rowWrap.className = 'row2';
-    row.forEach(r => rowWrap.appendChild(mkRoom(r)));
-    northEl.appendChild(rowWrap);
-  });
-}
-
-// Build room lists & counters
-function populateRooms(data) {
-  // index slots per room, filter by time (now < end)
-  const now = timeNowMin();
-  const active = data.slots.filter(s => (s.endMin - NOW_PAD) > now);
-
-  // Sort by start time then title
-  active.sort((a,b) => (a.startMin - b.startMin) || a.title.localeCompare(b.title));
-
-  const map = new Map();
-  for (const s of active) {
-    if (!map.has(s.roomId)) map.set(s.roomId, []);
-    map.get(s.roomId).push(s);
-  }
-
-  // write counts and initialize per-room state
-  document.querySelectorAll('.room').forEach(roomEl => {
-    const id = roomEl.dataset.room;
-    const list = map.get(id) || [];
-    const cntEl = roomEl.querySelector('.count');
-    cntEl.textContent = `${list.length} reservation${list.length===1?'':'s'}`;
-
-    STATE.perRoom.set(id, { list, idx: 0, nextAt: performance.now() + ROTATE_MS });
-    // Immediate first render
-    renderRoomSlide(roomEl, list[0] || null, /*instant*/ true);
-  });
-}
-
-function renderRoomSlide(roomEl, slot, instant=false) {
-  const slide = roomEl.querySelector('.slide');
-  if (!slide) return;
-  // Build content
-  const html = slot ? buildCardHtml(slot) : `<div class="event empty"><div class="when">—</div></div>`;
-  // For slide-left animation, create a temp element and animate with transform
-  if (instant) {
-    slide.innerHTML = html;
-    slide.style.transition = 'none';
-    slide.style.transform = 'translateX(0)';
-    // force reflow
-    void slide.offsetWidth;
-    return;
-  }
-
-  // animate: current -> left, new -> from right to center
-  const old = slide.cloneNode(true);
-  old.classList.add('leaving');
-  slide.parentNode.appendChild(old);
-
-  slide.innerHTML = html;
-  slide.style.transition = 'none';
-  slide.style.transform = 'translateX(100%)';
-  void slide.offsetWidth;
-
-  // start transitions
-  old.style.transition = `transform ${SLIDE_MS}ms ease, opacity ${SLIDE_MS}ms ease`;
-  old.style.transform  = 'translateX(-100%)';
-  old.style.opacity    = '0';
-
-  slide.style.transition = `transform ${SLIDE_MS}ms ease`;
-  slide.style.transform  = 'translateX(0)';
-
-  // cleanup
-  setTimeout(() => {
-    if (old && old.parentNode) old.parentNode.removeChild(old);
-  }, SLIDE_MS + 50);
-}
-
-function buildCardHtml(slot) {
-  // Title / subtitle already normalized by transform
-  const title = escapeHtml(slot.title || 'Reservation');
-  let subtitle = escapeHtml(slot.subtitle || '');
-  // small clean for possible trailing ')'
-  subtitle = subtitle.replace(/\)+$/, '');
-
-  const when = fmtRange(slot.startMin, slot.endMin);
-  return `
-    <div class="event">
-      <div class="who">${title}</div>
-      ${subtitle ? `<div class="what">${subtitle}</div>` : ``}
-      <div class="when">${when}</div>
+  // South/North stack: keep order as provided
+  const stack = (arr) => `
+    <div class="rooms-stack">
+      ${arr.map(roomCard).join('')}
     </div>
   `;
+
+  // Fieldhouse: 3 columns x 2 rows (3..8) if we have 6 items; otherwise just flow
+  const fieldhouseGrid = (arr) => {
+    if (arr.length === 6) {
+      return `
+        <div class="rooms-fieldhouse">
+          ${arr.map(roomCard).join('')}
+        </div>
+      `;
+    }
+    // Fallback: stack neatly if not exactly 6
+    return stack(arr);
+  };
+
+  const section = (title, id, inner) => `
+    <section class="group" id="${id}">
+      <div class="title">${title}</div>
+      ${inner}
+    </section>
+  `;
+
+  const southHTML = section('South Gym', 'group-south', stack(byGroup.south));
+  const fieldHTML = section('Fieldhouse', 'group-fieldhouse', fieldhouseGrid(byGroup.fieldhouse));
+  const northHTML = section('North Gym', 'group-north', stack(byGroup.north));
+
+  gridRoot.innerHTML = southHTML + fieldHTML + northHTML;
 }
 
-function escapeHtml(s) {
-  return String(s || '')
-    .replace(/&/g,'&amp;')
-    .replace(/</g,'&lt;')
-    .replace(/>/g,'&gt;');
+function normalizeReservation(slot) {
+  // Handles Pickleball & Catch Corner display rules and person-name flipping
+  const titleRaw = (slot.title || '').trim();
+  const subtitleRaw = (slot.subtitle || '').trim();
+  let title = titleRaw;
+  let subtitle = subtitleRaw;
+
+  // ---- Pickleball special rule ----
+  // Display as "Open Pickleball" (bold) and do not duplicate "internal" text
+  if (/pickleball/i.test(title) || /pickleball/i.test(subtitle)) {
+    return {
+      who: "Open Pickleball",
+      what: "",
+      when: `${fmtTime12(slot.startMin)} – ${fmtTime12(slot.endMin)}`
+    };
+  }
+
+  // ---- Catch Corner special rule ----
+  // Show bold "Catch Corner" and use "Reservation Purpose" details from subtitle,
+  // stripping a leading repeated "CatchCorner (" and any trailing ")"
+  if (/^catch\s*corner/i.test(title)) {
+    // remove leading "CatchCorner (" and trailing ")" if present
+    let clean = subtitle.replace(/^CatchCorner\s*\(\s*/i, '').replace(/\)\s*$/, '');
+    return {
+      who: "Catch Corner",
+      what: clean,
+      when: `${fmtTime12(slot.startMin)} – ${fmtTime12(slot.endMin)}`
+    };
+  }
+
+  // ---- Person-name detection ----
+  // If title looks like "Last, First", flip to "First Last" in bold
+  const m = title.match(/^\s*([A-Za-z'’\-]+)\s*,\s*([A-Za-z'’\-]+)\s*$/);
+  if (m) {
+    const first = m[2];
+    const last = m[1];
+    return {
+      who: `${first} ${last}`,
+      what: subtitle,
+      when: `${fmtTime12(slot.startMin)} – ${fmtTime12(slot.endMin)}`
+    };
+  }
+
+  // ---- Organization + contact (if present in slot.org / slot.contact) ----
+  const org = slot.org || title;
+  const contact = slot.contact || '';
+  let whatLine = subtitle;
+  if (contact && contact !== org) {
+    // If we have a distinct contact (like "Brandon Brown"), show under org name
+    whatLine = contact + (subtitle ? ` — ${subtitle}` : '');
+  }
+
+  return {
+    who: org,
+    what: whatLine,
+    when: `${fmtTime12(slot.startMin)} – ${fmtTime12(slot.endMin)}`
+  };
 }
 
-function timeNowMin() {
-  const d = new Date();
-  return d.getHours()*60 + d.getMinutes();
-}
+function renderReservations(data) {
+  const slots = Array.isArray(data.slots) ? data.slots : [];
 
-// Clock/date + wifi (already on page)
-function updateClock() {
-  const d = new Date();
-  const dateEl = document.getElementById('headerDate');
-  const clockEl = document.getElementById('headerClock');
-  if (dateEl) dateEl.textContent = d.toLocaleDateString(undefined,{weekday:'long', month:'long', day:'numeric'});
-  if (clockEl) {
-    let h = d.getHours(), m = String(d.getMinutes()).padStart(2,'0');
-    const ap = h >= 12 ? 'PM' : 'AM';
-    h = h % 12; if (h===0) h = 12;
-    clockEl.textContent = `${h}:${m} ${ap}`;
+  // Only show reservations that are still ongoing or upcoming
+  const filtered = slots.filter(s => Number.isFinite(s.endMin) && s.endMin > NOW_MIN);
+
+  // Group by roomId
+  const byRoom = new Map();
+  for (const s of filtered) {
+    const rid = String(s.roomId);
+    if (!byRoom.has(rid)) byRoom.set(rid, []);
+    byRoom.get(rid).push(s);
+  }
+
+  // Sort each room’s reservations by start time
+  for (const arr of byRoom.values()) {
+    arr.sort((a, b) => a.startMin - b.startMin || a.endMin - b.endMin);
+  }
+
+  // Render
+  const roomIds = Array.isArray(data.rooms) ? data.rooms.map(r => String(r.id)) : [];
+  for (const rid of roomIds) {
+    const listEl = document.getElementById(`events-${rid}`);
+    const countEl = document.getElementById(`count-${rid}`);
+    if (!listEl) continue;
+
+    const list = byRoom.get(rid) || [];
+    if (countEl) countEl.textContent = list.length ? `${list.length} reservation${list.length>1?'s':''}` : '';
+
+    if (!list.length) {
+      listEl.innerHTML = `<div class="event"><div class="what" style="opacity:.7">No reservations</div></div>`;
+      continue;
+    }
+
+    // Build cards (one per reservation)
+    listEl.innerHTML = list.map(slot => {
+      const v = normalizeReservation(slot);
+      return `
+        <div class="event">
+          <div class="who">${v.who}</div>
+          ${v.what ? `<div class="what">${v.what}</div>` : ``}
+          <div class="when">${v.when}</div>
+        </div>
+      `;
+    }).join('');
   }
 }
 
-// Main tick: rotate each room in sync every ROTATE_MS
-function startTicker() {
-  if (STATE.timer) clearInterval(STATE.timer);
-  const step = () => {
-    const now = performance.now();
-    document.querySelectorAll('.room').forEach(roomEl => {
-      const id = roomEl.dataset.room;
-      const st = STATE.perRoom.get(id);
-      if (!st) return;
-
-      // If list shrank (events fell off), keep idx in range
-      if (st.list.length === 0) {
-        renderRoomSlide(roomEl, null, true);
-        return;
-      }
-      st.idx = st.idx % st.list.length;
-
-      if (now >= st.nextAt) {
-        st.idx = (st.idx + 1) % st.list.length;
-        st.nextAt = now + ROTATE_MS;
-        renderRoomSlide(roomEl, st.list[st.idx], /*instant*/ false);
-      }
-    });
-    updateClock();
-  };
-  STATE.timer = setInterval(step, TICK_MS);
-  step();
+function chooseWifiDefaults() {
+  // Feel free to customize if you set these elsewhere.
+  const ssid = 'RAEC-Public';
+  const pass = 'Publ!c00';
+  safeSetText('wifiSsid', ssid);
+  safeSetText('wifiPass', pass);
 }
 
-// Init
 async function init() {
   try {
-    const data = await loadEvents();
-    STATE.data = data;
+    const data = await loadData();
 
-    // Build layout & skeleton
-    const layout = buildLayout(data);
-    renderSkeleton(layout);
-    populateRooms(data);
+    // Defensive: Make sure the header is populated even if index had IDs renamed/missing
+    updateHeaderClock();
+    chooseWifiDefaults();
+    setInterval(updateHeaderClock, 1000 * 30);
 
-    // Kick ticker
-    startTicker();
-  } catch (e) {
-    console.error(e);
+    // Build skeleton fresh from data to ensure containers exist
+    buildSkeletonFromData(data);
+
+    // Render reservations
+    renderReservations(data);
+  } catch (err) {
+    console.error('Init failed:', err);
   }
 }
 
