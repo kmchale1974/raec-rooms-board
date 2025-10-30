@@ -3,13 +3,23 @@
   "dayEndMin": 1380,
   "rooms": [
     {
-      "id": "1",
-      "label": "1",
+      "id": "1A",
+      "label": "1A",
       "group": "south"
     },
     {
-      "id": "2",
-      "label": "2",
+      "id": "1B",
+      "label": "1B",
+      "group": "south"
+    },
+    {
+      "id": "2A",
+      "label": "2A",
+      "group": "south"
+    },
+    {
+      "id": "2B",
+      "label": "2B",
       "group": "south"
     },
     {
@@ -43,147 +53,25 @@
       "group": "fieldhouse"
     },
     {
-      "id": "9",
-      "label": "9",
+      "id": "9A",
+      "label": "9A",
       "group": "north"
     },
     {
-      "id": "10",
-      "label": "10",
+      "id": "9B",
+      "label": "9B",
+      "group": "north"
+    },
+    {
+      "id": "10A",
+      "label": "10A",
+      "group": "north"
+    },
+    {
+      "id": "10B",
+      "label": "10B",
       "group": "north"
     }
   ],
-  "slots": [
-    {
-      "roomId": "9",
-      "startMin": 570,
-      "endMin": 750,
-      "title": "RAEC Front Desk",
-      "subtitle": "Open Pickleball",
-      "org": "RAEC Front Desk",
-      "contact": "Rentals - On Hold"
-    },
-    {
-      "roomId": "10",
-      "startMin": 570,
-      "endMin": 750,
-      "title": "RAEC Front Desk",
-      "subtitle": "Open Pickleball",
-      "org": "RAEC Front Desk",
-      "contact": "Rentals - On Hold"
-    },
-    {
-      "roomId": "9",
-      "startMin": 960,
-      "endMin": 1140,
-      "title": "Sam Franklin Training",
-      "subtitle": "2025 Q4 Pattern",
-      "org": "Sam Franklin Training",
-      "contact": "Sam Franklin"
-    },
-    {
-      "roomId": "10",
-      "startMin": 960,
-      "endMin": 1140,
-      "title": "Sam Franklin Training",
-      "subtitle": "2025 Q4 Pattern",
-      "org": "Sam Franklin Training",
-      "contact": "Sam Franklin"
-    },
-    {
-      "roomId": "1",
-      "startMin": 960,
-      "endMin": 1020,
-      "title": "Vazquez",
-      "subtitle": "Volleyball",
-      "org": "Vazquez",
-      "contact": "Isabel"
-    },
-    {
-      "roomId": "2",
-      "startMin": 960,
-      "endMin": 1020,
-      "title": "Vazquez",
-      "subtitle": "Volleyball",
-      "org": "Vazquez",
-      "contact": "Isabel"
-    },
-    {
-      "roomId": "7",
-      "startMin": 1080,
-      "endMin": 1170,
-      "title": "Illinois Flight",
-      "subtitle": "Basketball",
-      "org": "Illinois Flight",
-      "contact": "Brandon Brown"
-    },
-    {
-      "roomId": "8",
-      "startMin": 1080,
-      "endMin": 1200,
-      "title": "Catch Corner (Internal Holds",
-      "subtitle": "CatchCorner (Casey Toomey #447724 Basketball)",
-      "org": "Catch Corner (Internal Holds",
-      "contact": "Catch Corner (Internal Holds)"
-    },
-    {
-      "roomId": "6",
-      "startMin": 1080,
-      "endMin": 1260,
-      "title": "Illinois Flight",
-      "subtitle": "Basketball",
-      "org": "Illinois Flight",
-      "contact": "Brandon Brown"
-    },
-    {
-      "roomId": "1",
-      "startMin": 1140,
-      "endMin": 1260,
-      "title": "Omona Athletics",
-      "subtitle": "Volleyball"
-    },
-    {
-      "roomId": "2",
-      "startMin": 1140,
-      "endMin": 1260,
-      "title": "Omona Athletics",
-      "subtitle": "Volleyball"
-    },
-    {
-      "roomId": "9",
-      "startMin": 1170,
-      "endMin": 1290,
-      "title": "Catch Corner (Internal Holds",
-      "subtitle": "CatchCorner (Illinois Lady Elite #438347 Basketball)",
-      "org": "Catch Corner (Internal Holds",
-      "contact": "Catch Corner (Internal Holds)"
-    },
-    {
-      "roomId": "10",
-      "startMin": 1170,
-      "endMin": 1290,
-      "title": "Catch Corner (Internal Holds",
-      "subtitle": "CatchCorner (Illinois Lady Elite #438347 Basketball)",
-      "org": "Catch Corner (Internal Holds",
-      "contact": "Catch Corner (Internal Holds)"
-    },
-    {
-      "roomId": "1",
-      "startMin": 1260,
-      "endMin": 1380,
-      "title": "Chicago Sport and Social Club",
-      "subtitle": "Volleyball (Grab A Game)",
-      "org": "Chicago Sport and Social Club",
-      "contact": "Chicago Sport and Social Club"
-    },
-    {
-      "roomId": "2",
-      "startMin": 1260,
-      "endMin": 1380,
-      "title": "Chicago Sport and Social Club",
-      "subtitle": "Volleyball (Grab A Game)",
-      "org": "Chicago Sport and Social Club",
-      "contact": "Chicago Sport and Social Club"
-    }
-  ]
+  "slots": []
 }
