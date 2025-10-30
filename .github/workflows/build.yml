@@ -3,27 +3,32 @@ name: Build RAEC events.json
 on:
   workflow_dispatch:
   schedule:
-    - cron: "2 13 * * *"   # 08:02 AM America/Chicago
+    - cron: '2 13 * * *'   # 08:02 AM America/Chicago
 
 jobs:
   build:
     runs-on: ubuntu-latest
+
     env:
-      # Make sure the key is EXACTLY this case: IMAP_USER
       IMAP_USER: raecroominfo.board@gmail.com
-      IMAP_PASS: ${{ secrets.IMAP_PASS }}   # set this Secret in repo settings
-      FROM_SENDER: "romeovillerecreation@rectrac.com"
-      SUBJECT: "AC Daily Facility Report"
+      IMAP_PASS: ${{ secrets.IMAP_PASS }}
+      FROM_SENDER: 'romeovillerecreation@rectrac.com'
+      SUBJECT: 'AC Daily Facility Report'
       OUT_CSV: data/inbox/latest.csv
       OUT_JSON: events.json
-      NODE_VERSION: 20
+      NODE_VERSION: '20'
 
     steps:
-      - uses: actions/checkout@v4
-        with: { fetch-depth: 0 }
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
-      - uses: actions/setup-node@v4
-        with: { node-version: ${{ env.NODE_VERSION }}, cache: npm }
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'npm'
 
       - name: Install deps
         run: npm ci
@@ -45,12 +50,12 @@ jobs:
           set -e
           git config user.name  "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
+          git fetch origin main
+          git pull --rebase origin main
           git add "${OUT_JSON}"
           if git diff --cached --quiet; then
             echo "No changes to ${OUT_JSON}; skipping commit/push."
             exit 0
           fi
           git commit -m "Update ${OUT_JSON} [skip ci]"
-          git fetch origin main
-          git -c rebase.autostash=true pull --rebase origin main
           git push origin HEAD:main
