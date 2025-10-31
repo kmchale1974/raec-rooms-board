@@ -1,51 +1,137 @@
-name: Fetch RAEC Emails
+/**
+ * Fetch CSV attachments from Gmail (INBOX only) for messages matching:
+ *   subject:"AC Daily Facility" has:attachment newer_than:30d
+ *
+ * Outputs CSVs to: out/attachments/
+ * Exits with code 1 if nothing was extracted (to match your previous behavior).
+ */
 
-on:
-  workflow_dispatch:
-  schedule:
-    - cron: "10 * * * *" # hourly at :10 (optional—remove if not needed)
+const { ImapFlow } = require('imapflow');
+const { simpleParser } = require('mailparser');
+const fs = require('fs');
+const path = require('path');
 
-permissions:
-  contents: read
+const imapUser = process.env.IMAP_USER || 'raecroominfo.board@gmail.com';
+const imapPass = process.env.IMAP_PASS;
 
-jobs:
-  fetch:
-    runs-on: ubuntu-latest
+async function main() {
+  if (!imapUser || !imapPass) {
+    console.error(
+      `Missing credentials:
+  IMAP_USER: ${imapUser ? 'set' : 'missing'}
+  IMAP_PASS: ${imapPass ? 'set' : 'missing'}`
+    );
+    process.exit(2);
+  }
 
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
+  const client = new ImapFlow({
+    host: 'imap.gmail.com',
+    port: 993,
+    secure: true,
+    auth: { user: imapUser, pass: imapPass },
+    logger: false, // set to console for verbose
+    // gzip/deflate compression is auto-negotiated by Gmail; ImapFlow handles it
+  });
 
-      - name: Use Node.js 20
-        uses: actions/setup-node@v4
-        with:
-          node-version: "20"
+  const OUT_DIR = path.join(process.cwd(), 'out', 'attachments');
+  fs.mkdirSync(OUT_DIR, { recursive: true });
 
-      - name: Install deps
-        run: npm ci
+  let saved = 0;
 
-      # Preflight: ensure creds are present in this job
-      - name: Assert IMAP creds present
-        shell: bash
-        env:
-          IMAP_USER: ${{ vars.IMAP_USER || 'raecroominfo.board@gmail.com' }}
-          IMAP_PASS: ${{ secrets.IMAP_PASS }}
-        run: |
-          [[ -n "$IMAP_USER" ]] || { echo "::error::IMAP_USER missing"; exit 1; }
-          [[ -n "$IMAP_PASS" ]] || { echo "::error::IMAP_PASS missing (check repo/environment secrets)"; exit 1; }
-          echo "IMAP env present."
+  try {
+    console.log(`Connecting to Gmail as ${imapUser}…`);
+    await client.connect();
 
-      - name: Fetch RAEC emails
-        run: node scripts/fetch_email.js
-        env:
-          # If you don't keep IMAP_USER in repo/Env vars, hardcode it here
-          IMAP_USER: ${{ vars.IMAP_USER || 'raecroominfo.board@gmail.com' }}
-          IMAP_PASS: ${{ secrets.IMAP_PASS }}
+    // --- INBOX only to avoid duplicate messages from [Gmail]/All Mail
+    const lock = await client.getMailboxLock('INBOX');
+    try {
+      // Prefer Gmail's X-GM-RAW search (fast & accurate)
+      // ImapFlow supports a "gmailRaw" prop in the search query object.
+      // Fallback to broader search if the server doesn't support it (very unlikely on Gmail).
+      let messageUids = [];
+      try {
+        messageUids = await client.search({
+          gmailRaw: 'subject:"AC Daily Facility" has:attachment newer_than:30d',
+        });
+        console.log(`[INBOX] gmailRaw matched ${messageUids.length} messages`);
+      } catch (e) {
+        console.warn('gmailRaw search failed, falling back to broader search…', e?.message || e);
+        // Fallback: last 60 days and filter by subject locally
+        const since = new Date();
+        since.setDate(since.getDate() - 60);
+        const fallbackUids = await client.search({ since });
+        console.log(`[INBOX] fallback date search found ${fallbackUids.length} messages`);
 
-      - name: Upload extracted CSVs
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: raec-email-csvs
-          path: out/attachments/**
-          if-no-files-found: warn
+        // Narrow down by checking subject headers quickly
+        const chunks = client.fetch(fallbackUids, { envelope: true }, { uid: true });
+        for await (const msg of chunks) {
+          const subj = (msg.envelope?.subject || '').toLowerCase();
+          if (subj.includes('ac daily facility')) {
+            messageUids.push(msg.uid);
+          }
+        }
+        console.log(`[INBOX] filtered to ${messageUids.length} messages by subject`);
+      }
+
+      // Process newest first
+      messageUids.sort((a, b) => b - a);
+
+      for (const uid of messageUids) {
+        // Fetch the full RFC822 to parse attachments reliably
+        const msgData = await client.fetchOne(uid, { source: true, envelope: true }, { uid: true });
+        if (!msgData?.source) continue;
+
+        const parsed = await simpleParser(msgData.source);
+
+        const subject = parsed.subject || '(no subject)';
+        const dateStr = parsed.date ? parsed.date.toISOString() : '';
+        console.log(`Examining UID ${uid} — "${subject}" — ${dateStr}`);
+
+        if (!parsed.attachments || parsed.attachments.length === 0) {
+          continue;
+        }
+
+        for (const att of parsed.attachments) {
+          const isCSV =
+            (att.contentType || '').toLowerCase().includes('csv') ||
+            (att.filename || '').toLowerCase().endsWith('.csv');
+
+          if (!isCSV) continue;
+
+          // Build a safe filename
+          const safeSubject = subject
+            .replace(/[^\w\s.-]/g, '')
+            .replace(/\s+/g, '_')
+            .slice(0, 80);
+
+          const base = att.filename
+            ? att.filename.replace(/[^\w\s.-]/g, '_')
+            : `${safeSubject || 'attachment'}.csv`;
+
+          const outPath = path.join(OUT_DIR, base);
+          fs.writeFileSync(outPath, att.content);
+          saved++;
+          console.log(`Saved CSV -> ${outPath}`);
+        }
+      }
+    } finally {
+      lock.release();
+    }
+  } catch (err) {
+    console.error('Failed to fetch/parse emails:', err);
+    process.exit(1);
+  } finally {
+    try {
+      await client.logout();
+    } catch (_) {}
+  }
+
+  if (saved === 0) {
+    console.error('No CSV attachment could be extracted from any candidate message.');
+    process.exit(1);
+  } else {
+    console.log(`Done. Saved ${saved} CSV file(s) to ${OUT_DIR}`);
+  }
+}
+
+main();
