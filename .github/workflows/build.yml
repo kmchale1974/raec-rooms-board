@@ -3,7 +3,7 @@ name: Build RAEC events json
 on:
   workflow_dispatch:
   schedule:
-    # Every day at 08:03 AM America/Chicago (adjust if you want)
+    # Every day at 08:03 AM America/Chicago
     - cron: "3 13 * * *"
 
 jobs:
@@ -20,6 +20,8 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0   # <-- lets pull --rebase work cleanly
 
       - name: Use Node.js 20
         uses: actions/setup-node@v4
@@ -33,6 +35,12 @@ jobs:
         run: |
           mkdir -p data/inbox
           mkdir -p data/tmp
+
+      - name: Debug non-secret envs
+        run: |
+          echo "IMAP_USER present? $([ -n \"$IMAP_USER\" ] && echo yes || echo no)"
+          echo "OUT_CSV: ${OUT_CSV:-<unset>}"
+          echo "OUT_JSON: ${OUT_JSON:-<unset>}"
 
       - name: Fetch latest CSV from Gmail
         env:
