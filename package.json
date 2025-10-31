@@ -1,12 +1,22 @@
 {
   "name": "raec-rooms-board",
+  "version": "1.0.0",
   "private": true,
   "type": "module",
   "scripts": {
-    "fetch-email": "node scripts/fetch_email.js"
+    "fetch-email": "node scripts/fetch_email.js",
+    "start": "node scripts/fetch_email.js"
+  },
+  "engines": {
+    "node": ">=18.17.0"
   },
   "dependencies": {
+    "date-fns": "^3.6.0",
+    "dotenv": "^16.4.5",
+    "iconv-lite": "^0.6.3",
     "imapflow": "^1.0.200",
-    "mailparser": "^3.8.0"
+    "mailparser": "^3.6.8",
+    "pino": "^9.5.0",
+    "pino-pretty": "^11.2.2"
   }
 }
