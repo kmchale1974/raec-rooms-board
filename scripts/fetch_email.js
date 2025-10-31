@@ -1,200 +1,240 @@
 // scripts/fetch_email.js
-// Robust Gmail IMAP CSV fetcher for RAEC board
-// Requires env: IMAP_USER, IMAP_PASS, OUT_CSV
-// npm deps: imapflow, mailparser, pino-pretty (optional, for nicer logs)
+// ESM file – run by GitHub Actions job. Requires only "imapflow" in dependencies.
+//
+// ENV VARS (set in workflow):
+//   IMAP_USER  - Gmail address (plain, not a secret is fine)
+//   IMAP_PASS  - Gmail App Password (from repo Secrets)
+//   OUT_CSV    - where to write the latest CSV, e.g. data/inbox/latest.csv
+//
+// Exit codes: non-zero if no CSV found or any fatal error.
 
 import { ImapFlow } from 'imapflow';
-import fs from 'fs/promises';
-import path from 'path';
+import fs from 'node:fs';
+import fsp from 'node:fs/promises';
+import path from 'node:path';
 
-// --- Config from ENV ---
-const IMAP_USER = process.env.IMAP_USER;
-const IMAP_PASS = process.env.IMAP_PASS;
-const OUT_CSV   = process.env.OUT_CSV || 'data/inbox/latest.csv';
+const IMAP_HOST = 'imap.gmail.com';
+const IMAP_PORT = 993;
 
-if (!IMAP_USER) {
-  console.error('Missing IMAP_USER env var (Gmail address).');
-  process.exit(1);
+function assertEnv(name, secret = false) {
+  const v = process.env[name];
+  if (!v) {
+    console.error(`Missing ${name} env var${secret ? ' (Gmail App Password)' : ''}.`);
+    process.exit(1);
+  }
+  return v;
 }
-if (!IMAP_PASS) {
-  console.error('Missing IMAP_PASS env var (Gmail App Password).');
-  process.exit(1);
+
+const IMAP_USER = assertEnv('IMAP_USER');
+const IMAP_PASS = assertEnv('IMAP_PASS', true);
+const OUT_CSV = assertEnv('OUT_CSV');
+
+const SUBJECT = 'AC Daily Facility Report';
+// Accepts names like: "AC - Daily Facility Global Schedule_ 8-00-31 AM_15812-990.csv"
+const CSV_NAME_RE = /^AC\s*-\s*Daily\s*Facility\s*Global\s*Schedule_.*\.csv$/i;
+
+// Search the last N days
+const LOOKBACK_DAYS = 7;
+
+function sinceDate(days) {
+  const d = new Date();
+  d.setUTCDate(d.getUTCDate() - days);
+  // Gmail IMAP wants day-Mon-YYYY (RFC 3501). But ImapFlow allows JS Date directly.
+  return d;
 }
 
-// Helper: ensure folder exists
 async function ensureDirFor(filePath) {
-  await fs.mkdir(path.dirname(filePath), { recursive: true });
+  await fsp.mkdir(path.dirname(filePath), { recursive: true });
 }
 
-// Build an IMAP date string (e.g., 25-Oct-2025)
-function toImapDate(d) {
-  const day = String(d.getDate()).padStart(2, '0');
-  const monthNames = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
-  const mon = monthNames[d.getMonth()];
-  const year = d.getFullYear();
-  return `${day}-${mon}-${year}`;
-}
+function pickCsvPartFromBodyStructure(bodyStructure) {
+  // bodyStructure can be an array (multipart) or a single part descriptor
+  // We’ll flatten and scan for any text/* or application/* with a .csv filename.
+  const parts = [];
 
-// Subject matcher (case-insensitive "contains")
-function subjectContains(env, needle) {
-  return (env?.subject || '').toLowerCase().includes(needle.toLowerCase());
-}
+  function walk(node, prefix = '') {
+    if (!node) return;
+    if (Array.isArray(node)) {
+      // multipart: array of subparts + params at the end (object)
+      for (let i = 0; i < node.length; i++) {
+        const sub = node[i];
+        // ImapFlow returns structured objects; but some servers give arrays.
+        walk(sub, prefix ? `${prefix}.${i + 1}` : String(i + 1));
+      }
+    } else if (typeof node === 'object') {
+      if (node.part || node.type) {
+        // ImapFlow bodystructure object
+        const partId = node.part || prefix || '1';
+        const name =
+          node.disposition?.params?.filename ||
+          node.params?.name ||
+          node.params?.filename ||
+          '';
+        const type = `${node.type || ''}/${node.subtype || ''}`.toLowerCase();
+        parts.push({ partId, name, type, node });
+      }
 
-function isLikelyOurCsv(part) {
-  // Text/Plain attachment, filename contains our pattern and ends with .csv
-  const disp = part?.disposition?.toLowerCase?.() || '';
-  const name = (part?.parameters?.name || part?.dispositionParameters?.filename || '').toString();
-  return (
-    disp.includes('attachment') &&
-    name.toLowerCase().endsWith('.csv') &&
-    name.toLowerCase().includes('daily facility global schedule')
-  );
-}
+      // Some servers embed child nodes in .childNodes or .childParts
+      if (node.childNodes) {
+        node.childNodes.forEach((sub, idx) =>
+          walk(sub, `${prefix}${prefix ? '.' : ''}${idx + 1}`)
+        );
+      }
+      if (node.childParts) {
+        node.childParts.forEach((sub, idx) =>
+          walk(sub, `${prefix}${prefix ? '.' : ''}${idx + 1}`)
+        );
+      }
 
-async function findLatestCsv(client, mailbox) {
-  // Try subject search first, last 5 days
-  const since = new Date();
-  since.setDate(since.getDate() - 5);
-  const sinceStr = toImapDate(since);
-
-  console.log(`Searching "${mailbox}" since ${sinceStr} for subject "AC Daily Facility Report"...`);
-  await client.mailboxOpen(mailbox, { readOnly: true });
-
-  // Gmail supports: ['SINCE', 'DD-Mon-YYYY', 'HEADER', 'SUBJECT', 'AC Daily Facility Report']
-  let uids = await client.search({
-    since: since,
-    header: ['subject', 'AC Daily Facility Report'],
-  }).catch(() => []);
-
-  // If not found by subject, broaden: any CSV attachment with our pattern
-  if (!uids || uids.length === 0) {
-    console.log('No subject matches; broadening to any message SINCE with CSV attachment name pattern…');
-    // Search all messages since date; we’ll filter by bodystructure client-side
-    uids = await client.search({ since }).catch(() => []);
-  }
-
-  if (!uids || uids.length === 0) {
-    console.log(`No messages found in "${mailbox}" for date window.`);
-    return null;
-  }
-
-  // Fetch BODYSTRUCTURE & ENVELOPE for candidates (limit to last 50 uids for speed)
-  const tail = uids.slice(-50);
-  let best = null;
-
-  for await (const msg of client.fetch(tail, { uid: true, envelope: true, bodyStructure: true, internalDate: true })) {
-    const env = msg.envelope || {};
-    const hasGoodSubject = subjectContains(env, 'AC Daily Facility Report');
-
-    // Walk bodystructure to find CSV parts
-    const stack = Array.isArray(msg.bodyStructure) ? msg.bodyStructure : [msg.bodyStructure];
-    const csvParts = [];
-    const walk = (node) => {
-      if (!node) return;
+      // ImapFlow multipart lists can be in node.childNodes or node.childParts; but also in node[0..n] if server returns array structures
       if (Array.isArray(node)) {
-        node.forEach(walk);
-        return;
+        node.forEach((sub, idx) =>
+          walk(sub, `${prefix}${prefix ? '.' : ''}${idx + 1}`)
+        );
       }
-      // node can be a multipart with childNodes
-      if (node.childNodes && node.childNodes.length) node.childNodes.forEach(walk);
-
-      // leaf
-      if (!node.childNodes) {
-        const disp = (node.disposition || '').toLowerCase();
-        const name = (node.parameters?.name || node.dispositionParameters?.filename || '').toString();
-        const size = Number(node.size || 0);
-        if (disp.includes('attachment') && name.toLowerCase().endsWith('.csv')) {
-          csvParts.push({ node, name, size });
-        }
-      }
-    };
-    walk(msg.bodyStructure);
-
-    // Prefer files with our typical name and the largest size
-    const priorityCsv = csvParts
-      .filter(p => p.name.toLowerCase().includes('daily facility global schedule'))
-      .sort((a, b) => b.size - a.size);
-
-    const fallbackCsv = csvParts.sort((a, b) => b.size - a.size);
-
-    let pick = priorityCsv[0] || fallbackCsv[0] || null;
-    if (!pick) continue;
-
-    // Score: prefer correct subject and recency/size
-    const score =
-      (hasGoodSubject ? 1000 : 0) +
-      Math.min(500, Math.floor((new Date(msg.internalDate) - since) / 60000)) + // newer → more points
-      Math.min(200, Math.floor((pick.size || 0) / 1024)); // larger → more points
-
-    if (!best || score > best.score) {
-      best = {
-        uid: msg.uid,
-        subject: env.subject || '(no subject)',
-        internalDate: msg.internalDate,
-        csvName: pick.name,
-        csvSize: pick.size,
-        csvPart: pick.node
-      };
     }
   }
 
-  if (!best) {
-    console.log(`Found messages in "${mailbox}" but none with CSV attachments.`);
+  walk(bodyStructure);
+
+  // Prefer filename match; allow text/plain or application/octet-stream
+  const scored = parts
+    .map((p) => {
+      const hasCsvName = p.name && CSV_NAME_RE.test(p.name);
+      const csvishType =
+        p.type === 'text/plain' ||
+        p.type === 'application/octet-stream' ||
+        p.type === 'text/csv' ||
+        p.type === 'application/csv';
+      let score = 0;
+      if (hasCsvName) score += 10;
+      if (csvishType) score += 2;
+      return { ...p, score };
+    })
+    .filter((p) => p.score > 0)
+    .sort((a, b) => b.score - a.score);
+
+  return scored[0] || null;
+}
+
+async function searchForCandidate(client, mailbox) {
+  // 1) Try exact subject within lookback window
+  const since = sinceDate(LOOKBACK_DAYS);
+  console.log(`Searching "${mailbox}" since ${since.toDateString()} for subject "${SUBJECT}"...`);
+  let uids = await client.search(
+    { since, header: [['subject', SUBJECT]] },
+    { uid: true }
+  );
+
+  // If none, broaden to: any message since LOOKBACK_DAYS with CSV attachment filename pattern
+  if (!uids?.length) {
+    console.log('No subject matches; broadening to any message SINCE with CSV attachment name pattern…');
+
+    // We have to fetch envelopes+bodystructure for a recent slice and test filenames.
+    const allRecentUids = await client.search({ since }, { uid: true });
+    if (!allRecentUids?.length) return null;
+
+    // Fetch in descending UID order (newest first)
+    const recent = allRecentUids.sort((a, b) => b - a).slice(0, 50);
+    for await (const msg of client.fetch(recent, { envelope: true, bodyStructure: true, uid: true, internalDate: true })) {
+      // Scan bodystructure for a csv-like filename
+      const csvPart = pickCsvPartFromBodyStructure(msg.bodyStructure);
+      if (csvPart) {
+        return {
+          uid: msg.uid,
+          date: msg.internalDate,
+          subject: msg.envelope?.subject || '(no subject)',
+          csvPart
+        };
+      }
+    }
     return null;
   }
 
-  console.log(`Chosen message uid=${best.uid} | ${best.internalDate} | ${best.subject}`);
-  console.log(`CSV part: ${best.csvName} (${best.csvSize} bytes)`);
+  // If we found subject matches, pick the newest
+  uids = uids.sort((a, b) => b - a);
+  const newestUid = uids[0];
+  const [msg] = await client.fetchOne(newestUid, { envelope: true, bodyStructure: true, uid: true, internalDate: true });
+  // Ensure it actually has a CSV attachment that matches our pattern
+  const csvPart = pickCsvPartFromBodyStructure(msg.bodyStructure);
+  if (!csvPart) return null;
+  return {
+    uid: msg.uid,
+    date: msg.internalDate,
+    subject: msg.envelope?.subject || '(no subject)',
+    csvPart
+  };
+}
 
-  // Download the CSV part
-  const partId = best.csvPart.part || best.csvPart.partId || best.csvPart.partID || '2';
-  const download = await client.download(best.uid, partId);
-  const buf = await download.content.readAll();
-  return { buf, name: best.csvName };
+async function downloadPartToFile(client, uid, partId, filename, destPath) {
+  await ensureDirFor(destPath);
+  console.log(`Downloading CSV part ${partId} (${filename})…`);
+  const dl = await client.download(uid, partId);
+  if (!dl || !dl.content) {
+    throw new Error('Download stream missing');
+  }
+  await new Promise((resolve, reject) => {
+    const w = fs.createWriteStream(destPath);
+    dl.content.pipe(w);
+    dl.content.on('error', reject);
+    w.on('finish', resolve);
+    w.on('error', reject);
+  });
+  const stats = await fsp.stat(destPath);
+  if (!stats.size) {
+    throw new Error('Downloaded file is empty');
+  }
+}
+
+async function findCsvAndDownload(client) {
+  // Try INBOX, then [Gmail]/All Mail
+  const mailboxes = ['INBOX', '[Gmail]/All Mail'];
+
+  for (const box of mailboxes) {
+    await client.mailboxOpen(box, { readOnly: true }).catch(() => {});
+    try {
+      const candidate = await searchForCandidate(client, box);
+      if (candidate) {
+        const { uid, date, subject, csvPart } = candidate;
+        console.log(`Chosen message uid=${uid} | ${new Date(date).toString()} | ${subject}`);
+        console.log(`CSV part: ${csvPart.name || '(no filename)'} (${csvPart.type})`);
+        await downloadPartToFile(client, uid, csvPart.partId, csvPart.name || 'report.csv', OUT_CSV);
+        return true;
+      }
+    } catch (err) {
+      console.warn(`Search in "${box}" failed: ${err.message}`);
+      // continue to next mailbox
+    }
+  }
+  return false;
 }
 
 async function main() {
+  console.log(`Connecting to Gmail as ${IMAP_USER}…`);
   const client = new ImapFlow({
-    host: 'imap.gmail.com',
-    port: 993,
+    host: IMAP_HOST,
+    port: IMAP_PORT,
     secure: true,
     auth: { user: IMAP_USER, pass: IMAP_PASS },
-    logger: false,
-    // Give Gmail a generous timeout for large downloads
-    socketTimeout: 60_000,
-    logRaw: false
+    logger: false // keep Action logs cleaner; set to console for verbose
   });
 
   try {
-    console.log(`Connecting to Gmail as ${IMAP_USER}…`);
     await client.connect();
 
-    const mailboxesToTry = ['INBOX', '[Gmail]/All Mail'];
-    let found = null;
-
-    for (const mbox of mailboxesToTry) {
-      try {
-        found = await findLatestCsv(client, mbox);
-        if (found) break;
-      } catch (e) {
-        console.log(`Search in "${mbox}" failed:`, e?.message || e);
-      }
-    }
-
-    if (!found) {
+    const ok = await findCsvAndDownload(client);
+    if (!ok) {
       console.error('No suitable "AC Daily Facility Report" CSV found in INBOX or [Gmail]/All Mail.');
       process.exit(1);
     }
 
-    await ensureDirFor(OUT_CSV);
-    await fs.writeFile(OUT_CSV, found.buf);
     console.log(`Saved CSV → ${OUT_CSV}`);
+  } catch (err) {
+    console.error(err);
+    process.exit(1);
   } finally {
     try { await client.logout(); } catch {}
   }
 }
 
-main().catch((err) => {
-  console.error('fetch_email failed:', err?.message || err);
-  process.exit(1);
-});
+main();
