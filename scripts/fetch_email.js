@@ -1,137 +1,155 @@
-/**
- * Fetch CSV attachments from Gmail (INBOX only) for messages matching:
- *   subject:"AC Daily Facility" has:attachment newer_than:30d
- *
- * Outputs CSVs to: out/attachments/
- * Exits with code 1 if nothing was extracted (to match your previous behavior).
- */
+// scripts/fetch_email.js
+import 'dotenv/config';
+import { ImapFlow } from 'imapflow';
+import pino from 'pino';
+import { simpleParser } from 'mailparser';
 
-const { ImapFlow } = require('imapflow');
-const { simpleParser } = require('mailparser');
-const fs = require('fs');
-const path = require('path');
+const log = pino({
+  level: process.env.LOG_LEVEL || 'info',
+  transport: process.env.PRETTY_LOGS ? {
+    target: 'pino-pretty',
+    options: { colorize: true, translateTime: 'SYS:standard' }
+  } : undefined
+});
 
-const imapUser = process.env.IMAP_USER || 'raecroominfo.board@gmail.com';
-const imapPass = process.env.IMAP_PASS;
+// --- Config from env / defaults ---
+const IMAP_HOST = process.env.IMAP_HOST || 'imap.gmail.com';
+const IMAP_PORT = Number(process.env.IMAP_PORT || 993);
+const IMAP_SECURE = process.env.IMAP_SECURE ? process.env.IMAP_SECURE === 'true' : true;
+const IMAP_USER = process.env.IMAP_USER || 'raecroominfo.board@gmail.com';
+const IMAP_PASS = process.env.IMAP_PASS; // <-- REQUIRED (GitHub Secret)
 
-async function main() {
-  if (!imapUser || !imapPass) {
-    console.error(
-      `Missing credentials:
-  IMAP_USER: ${imapUser ? 'set' : 'missing'}
-  IMAP_PASS: ${imapPass ? 'set' : 'missing'}`
-    );
-    process.exit(2);
-  }
-
-  const client = new ImapFlow({
-    host: 'imap.gmail.com',
-    port: 993,
-    secure: true,
-    auth: { user: imapUser, pass: imapPass },
-    logger: false, // set to console for verbose
-    // gzip/deflate compression is auto-negotiated by Gmail; ImapFlow handles it
-  });
-
-  const OUT_DIR = path.join(process.cwd(), 'out', 'attachments');
-  fs.mkdirSync(OUT_DIR, { recursive: true });
-
-  let saved = 0;
-
-  try {
-    console.log(`Connecting to Gmail as ${imapUser}…`);
-    await client.connect();
-
-    // --- INBOX only to avoid duplicate messages from [Gmail]/All Mail
-    const lock = await client.getMailboxLock('INBOX');
-    try {
-      // Prefer Gmail's X-GM-RAW search (fast & accurate)
-      // ImapFlow supports a "gmailRaw" prop in the search query object.
-      // Fallback to broader search if the server doesn't support it (very unlikely on Gmail).
-      let messageUids = [];
-      try {
-        messageUids = await client.search({
-          gmailRaw: 'subject:"AC Daily Facility" has:attachment newer_than:30d',
-        });
-        console.log(`[INBOX] gmailRaw matched ${messageUids.length} messages`);
-      } catch (e) {
-        console.warn('gmailRaw search failed, falling back to broader search…', e?.message || e);
-        // Fallback: last 60 days and filter by subject locally
-        const since = new Date();
-        since.setDate(since.getDate() - 60);
-        const fallbackUids = await client.search({ since });
-        console.log(`[INBOX] fallback date search found ${fallbackUids.length} messages`);
-
-        // Narrow down by checking subject headers quickly
-        const chunks = client.fetch(fallbackUids, { envelope: true }, { uid: true });
-        for await (const msg of chunks) {
-          const subj = (msg.envelope?.subject || '').toLowerCase();
-          if (subj.includes('ac daily facility')) {
-            messageUids.push(msg.uid);
-          }
-        }
-        console.log(`[INBOX] filtered to ${messageUids.length} messages by subject`);
-      }
-
-      // Process newest first
-      messageUids.sort((a, b) => b - a);
-
-      for (const uid of messageUids) {
-        // Fetch the full RFC822 to parse attachments reliably
-        const msgData = await client.fetchOne(uid, { source: true, envelope: true }, { uid: true });
-        if (!msgData?.source) continue;
-
-        const parsed = await simpleParser(msgData.source);
-
-        const subject = parsed.subject || '(no subject)';
-        const dateStr = parsed.date ? parsed.date.toISOString() : '';
-        console.log(`Examining UID ${uid} — "${subject}" — ${dateStr}`);
-
-        if (!parsed.attachments || parsed.attachments.length === 0) {
-          continue;
-        }
-
-        for (const att of parsed.attachments) {
-          const isCSV =
-            (att.contentType || '').toLowerCase().includes('csv') ||
-            (att.filename || '').toLowerCase().endsWith('.csv');
-
-          if (!isCSV) continue;
-
-          // Build a safe filename
-          const safeSubject = subject
-            .replace(/[^\w\s.-]/g, '')
-            .replace(/\s+/g, '_')
-            .slice(0, 80);
-
-          const base = att.filename
-            ? att.filename.replace(/[^\w\s.-]/g, '_')
-            : `${safeSubject || 'attachment'}.csv`;
-
-          const outPath = path.join(OUT_DIR, base);
-          fs.writeFileSync(outPath, att.content);
-          saved++;
-          console.log(`Saved CSV -> ${outPath}`);
-        }
-      }
-    } finally {
-      lock.release();
-    }
-  } catch (err) {
-    console.error('Failed to fetch/parse emails:', err);
-    process.exit(1);
-  } finally {
-    try {
-      await client.logout();
-    } catch (_) {}
-  }
-
-  if (saved === 0) {
-    console.error('No CSV attachment could be extracted from any candidate message.');
-    process.exit(1);
-  } else {
-    console.log(`Done. Saved ${saved} CSV file(s) to ${OUT_DIR}`);
-  }
+if (!IMAP_PASS) {
+  log.error('No password configured. Set IMAP_PASS as a secret/environment variable.');
+  process.exit(1);
 }
 
-main();
+// Search parameters
+const SEARCH_SUBJECT = process.env.SEARCH_SUBJECT || 'AC Daily Facility';
+const SEARCH_DAYS = Number(process.env.SEARCH_DAYS || 30);
+const SEARCH_IN_ALLMAIL = (process.env.SEARCH_IN_ALLMAIL || 'true') === 'true'; // search [Gmail]/All Mail too
+
+// Helpers
+function formatSinceDays(days) {
+  const d = new Date();
+  d.setDate(d.getDate() - days);
+  const day = String(d.getDate()).padStart(2, '0');
+  const monthNames = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+  return `${day}-${monthNames[d.getMonth()]}-${d.getFullYear()}`;
+}
+
+async function searchAndFetch(client, mailboxLabel, rawQuery) {
+  await client.mailboxOpen(mailboxLabel, { readOnly: true });
+  const uids = await client.search({ or: [ ['x-gm-raw', rawQuery] ] });
+  log.info(`[${mailboxLabel}] ${rawQuery} -> ${uids.length} matches`);
+  const results = [];
+
+  // Fetch newest first
+  uids.sort((a, b) => b - a);
+
+  for (const uid of uids) {
+    const msg = await client.fetchOne(uid, { source: true, envelope: true, internalDate: true, uid: true });
+    if (!msg?.source) continue;
+
+    const parsed = await simpleParser(msg.source);
+    const hasAttachments = (parsed.attachments || []).length > 0;
+
+    results.push({
+      uid,
+      subject: parsed.subject || msg.envelope?.subject || '',
+      date: msg.internalDate,
+      hasAttachments,
+      attachments: parsed.attachments || []
+    });
+  }
+
+  return results;
+}
+
+(async () => {
+  log.info(`Connecting to Gmail as ${IMAP_USER}…`);
+
+  const client = new ImapFlow({
+    host: IMAP_HOST,
+    port: IMAP_PORT,
+    secure: IMAP_SECURE,
+    auth: { user: IMAP_USER, pass: IMAP_PASS },
+    logger: false, // set to console for wire logs
+    // gzip/deflate compression is auto-handled by Gmail; ImapFlow negotiates if supported
+  });
+
+  try {
+    await client.connect();
+
+    const newerThanRaw = `subject:"${SEARCH_SUBJECT}" has:attachment newer_than:${SEARCH_DAYS}d`;
+    const sinceRaw = `has:attachment newer_than:${Math.max(SEARCH_DAYS * 2, 60)}d`; // fallback breadth
+    const sinceDateLiteral = formatSinceDays(Math.max(SEARCH_DAYS * 3, 90));
+
+    let allResults = [];
+
+    // 1) INBOX targeted search
+    allResults.push(...await searchAndFetch(client, 'INBOX', newerThanRaw));
+    allResults.push(...await searchAndFetch(client, 'INBOX', sinceRaw));
+    allResults.push(...await searchAndFetch(client, 'INBOX', `SINCE ${sinceDateLiteral}`)); // fallback
+
+    // 2) Optionally, search [Gmail]/All Mail as well
+    if (SEARCH_IN_ALLMAIL) {
+      allResults.push(...await searchAndFetch(client, '[Gmail]/All Mail', newerThanRaw));
+      allResults.push(...await searchAndFetch(client, '[Gmail]/All Mail', sinceRaw));
+      allResults.push(...await searchAndFetch(client, '[Gmail]/All Mail', `SINCE ${sinceDateLiteral}`));
+    }
+
+    // Deduplicate by UID+mailbox isn’t reliable across mailboxes; use subject+date hash-ish
+    const seen = new Set();
+    const unique = [];
+    for (const r of allResults) {
+      const key = `${r.subject}__${new Date(r.date).toISOString()}`;
+      if (!seen.has(key)) {
+        seen.add(key);
+        unique.push(r);
+      }
+    }
+
+    // Sort newest first
+    unique.sort((a, b) => new Date(b.date) - new Date(a.date));
+
+    // Filter to CSV attachments (or any attachment—adjust as needed)
+    const csvCandidates = unique.flatMap(m => (m.attachments || []).map(att => ({ msg: m, att })))
+      .filter(({ att }) => {
+        const name = (att.filename || '').toLowerCase();
+        const type = (att.contentType || '').toLowerCase();
+        return name.endsWith('.csv') || type.includes('text/csv') || type.includes('application/vnd.ms-excel');
+      });
+
+    if (csvCandidates.length === 0) {
+      log.warn('No CSV attachment could be extracted from any candidate message.');
+      process.exit(1);
+    }
+
+    // If you want to save the latest CSV to disk, do it here:
+    const latest = csvCandidates[0];
+    log.info({
+      subject: latest.msg.subject,
+      date: latest.msg.date,
+      attachment: latest.att.filename || '(no name)',
+      size: latest.att.content?.length || 0
+    }, 'Found CSV attachment');
+
+    // Example: write to file system (uncomment if your runner needs an artifact)
+    // import { writeFileSync } from 'node:fs';
+    // writeFileSync('latest.csv', latest.att.content);
+
+    // Success
+    process.exit(0);
+
+  } catch (err) {
+    if (err?.authenticationFailed || /No password configured/i.test(String(err))) {
+      log.error('Authentication failed: IMAP_PASS is missing or incorrect.');
+    } else {
+      log.error({ err }, 'Failed to fetch email.');
+    }
+    process.exit(1);
+  } finally {
+    try { await client.logout(); } catch {}
+  }
+})();
