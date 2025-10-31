@@ -22,6 +22,18 @@ if (!IMAP_PASS) {
   process.exit(1);
 }
 
+// Common “All Mail” names used by Gmail across locales
+const MAILBOX_CANDIDATES = [
+  'INBOX',
+  '[Gmail]/All Mail',
+  'All Mail',
+  '[Google Mail]/All Mail',
+  '[Gmail]/Tous les messages',
+  '[Gmail]/Posta in arrivo',             // (rare false positive—still safe)
+  '[Gmail]/Todo',                         // Spanish variants sometimes appear
+  '[Gmail]/Correio todos',                // Portuguese-ish variants
+];
+
 const CSV_NAME_RE = /AC\s*-\s*Daily\s*Facility\s*Global\s*Schedule.*\.csv$/i;
 
 function daysAgo(n) {
@@ -58,7 +70,6 @@ function flattenParts(struct) {
 function pickCsvPart(parts) {
   if (!Array.isArray(parts) || !parts.length) return null;
 
-  // 1) exact CivicPlus name pattern
   const byPattern = parts.find(p => {
     const name =
       p?.disposition?.params?.filename ||
@@ -68,7 +79,6 @@ function pickCsvPart(parts) {
   });
   if (byPattern) return byPattern;
 
-  // 2) any *.csv attachment
   const byExt = parts.find(p => {
     const name =
       p?.disposition?.params?.filename ||
@@ -78,7 +88,6 @@ function pickCsvPart(parts) {
   });
   if (byExt) return byExt;
 
-  // 3) weak type guesser fallback
   const byType = parts.find(
     p =>
       (p.type?.toLowerCase?.() === 'text' && p.subtype?.toLowerCase?.() === 'csv') ||
@@ -106,12 +115,12 @@ async function tryMailbox(client, mailboxName, sinceDate) {
     console.warn(`Subject search failed in "${mailboxName}": ${e?.message || e}`);
   }
 
-  // If that failed, scan recent since-date messages
+  // If no exact subject hit, scan by date and inspect attachments
   if (!Array.isArray(uids) || uids.length === 0) {
     try {
       const bySince = await client.search({ since: sinceDate });
       if (Array.isArray(bySince) && bySince.length) {
-        uids = bySince.slice(-100); // last ~100 to be safe
+        uids = bySince.slice(-150); // check newest ~150 messages
       }
     } catch (e) {
       console.warn(`SINCE search failed in "${mailboxName}": ${e?.message || e}`);
@@ -119,12 +128,16 @@ async function tryMailbox(client, mailboxName, sinceDate) {
     }
   }
 
-  // Newest → oldest: pick first message with a CSV that matches
+  // Newest → oldest, first message with a usable CSV
   for (let i = uids.length - 1; i >= 0; i--) {
     const uid = uids[i];
     let msg;
     try {
-      msg = await client.fetchOne(uid, { envelope: true, bodyStructure: true }, { uid: true });
+      msg = await client.fetchOne(
+        uid,
+        { envelope: true, bodyStructure: true },
+        { uid: true }
+      );
     } catch (e) {
       console.warn(`fetchOne uid=${uid} failed in "${mailboxName}": ${e?.message || e}`);
       continue;
@@ -157,14 +170,6 @@ async function downloadCsv(client, mailbox, uid, partId, outFile) {
   await pipeline(dl.content, createWriteStream(outFile));
 }
 
-function isAllMailBox(meta) {
-  // Prefer specialUse tag
-  if (meta?.specialUse && String(meta.specialUse).toLowerCase().includes('\\all')) return true;
-  // Name heuristics (covers localized variants sometimes labeled in English)
-  const name = (meta?.name || '').toLowerCase();
-  return /all.?mail/.test(name) || name === '[gmail]/all mail';
-}
-
 async function main() {
   const since = daysAgo(7);
   console.log(`Connecting to Gmail as ${IMAP_USER}…`);
@@ -180,28 +185,10 @@ async function main() {
   await client.connect();
 
   try {
-    // Discover All Mail dynamically
-    const boxes = [];
-    for await (const box of client.list()) {
-      boxes.push(box);
-    }
-    const allMailCandidates = boxes.filter(isAllMailBox).map(b => b.name);
-
-    // Build mailbox try order
-    const mailboxOrder = ['INBOX', ...allMailCandidates];
-    // Ensure uniqueness
-    const seen = new Set();
-    const MAILBOXES = mailboxOrder.filter(n => {
-      const key = n.toLowerCase();
-      if (seen.has(key)) return false;
-      seen.add(key);
-      return true;
-    });
-
     let found = null;
     let foundMailbox = null;
 
-    for (const mb of MAILBOXES) {
+    for (const mb of MAILBOX_CANDIDATES) {
       console.log(`Searching "${mb}" since ${since.toString()} for CSV…`);
       const hit = await tryMailbox(client, mb, since);
       if (hit) {
@@ -212,7 +199,7 @@ async function main() {
     }
 
     if (!found) {
-      console.error('No suitable "AC Daily Facility Report" CSV found in any mailbox.');
+      console.error('No suitable "AC Daily Facility Report" CSV found in INBOX or common All Mail names.');
       process.exit(1);
     }
 
