@@ -1,5 +1,5 @@
 // scripts/fetch_email.js
-// ESM module. Ensure your package.json includes: { "type": "module" }
+// ESM module. Ensure package.json includes: { "type": "module" }
 
 import fs from 'node:fs/promises';
 import { createWriteStream } from 'node:fs';
@@ -23,6 +23,7 @@ if (!IMAP_PASS) {
   process.exit(1);
 }
 
+// Matches the CivicPlus CSV name we usually get, but we’ll still accept any .csv
 const CIVICPLUS_RE = /AC\s*-\s*Daily\s*Facility\s*Global\s*Schedule.*\.csv$/i;
 
 async function ensureDir(filePath) {
@@ -59,7 +60,7 @@ function filenameFromPart(p) {
 function pickCsvPart(parts) {
   if (!Array.isArray(parts)) return null;
 
-  // 1) Prefer exact CivicPlus pattern
+  // 1) Prefer exact CivicPlus file naming
   let match = parts.find(p => CIVICPLUS_RE.test(filenameFromPart(p)));
   if (match) return match;
 
@@ -67,12 +68,13 @@ function pickCsvPart(parts) {
   match = parts.find(p => /\.csv$/i.test(filenameFromPart(p)));
   if (match) return match;
 
-  // 3) CSV-ish content types
+  // 3) CSV-like content types (fallback)
   match = parts.find(p => {
     const t = (p.type || '').toLowerCase();
     const s = (p.subtype || '').toLowerCase();
     return (t === 'text' && s === 'csv') || (t === 'application' && s === 'octet-stream');
   });
+
   return match || null;
 }
 
@@ -83,69 +85,78 @@ async function downloadCsv(client, uid, partId, outFile) {
   await pipeline(dl.content, createWriteStream(outFile));
 }
 
-async function searchNewestCsvInMailbox(client, mailboxPath, days = 60, maxFetch = 200) {
+async function openMailbox(client, name) {
+  await client.mailboxOpen(name);
+  console.log(`Opened mailbox: ${name}`);
+}
+
+async function searchNewestCsvViaFetch(client, mailbox, days = 90, maxFetch = 300) {
   try {
-    await client.mailboxOpen(mailboxPath);
-    console.log(`Opened mailbox: ${mailboxPath}`);
+    await openMailbox(client, mailbox);
   } catch (e) {
-    console.warn(`Cannot open mailbox "${mailboxPath}": ${e?.message || e}`);
+    console.warn(`Cannot open mailbox "${mailbox}": ${e?.message || e}`);
     return null;
   }
 
   const since = new Date(Date.now() - days * 24 * 60 * 60 * 1000);
 
-  // Broad, robust search: last N days, any message
   let uids = [];
   try {
+    // Broad search: everything since date (we’ll filter by attachment later)
     uids = await client.search({ since });
   } catch (e) {
-    console.warn(`IMAP SEARCH failed in "${mailboxPath}": ${e?.message || e}`);
+    console.warn(`IMAP SEARCH failed in "${mailbox}": ${e?.message || e}`);
     return null;
   }
 
   if (!uids?.length) {
-    console.log(`No messages found in ${mailboxPath} since ${since.toISOString()}`);
+    console.log(`No messages found in ${mailbox} since ${since.toISOString()}`);
     return null;
   }
 
-  // Consider only the most recent chunk (cap to maxFetch)
+  // Limit how many we fetch for speed; newest first
   const subset = uids.slice(-maxFetch);
 
-  // Walk newest → oldest
-  for (let i = subset.length - 1; i >= 0; i--) {
-    const uid = subset[i];
-    let msg;
-    try {
-      msg = await client.fetchOne(uid, { envelope: true, bodyStructure: true }, { uid: true });
-    } catch (e) {
-      console.warn(`fetchOne uid=${uid} failed: ${e?.message || e}`);
-      continue;
+  // Pull envelope, bodyStructure, internalDate for the subset in bulk
+  const candidates = [];
+  try {
+    for await (const msg of client.fetch(subset, {
+      uid: true,
+      envelope: true,
+      bodyStructure: true,
+      internalDate: true
+    }, {uid: true})) {
+      const uid = msg?.uid;
+      const subject = msg?.envelope?.subject || '(no subject)';
+      const whenMs = msg?.internalDate ? new Date(msg.internalDate).getTime() : 0;
+
+      const parts = flattenParts(msg?.bodyStructure);
+      const csvPart = pickCsvPart(parts);
+      const fn = csvPart ? filenameFromPart(csvPart) : '';
+      console.log(
+        `Consider uid=${uid} | ${msg?.internalDate || 'no date'} | "${subject}" | ` +
+        (csvPart ? `CSV: ${fn}` : 'no CSV')
+      );
+
+      if (csvPart?.part) {
+        candidates.push({
+          uid,
+          partId: csvPart.part,
+          subject,
+          whenMs,
+          filename: fn || '(no filename)'
+        });
+      }
     }
-
-    const subj = msg?.envelope?.subject || '(no subject)';
-    const when = msg?.envelope?.date ? new Date(msg.envelope.date) : null;
-    const parts = flattenParts(msg?.bodyStructure);
-    const csvPart = pickCsvPart(parts);
-
-    // Log what we’re evaluating (helps debug)
-    const fn = csvPart ? filenameFromPart(csvPart) : '';
-    console.log(
-      `Consider uid=${uid} | ${when?.toISOString() || 'no date'} | "${subj}" | ` +
-      (csvPart ? `CSV: ${fn}` : 'no CSV')
-    );
-
-    if (csvPart?.part) {
-      return {
-        uid,
-        partId: csvPart.part,
-        subject: subj,
-        date: when,
-        filename: fn || '(no filename)',
-      };
-    }
+  } catch (e) {
+    console.warn(`fetch() failed in "${mailbox}": ${e?.message || e}`);
   }
 
-  return null;
+  if (!candidates.length) return null;
+
+  // Newest by internal date
+  candidates.sort((a, b) => b.whenMs - a.whenMs);
+  return candidates[0];
 }
 
 async function main() {
@@ -155,29 +166,29 @@ async function main() {
     port: 993,
     secure: true,
     auth: { user: IMAP_USER, pass: IMAP_PASS },
-    logger: false, // set to console for verbose logs
+    logger: false
   });
 
   await client.connect();
 
   try {
-    // 1) INBOX first
-    let chosen = await searchNewestCsvInMailbox(client, 'INBOX');
+    // Try INBOX first
+    let chosen = await searchNewestCsvViaFetch(client, 'INBOX', 90, 400);
 
-    // 2) If not there, try All Mail (we’ll use the common Gmail name)
+    // Then the canonical Gmail All Mail
     if (!chosen) {
-      chosen = await searchNewestCsvInMailbox(client, '[Gmail]/All Mail');
+      chosen = await searchNewestCsvViaFetch(client, '[Gmail]/All Mail', 180, 600);
     }
 
     if (!chosen) {
       console.error(
-        'No suitable "AC Daily Facility Global Schedule" CSV found (checked INBOX then [Gmail]/All Mail, last 60 days).'
+        'No suitable "AC Daily Facility Global Schedule" CSV found (checked INBOX then [Gmail]/All Mail).'
       );
       process.exit(1);
     }
 
     console.log(
-      `Chosen uid=${chosen.uid} | ${chosen.date || 'unknown date'} | ${chosen.subject}`
+      `Chosen uid=${chosen.uid} | ${new Date(chosen.whenMs).toISOString()} | ${chosen.subject}`
     );
     console.log(`Attachment: ${chosen.filename} (part ${chosen.partId})`);
 
