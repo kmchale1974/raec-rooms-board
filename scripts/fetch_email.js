@@ -1,5 +1,5 @@
 // scripts/fetch_email.js
-// ESM module (package.json should include: "type": "module")
+// ESM module. Ensure your package.json includes: { "type": "module" }
 
 import fs from 'node:fs/promises';
 import { createWriteStream } from 'node:fs';
@@ -8,6 +8,7 @@ import { pipeline } from 'node:stream/promises';
 import { ImapFlow } from 'imapflow';
 
 const {
+  IMAP_HOST = 'imap.gmail.com',
   IMAP_USER,
   IMAP_PASS,
   OUT_CSV = 'data/inbox/latest.csv',
@@ -22,8 +23,7 @@ if (!IMAP_PASS) {
   process.exit(1);
 }
 
-// Prefer the CivicPlus export filename; fallback to any .csv
-const CSV_NAME_RE = /AC\s*-\s*Daily\s*Facility\s*Global\s*Schedule.*\.csv$/i;
+const CIVICPLUS_RE = /AC\s*-\s*Daily\s*Facility\s*Global\s*Schedule.*\.csv$/i;
 
 async function ensureDir(filePath) {
   await fs.mkdir(path.dirname(filePath), { recursive: true });
@@ -48,30 +48,32 @@ function flattenParts(struct) {
   return out;
 }
 
-function pickCsvPart(parts) {
-  if (!Array.isArray(parts) || !parts.length) return null;
-
-  // Best: exact CivicPlus pattern
-  const byPattern = parts.find(p => {
-    const name = p?.disposition?.params?.filename || p?.parameters?.name || '';
-    return CSV_NAME_RE.test(name);
-  });
-  if (byPattern) return byPattern;
-
-  // Next: any .csv filename
-  const byExt = parts.find(p => {
-    const name = p?.disposition?.params?.filename || p?.parameters?.name || '';
-    return /\.csv$/i.test(name);
-  });
-  if (byExt) return byExt;
-
-  // Last: CSV-like content types
-  const byType = parts.find(
-    p =>
-      (p.type?.toLowerCase?.() === 'text' && p.subtype?.toLowerCase?.() === 'csv') ||
-      (p.type?.toLowerCase?.() === 'application' && p.subtype?.toLowerCase?.() === 'octet-stream')
+function filenameFromPart(p) {
+  return (
+    p?.disposition?.params?.filename ||
+    p?.parameters?.name ||
+    ''
   );
-  return byType || null;
+}
+
+function pickCsvPart(parts) {
+  if (!Array.isArray(parts)) return null;
+
+  // 1) Prefer exact CivicPlus pattern
+  let match = parts.find(p => CIVICPLUS_RE.test(filenameFromPart(p)));
+  if (match) return match;
+
+  // 2) Any filename ending in .csv
+  match = parts.find(p => /\.csv$/i.test(filenameFromPart(p)));
+  if (match) return match;
+
+  // 3) CSV-ish content types
+  match = parts.find(p => {
+    const t = (p.type || '').toLowerCase();
+    const s = (p.subtype || '').toLowerCase();
+    return (t === 'text' && s === 'csv') || (t === 'application' && s === 'octet-stream');
+  });
+  return match || null;
 }
 
 async function downloadCsv(client, uid, partId, outFile) {
@@ -81,132 +83,101 @@ async function downloadCsv(client, uid, partId, outFile) {
   await pipeline(dl.content, createWriteStream(outFile));
 }
 
-async function findAllMailBox(client) {
-  // Try the official special-use discovery (\All)
+async function searchNewestCsvInMailbox(client, mailboxPath, days = 60, maxFetch = 200) {
   try {
-    const found = [];
-    for await (const box of client.list()) {
-      // ImapFlow returns .path and .specialUse (array of strings) when available
-      const su = (box.specialUse || []).map(s => s.toLowerCase());
-      if (su.includes('\\all') || su.includes('all')) {
-        found.push(box.path);
-      }
-    }
-    if (found.length) {
-      // First match wins; also log what we picked
-      console.log(`Discovered All Mail via special-use: ${found[0]}`);
-      return found[0];
-    }
+    await client.mailboxOpen(mailboxPath);
+    console.log(`Opened mailbox: ${mailboxPath}`);
   } catch (e) {
-    console.warn(`Special-use discovery failed: ${e?.message || e}`);
+    console.warn(`Cannot open mailbox "${mailboxPath}": ${e?.message || e}`);
+    return null;
   }
 
-  // Fallback: try common localized names (as a last resort)
-  const candidates = [
-    '[Gmail]/All Mail',
-    'All Mail',
-    '[Google Mail]/All Mail',
-    '[Gmail]/Tous les messages',
-    '[Gmail]/Alle Nachrichten',
-    '[Gmail]/Todos',
-    '[Gmail]/Posta in arrivo', // unlikely All Mail, but we tried earlier
-  ];
-  for (const name of candidates) {
-    try {
-      await client.mailboxOpen(name);
-      console.log(`Opened candidate All Mail: ${name}`);
-      return name;
-    } catch {
-      /* keep trying */
-    }
+  const since = new Date(Date.now() - days * 24 * 60 * 60 * 1000);
+
+  // Broad, robust search: last N days, any message
+  let uids = [];
+  try {
+    uids = await client.search({ since });
+  } catch (e) {
+    console.warn(`IMAP SEARCH failed in "${mailboxPath}": ${e?.message || e}`);
+    return null;
   }
-  return null;
-}
 
-async function searchNewestCsvInMailbox(client, mailboxPath) {
-  await client.mailboxOpen(mailboxPath);
-  console.log(`Opened mailbox: ${mailboxPath}`);
-
-  // Try tighter query first (subject + has:attachment + csv filename)
-  let uids = await client.search({
-    // last 14 days; adjust if you want longer
-    gmailRaw:
-      'newer_than:14d has:attachment filename:csv subject:"AC Daily Facility Report"',
-  });
-
-  // Looser: any CSV in last 14d
   if (!uids?.length) {
-    uids = await client.search({
-      gmailRaw: 'newer_than:14d has:attachment filename:csv',
-    });
+    console.log(`No messages found in ${mailboxPath} since ${since.toISOString()}`);
+    return null;
   }
 
-  if (!uids?.length) return null;
+  // Consider only the most recent chunk (cap to maxFetch)
+  const subset = uids.slice(-maxFetch);
 
-  // Walk newest → oldest to find a message that actually has a CSV attachment
-  for (let i = uids.length - 1; i >= 0; i--) {
-    const uid = uids[i];
+  // Walk newest → oldest
+  for (let i = subset.length - 1; i >= 0; i--) {
+    const uid = subset[i];
     let msg;
     try {
-      msg = await client.fetchOne(
-        uid,
-        { envelope: true, bodyStructure: true },
-        { uid: true }
-      );
+      msg = await client.fetchOne(uid, { envelope: true, bodyStructure: true }, { uid: true });
     } catch (e) {
       console.warn(`fetchOne uid=${uid} failed: ${e?.message || e}`);
       continue;
     }
+
+    const subj = msg?.envelope?.subject || '(no subject)';
+    const when = msg?.envelope?.date ? new Date(msg.envelope.date) : null;
     const parts = flattenParts(msg?.bodyStructure);
     const csvPart = pickCsvPart(parts);
+
+    // Log what we’re evaluating (helps debug)
+    const fn = csvPart ? filenameFromPart(csvPart) : '';
+    console.log(
+      `Consider uid=${uid} | ${when?.toISOString() || 'no date'} | "${subj}" | ` +
+      (csvPart ? `CSV: ${fn}` : 'no CSV')
+    );
+
     if (csvPart?.part) {
-      const subj = msg?.envelope?.subject || '(no subject)';
-      const when = msg?.envelope?.date ? new Date(msg.envelope.date) : null;
-      const filename =
-        csvPart.disposition?.params?.filename ||
-        csvPart.parameters?.name ||
-        '(no filename)';
-      return { uid, partId: csvPart.part, subject: subj, date: when, filename };
+      return {
+        uid,
+        partId: csvPart.part,
+        subject: subj,
+        date: when,
+        filename: fn || '(no filename)',
+      };
     }
   }
+
   return null;
 }
 
 async function main() {
   console.log(`Connecting to Gmail as ${IMAP_USER}…`);
   const client = new ImapFlow({
-    host: 'imap.gmail.com',
+    host: IMAP_HOST,
     port: 993,
     secure: true,
     auth: { user: IMAP_USER, pass: IMAP_PASS },
-    logger: false, // set to console for very verbose logs
+    logger: false, // set to console for verbose logs
   });
 
   await client.connect();
 
   try {
-    // 1) Try INBOX
+    // 1) INBOX first
     let chosen = await searchNewestCsvInMailbox(client, 'INBOX');
 
-    // 2) If not in INBOX, try the discovered All Mail
+    // 2) If not there, try All Mail (we’ll use the common Gmail name)
     if (!chosen) {
-      const allMail = await findAllMailBox(client);
-      if (allMail) {
-        chosen = await searchNewestCsvInMailbox(client, allMail);
-      } else {
-        console.warn('Could not discover an All Mail mailbox over IMAP.');
-      }
+      chosen = await searchNewestCsvInMailbox(client, '[Gmail]/All Mail');
     }
 
     if (!chosen) {
       console.error(
-        'No suitable "AC Daily Facility Report" CSV found in INBOX or All Mail (last 14 days).'
+        'No suitable "AC Daily Facility Global Schedule" CSV found (checked INBOX then [Gmail]/All Mail, last 60 days).'
       );
       process.exit(1);
     }
 
     console.log(
-      `Chosen message uid=${chosen.uid} | ${chosen.date || 'unknown date'} | ${chosen.subject}`
+      `Chosen uid=${chosen.uid} | ${chosen.date || 'unknown date'} | ${chosen.subject}`
     );
     console.log(`Attachment: ${chosen.filename} (part ${chosen.partId})`);
 
@@ -216,9 +187,7 @@ async function main() {
     console.error('fetch_email failed:', err?.message || err);
     process.exit(1);
   } finally {
-    try {
-      await client.logout();
-    } catch {}
+    try { await client.logout(); } catch {}
   }
 }
 
