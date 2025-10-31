@@ -1,14 +1,12 @@
 {
   "name": "raec-rooms-board",
-  "version": "1.0.0",
-  "type": "module",
   "private": true,
+  "type": "module",
   "scripts": {
-    "fetch": "node scripts/fetch_email.js",
-    "transform": "node scripts/transform.mjs"
+    "fetch-email": "node scripts/fetch_email.js"
   },
   "dependencies": {
-    "imapflow": "^1.0.199",
-    "mailparser": "3.7.4"
+    "imapflow": "^1.0.200",
+    "mailparser": "^3.8.0"
   }
 }
