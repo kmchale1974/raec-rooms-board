@@ -1,51 +1,38 @@
-name: Fetch RAEC Emails
+name: Fetch Email (IMAP)
 
 on:
   workflow_dispatch:
   schedule:
-    - cron: "10 * * * *" # hourly at :10 (optional—remove if not needed)
-
-permissions:
-  contents: read
+    - cron: "0 * * * *"  # hourly, adjust as needed
 
 jobs:
   fetch:
     runs-on: ubuntu-latest
-
+    permissions:
+      contents: read
     steps:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Use Node.js 20
+      - name: Use Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: "20"
+          node-version: '20'
 
       - name: Install deps
         run: npm ci
-
-      # Preflight: ensure creds are present in this job
-      - name: Assert IMAP creds present
-        shell: bash
         env:
-          IMAP_USER: ${{ vars.IMAP_USER || 'raecroominfo.board@gmail.com' }}
-          IMAP_PASS: ${{ secrets.IMAP_PASS }}
-        run: |
-          [[ -n "$IMAP_USER" ]] || { echo "::error::IMAP_USER missing"; exit 1; }
-          [[ -n "$IMAP_PASS" ]] || { echo "::error::IMAP_PASS missing (check repo/environment secrets)"; exit 1; }
-          echo "IMAP env present."
+          # Ensure private registries or proxies don’t interfere
+          NPM_CONFIG_FUND: "false"
+          NPM_CONFIG_AUDIT: "false"
 
-      - name: Fetch RAEC emails
-        run: node scripts/fetch_email.js
+      - name: Run fetch script
         env:
-          # If you don't keep IMAP_USER in repo/Env vars, hardcode it here
-          IMAP_USER: ${{ vars.IMAP_USER || 'raecroominfo.board@gmail.com' }}
-          IMAP_PASS: ${{ secrets.IMAP_PASS }}
-
-      - name: Upload extracted CSVs
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: raec-email-csvs
-          path: out/attachments/**
-          if-no-files-found: warn
+          IMAP_USER: ${{ secrets.IMAP_USER }} # optional; default is raecroominfo.board@gmail.com if not set
+          IMAP_PASS: ${{ secrets.IMAP_PASS }} # REQUIRED
+          LOG_LEVEL: info
+          PRETTY_LOGS: "true"
+          SEARCH_SUBJECT: "AC Daily Facility"
+          SEARCH_DAYS: "30"
+          SEARCH_IN_ALLMAIL: "true"
+        run: npm run fetch-email
