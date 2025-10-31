@@ -23,6 +23,7 @@ if (!IMAP_PASS) {
   process.exit(1);
 }
 
+// Typical CivicPlus filename pattern
 const CIVICPLUS_RE = /AC\s*-\s*Daily\s*Facility\s*Global\s*Schedule.*\.csv$/i;
 
 async function ensureDir(filePath) {
@@ -43,40 +44,61 @@ function flattenParts(struct) {
       subtype: (node.subtype || '').toLowerCase(),
       parameters: node.parameters || {},
       disposition: node.disposition || {},
+      size: node.size || 0,
     });
   })(struct);
   return out;
 }
 
 function filenameFromPart(p) {
+  const d = p?.disposition || {};
+  const dp = d.params || d.parameters || {};
+  const pp = p?.parameters || {};
   return (
-    p?.disposition?.params?.filename ||
-    p?.parameters?.name ||
+    dp.filename ||
+    dp.name ||
+    pp.name ||
     ''
   );
+}
+
+function isAttachment(p) {
+  const disp = (p?.disposition?.type || '').toLowerCase();
+  return disp === 'attachment' || disp === 'inline'; // Gmail often sets inline for attachments
+}
+
+function looksLikeCsv(p) {
+  const fn = filenameFromPart(p);
+  const hasCsvName = /\.csv$/i.test(fn) || CIVICPLUS_RE.test(fn);
+  const isCsvMime =
+    (p.type === 'text' && (p.subtype === 'csv' || p.subtype === 'comma-separated-values')) ||
+    (p.type === 'application' && (p.subtype === 'vnd.ms-excel' || p.subtype === 'csv'));
+
+  // As a fallback, treat any non-zero-sized attachment with a plausible name as CSV
+  const genericMaybe =
+    isAttachment(p) &&
+    p.size > 0 &&
+    /(schedule|facility|global|daily)/i.test(fn || '');
+
+  return hasCsvName || isCsvMime || genericMaybe;
 }
 
 function pickCsvPart(parts) {
   if (!Array.isArray(parts)) return null;
 
-  // Prefer CivicPlus naming
+  // 1) Exact CivicPlus name
   let match = parts.find(p => CIVICPLUS_RE.test(filenameFromPart(p)));
   if (match) return match;
 
-  // Any .csv filename
+  // 2) Any .csv filename
   match = parts.find(p => /\.csv$/i.test(filenameFromPart(p)));
   if (match) return match;
 
-  // CSV-ish mimetypes
-  match = parts.find(p => {
-    const t = p.type; const s = p.subtype;
-    return (t === 'text' && s === 'csv') || (t === 'application' && s === 'vnd.ms-excel');
-  });
+  // 3) CSV-ish MIME types
+  match = parts.find(p => looksLikeCsv(p));
   if (match) return match;
 
-  // Last resort: octet-stream with plausible name
-  match = parts.find(p => p.type === 'application' && p.subtype === 'octet-stream' && /schedule|facility|global/i.test(filenameFromPart(p)));
-  return match || null;
+  return null;
 }
 
 async function downloadCsv(client, uid, partId, outFile) {
@@ -97,75 +119,71 @@ async function tryOpen(client, mailbox) {
   }
 }
 
-async function pickNewestCsvFromUids(client, uids, label) {
+async function listUids(client, mailbox, queryDesc, query) {
+  const ok = await tryOpen(client, mailbox);
+  if (!ok) return [];
+  try {
+    const uids = await client.search(query);
+    const n = Array.isArray(uids) ? uids.length : 0;
+    console.log(`[${mailbox}] ${queryDesc} → ${n} matches`);
+    return uids || [];
+  } catch (e) {
+    console.warn(`[${mailbox}] search failed (${queryDesc}): ${e?.message || e}`);
+    return [];
+  }
+}
+
+async function pickNewestCsvFromUids(client, mailbox, uids, label) {
   if (!uids?.length) {
-    console.log(`(${label}) No UIDs to fetch.`);
+    console.log(`(${label} @ ${mailbox}) No UIDs to fetch.`);
     return null;
   }
-  const subset = uids.slice(-800); // newest group, bounded
+  // Scan newest first, but cap the volume to keep builds fast
+  const subset = uids.slice(-400);
   const candidates = [];
 
   try {
-    for await (const msg of client.fetch(subset, {
-      uid: true, envelope: true, bodyStructure: true, internalDate: true
-    }, { uid: true })) {
+    for await (const msg of client.fetch(
+      subset,
+      { uid: true, envelope: true, bodyStructure: true, internalDate: true },
+      { uid: true }
+    )) {
       const uid = msg?.uid;
       const subject = (msg?.envelope?.subject || '(no subject)').toString();
       const when = msg?.internalDate ? new Date(msg.internalDate) : null;
       const parts = flattenParts(msg?.bodyStructure);
+
+      // Briefly log the discovered filenames for debugging
+      const names = parts
+        .map(p => filenameFromPart(p))
+        .filter(Boolean)
+        .slice(0, 5);
+      if (names.length) {
+        console.log(`[${label} @ ${mailbox}] uid=${uid} name(s): ${names.join(' | ')}`);
+      }
+
       const csvPart = pickCsvPart(parts);
-      const fn = csvPart ? filenameFromPart(csvPart) : '';
-
-      console.log(
-        `[${label}] uid=${uid} | ${when ? when.toISOString() : 'no-date'} | "${subject}" | ` +
-        (csvPart ? `CSV: ${fn}` : 'no CSV')
-      );
-
       if (csvPart?.part) {
+        const fn = filenameFromPart(csvPart) || '(no filename)';
         candidates.push({
           uid,
           whenMs: when ? when.getTime() : 0,
           partId: csvPart.part,
-          filename: fn || '(no filename)',
+          filename: fn,
           subject
         });
+        console.log(`[${label} @ ${mailbox}] uid=${uid} → CSV match: ${fn}`);
+      } else {
+        console.log(`[${label} @ ${mailbox}] uid=${uid} → no CSV part`);
       }
     }
   } catch (e) {
-    console.warn(`[${label}] fetch failed: ${e?.message || e}`);
+    console.warn(`[${label} @ ${mailbox}] fetch failed: ${e?.message || e}`);
   }
 
   if (!candidates.length) return null;
   candidates.sort((a, b) => b.whenMs - a.whenMs);
   return candidates[0];
-}
-
-async function searchWithGmailRaw(client, mailbox, raw) {
-  const ok = await tryOpen(client, mailbox);
-  if (!ok) return [];
-  try {
-    const uids = await client.search({ gmailRaw: raw });
-    console.log(`[${mailbox}] gmailRaw "${raw}" → ${uids?.length || 0} matches`);
-    return uids || [];
-  } catch (e) {
-    console.warn(`[${mailbox}] gmailRaw search failed: ${e?.message || e}`);
-    return [];
-  }
-}
-
-async function searchSince(client, mailbox, sinceDate) {
-  const ok = await tryOpen(client, mailbox);
-  if (!ok) return [];
-  try {
-    const uids = await client.search({ since: sinceDate });
-    console.log(
-      `[${mailbox}] SEARCH since ${sinceDate.toISOString()} → ${uids?.length || 0} matches`
-    );
-    return uids || [];
-  } catch (e) {
-    console.warn(`[${mailbox}] SEARCH failed: ${e?.message || e}`);
-    return [];
-  }
 }
 
 async function main() {
@@ -180,51 +198,52 @@ async function main() {
 
   await client.connect();
   try {
-    // Strategies to try in order. Each yields an array of UIDs to examine.
+    const mailboxes = ['INBOX', '[Gmail]/All Mail'];
+
+    // Strategies (we try each in BOTH mailboxes before moving on)
     const strategies = [
-      async () => {
-        // Tight subject + attachment in last 21d
-        let uids = await searchWithGmailRaw(client, 'INBOX', 'subject:"AC Daily Facility" has:attachment newer_than:21d');
-        if (!uids.length) uids = await searchWithGmailRaw(client, '[Gmail]/All Mail', 'subject:"AC Daily Facility" has:attachment newer_than:21d');
-        return { label: 'subject+attach(21d)', uids };
+      {
+        desc: 'subject+attach(21d)',
+        queryDesc: 'gmailRaw "subject:"AC Daily Facility" has:attachment newer_than:21d"',
+        query: { gmailRaw: 'subject:"AC Daily Facility" has:attachment newer_than:21d' },
       },
-      async () => {
-        // Any message with attachments in last 60d
-        let uids = await searchWithGmailRaw(client, 'INBOX', 'has:attachment newer_than:60d');
-        if (!uids.length) uids = await searchWithGmailRaw(client, '[Gmail]/All Mail', 'has:attachment newer_than:60d');
-        return { label: 'attach(60d)', uids };
+      {
+        desc: 'attach(60d)',
+        queryDesc: 'gmailRaw "has:attachment newer_than:60d"',
+        query: { gmailRaw: 'has:attachment newer_than:60d' },
       },
-      async () => {
-        // Plain IMAP since 90d, filter by bodystructure ourselves
-        const since = new Date(Date.now() - 90 * 24 * 3600 * 1000);
-        let uids = await searchSince(client, 'INBOX', since);
-        if (!uids.length) uids = await searchSince(client, '[Gmail]/All Mail', since);
-        return { label: 'since(90d)', uids };
+      {
+        desc: 'since(90d)',
+        makeQuery: () => ({ since: new Date(Date.now() - 90 * 24 * 3600 * 1000) }),
+        queryDesc: 'SEARCH since 90 days',
       }
     ];
 
     let chosen = null;
 
     for (const strat of strategies) {
-      const { label, uids } = await strat();
-      if (!uids?.length) {
-        // No messages in this strategy; keep going
-        continue;
+      for (const mb of mailboxes) {
+        const query = strat.query || strat.makeQuery?.();
+        const uids = await listUids(client, mb, strat.queryDesc, query);
+        if (!uids.length) continue;
+
+        const found = await pickNewestCsvFromUids(client, mb, uids, strat.desc);
+        if (found) {
+          chosen = found;
+          break;
+        }
       }
-      // Try to find a CSV attachment among those UIDs
-      chosen = await pickNewestCsvFromUids(client, uids, label);
-      if (chosen) break; // success
-      // Otherwise, try next strategy
-      console.log(`No CSV found via strategy "${label}", falling back…`);
+      if (chosen) break; // stop trying strategies
+      console.log(`No CSV found via strategy "${strat.desc}", trying next…`);
     }
 
     if (!chosen) {
-      console.error('No attachments that look like the Facility CSV were found in matched messages across all strategies.');
+      console.error('No attachments that look like the Facility CSV were found in matched messages across all strategies and mailboxes.');
       process.exit(1);
     }
 
     console.log(
-      `Chosen uid=${chosen.uid} | ${new Date(chosen.whenMs).toISOString()} | "${chosen.subject}"`
+      `Chosen uid=${chosen.uid} | "${chosen.subject}" | ${new Date(chosen.whenMs).toISOString()}`
     );
     console.log(`Attachment: ${chosen.filename} (part ${chosen.partId})`);
 
