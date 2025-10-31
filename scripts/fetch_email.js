@@ -1,5 +1,5 @@
 // scripts/fetch_email.js
-// ESM (package.json should have: { "type": "module" })
+// ESM file (package.json should contain { "type": "module" })
 
 import fs from 'node:fs/promises';
 import { createWriteStream } from 'node:fs';
@@ -23,29 +23,45 @@ if (!IMAP_PASS) {
   process.exit(1);
 }
 
-const CIVICPLUS_RE = /AC\s*-\s*Daily\s*Facility\s*Global\s*Schedule.*\.csv$/i;
+const NAME_HINT = /AC\s*-\s*Daily\s*Facility\s*Global\s*Schedule/i;
 
 async function ensureDir(filePath) {
   await fs.mkdir(path.dirname(filePath), { recursive: true });
 }
 
+function get(obj, ...keys) {
+  for (const k of keys) {
+    if (obj && Object.prototype.hasOwnProperty.call(obj, k)) obj = obj[k];
+    else return undefined;
+  }
+  return obj;
+}
+
 function flattenParts(struct) {
   const out = [];
-  (function walk(node) {
+  const walk = (node) => {
     if (!node) return;
-    if (Array.isArray(node.childNodes) && node.childNodes.length) {
-      node.childNodes.forEach(walk);
+
+    // Multipart containers (varies by version/host)
+    const kids = node.childNodes || node.children || node.parts || [];
+    if (Array.isArray(kids) && kids.length) {
+      kids.forEach(walk);
       return;
     }
+
+    // Leaf
     out.push({
-      part: node.part,
+      part: node.part || node.partId || '?',
       type: (node.type || '').toLowerCase(),
       subtype: (node.subtype || '').toLowerCase(),
       parameters: node.parameters || {},
       disposition: node.disposition || {},
+      id: node.id,
+      description: node.description,
       size: node.size || 0,
     });
-  })(struct);
+  };
+  walk(struct);
   return out;
 }
 
@@ -53,51 +69,70 @@ function filenameFromPart(p) {
   const disp = p?.disposition || {};
   const dp = disp.params || disp.parameters || {};
   const pp = p?.parameters || {};
-  // Gmail often stuffs names in any of these
-  return (dp.filename || dp.name || pp.name || '').toString();
+
+  // Try all the likely places, plus some fallbacks Gmail occasionally uses
+  return (
+    dp.filename ||
+    dp.name ||
+    pp.name ||
+    p?.id ||
+    p?.description ||
+    '' // return empty string if nothing found
+  ).toString();
 }
 
-function isAttachment(p) {
-  // Gmail frequently uses "inline" for attachments as well
+function isProbablyAttachment(p) {
   const disp = (p?.disposition?.type || '').toLowerCase();
-  return disp === 'attachment' || disp === 'inline';
+  // Gmail sometimes omits disposition entirely; treat text/plain+base64-ish as candidates
+  return (
+    disp === 'attachment' ||
+    disp === 'inline' ||
+    (!disp && p.size > 1024) // heuristic fallback
+  );
 }
 
-function looksLikeCsv(p) {
-  const fn = filenameFromPart(p);
-  const hasCsvName = /\.csv$/i.test(fn) || CIVICPLUS_RE.test(fn);
+function looksLikeCsvByMime(p) {
+  // Plenty of variants; text/plain BASE64 is common for these reports
+  if (p.type === 'text' && (p.subtype === 'csv' || p.subtype === 'comma-separated-values' || p.subtype === 'plain')) {
+    return true;
+  }
+  if (p.type === 'application' && (p.subtype === 'csv' || p.subtype === 'vnd.ms-excel' || p.subtype === 'octet-stream')) {
+    return true;
+  }
+  return false;
+}
 
-  const isCsvMime =
-    (p.type === 'text' && (p.subtype === 'csv' || p.subtype === 'comma-separated-values' || p.subtype === 'plain')) ||
-    (p.type === 'application' && (p.subtype === 'vnd.ms-excel' || p.subtype === 'csv' || p.subtype === 'octet-stream'));
-
-  // Heuristic: attachment, non-trivial size, and the (possibly missing) filename hints at schedule
-  const genericMaybe =
-    isAttachment(p) &&
-    p.size > 1024 &&
-    (/(schedule|facility|global|daily)/i.test(filenameFromPart(p)) ||
-      // sometimes entirely missing name — allow generic if csv-ish mime
-      isCsvMime);
-
-  return hasCsvName || isCsvMime || genericMaybe;
+function looksLikeCsvByName(name) {
+  if (!name) return false;
+  if (/\.csv$/i.test(name)) return true;
+  // Name hints (CivicRec sometimes plays games with names)
+  if (NAME_HINT.test(name)) return true;
+  if (/(schedule|facility|global|daily)/i.test(name) && /\.txt$/i.test(name) === false) return true;
+  return false;
 }
 
 function pickCsvPart(parts) {
-  if (!Array.isArray(parts)) return null;
+  if (!Array.isArray(parts) || !parts.length) return null;
 
-  // 1) Exact CivicPlus name
-  let match = parts.find(p => CIVICPLUS_RE.test(filenameFromPart(p)));
-  if (match) return match;
+  // 1) Exact/obvious CSV filename
+  let m = parts.find((p) => looksLikeCsvByName(filenameFromPart(p)));
+  if (m) return m;
 
-  // 2) Any .csv filename
-  match = parts.find(p => /\.csv$/i.test(filenameFromPart(p)));
-  if (match) return match;
+  // 2) CSV-ish MIME (often text/plain for these)
+  m = parts.find((p) => looksLikeCsvByMime(p) && isProbablyAttachment(p));
+  if (m) return m;
 
-  // 3) CSV-ish MIME or heuristic
-  match = parts.find(looksLikeCsv);
-  if (match) return match;
+  // 3) Heuristic: any sizeable “attachment-like” text/plain
+  m = parts.find((p) => isProbablyAttachment(p) && p.size > 5 * 1024 && p.type === 'text');
+  if (m) return m;
 
   return null;
+}
+
+function briefPart(p) {
+  const fn = filenameFromPart(p) || '(no-filename)';
+  const disp = p?.disposition?.type || '(no-disposition)';
+  return `${p.part} ${p.type}/${p.subtype} size=${p.size} disp=${disp} fn="${fn}"`;
 }
 
 async function downloadCsv(client, uid, partId, outFile) {
@@ -118,13 +153,12 @@ async function tryOpen(client, mailbox) {
   }
 }
 
-async function listUids(client, mailbox, queryDesc, query) {
+async function searchUids(client, mailbox, queryDesc, query) {
   const ok = await tryOpen(client, mailbox);
   if (!ok) return [];
   try {
     const uids = await client.search(query);
-    const n = Array.isArray(uids) ? uids.length : 0;
-    console.log(`[${mailbox}] ${queryDesc} → ${n} matches`);
+    console.log(`[${mailbox}] ${queryDesc} → ${uids?.length || 0} matches`);
     return Array.isArray(uids) ? uids : [];
   } catch (e) {
     console.warn(`[${mailbox}] search failed (${queryDesc}): ${e?.message || e}`);
@@ -132,18 +166,11 @@ async function listUids(client, mailbox, queryDesc, query) {
   }
 }
 
-function briefPart(p) {
-  const fn = filenameFromPart(p);
-  return `${p.part || '?'} ${p.type || ''}/${p.subtype || ''} size=${p.size} fn="${fn || '(none)'}" disp=${p?.disposition?.type || '(none)'}`;
-}
-
-async function inspectAndPick(client, mailbox, label, uids) {
+async function inspectNewest(client, mailbox, label, uids) {
   if (!uids?.length) return null;
 
-  // Look at the newest ~300 to keep the run time predictable
-  const subset = uids.slice(-300);
-  let inspected = 0;
-  const found = [];
+  const subset = uids.slice(-200); // newest window
+  let newestPick = null;
 
   try {
     for await (const msg of client.fetch(
@@ -151,84 +178,79 @@ async function inspectAndPick(client, mailbox, label, uids) {
       { uid: true, envelope: true, bodyStructure: true, internalDate: true },
       { uid: true }
     )) {
-      inspected++;
       const uid = msg?.uid;
       const subject = (msg?.envelope?.subject || '(no subject)').toString();
       const whenIso = msg?.internalDate ? new Date(msg.internalDate).toISOString() : '(no date)';
       const parts = flattenParts(msg?.bodyStructure);
 
-      // Log first few parts to see what Gmail is giving us
-      const partSummaries = parts.slice(0, 6).map(briefPart).join(' | ');
-      console.log(`[${label} @ ${mailbox}] uid=${uid} ${whenIso} subj="${subject}" parts: ${partSummaries}`);
+      // Log parts we see
+      console.log(`[${label} @ ${mailbox}] uid=${uid} ${whenIso} subj="${subject}"`);
+      if (!parts.length) {
+        console.log('  (no parts)');
+        continue;
+      }
+      parts.forEach((p) => console.log('  ', briefPart(p)));
 
-      const csvPart = pickCsvPart(parts);
-      if (csvPart?.part) {
-        const fn = filenameFromPart(csvPart) || '(no filename)';
-        console.log(`[${label} @ ${mailbox}] uid=${uid} → CSV PICK: part ${csvPart.part} "${fn}" ${csvPart.type}/${csvPart.subtype} size=${csvPart.size}`);
-        found.push({
-          uid,
-          whenMs: msg?.internalDate ? new Date(msg.internalDate).getTime() : 0,
-          partId: csvPart.part,
-          filename: fn,
-          subject
-        });
-      } else {
-        console.log(`[${label} @ ${mailbox}] uid=${uid} → no CSV part recognized`);
+      const csv = pickCsvPart(parts);
+      if (csv) {
+        // prefer newest by internalDate
+        const whenMs = msg?.internalDate ? new Date(msg.internalDate).getTime() : 0;
+        if (!newestPick || whenMs > newestPick.whenMs) {
+          newestPick = {
+            uid,
+            mailbox,
+            whenMs,
+            subject,
+            partId: csv.part,
+            filename: filenameFromPart(csv) || '(no-filename)',
+            type: `${csv.type}/${csv.subtype}`,
+            size: csv.size,
+          };
+        }
       }
     }
   } catch (e) {
     console.warn(`[${label} @ ${mailbox}] fetch failed: ${e?.message || e}`);
   }
-
-  if (!found.length) return null;
-  found.sort((a, b) => b.whenMs - a.whenMs);
-  return found[0];
+  return newestPick;
 }
 
 async function bruteForcePick(client, mailbox) {
-  // Absolute last resort: scan the newest 50 messages in this mailbox and
-  // pick the largest attachment that has a .csv filename OR looks attachment-ish.
+  // Absolute fallback: newest 50 messages, largest plausible “attachment-like” leaf
   const ok = await tryOpen(client, mailbox);
   if (!ok) return null;
-
-  // Get newest 50 UIDs in this mailbox
   let uids = await client.search({ all: true });
   uids = Array.isArray(uids) ? uids.slice(-50) : [];
   if (!uids.length) return null;
 
-  const candidates = [];
+  let candidate = null;
+  for await (const msg of client.fetch(
+    uids,
+    { uid: true, envelope: true, bodyStructure: true, internalDate: true },
+    { uid: true }
+  )) {
+    const parts = flattenParts(msg?.bodyStructure);
+    const attachy = parts
+      .filter((p) => isProbablyAttachment(p) && p.size > 1024)
+      .sort((a, b) => b.size - a.size);
+    if (!attachy.length) continue;
 
-  try {
-    for await (const msg of client.fetch(
-      uids,
-      { uid: true, envelope: true, bodyStructure: true, internalDate: true },
-      { uid: true }
-    )) {
-      const parts = flattenParts(msg?.bodyStructure);
-      const attachments = parts.filter(p => isAttachment(p) && p.size > 512);
-      if (!attachments.length) continue;
-
-      // Prefer CSV-like names, else largest attachment
-      const withCsvName = attachments.filter(a => /\.csv$/i.test(filenameFromPart(a)));
-      const pick = (withCsvName[0] || attachments.sort((a, b) => b.size - a.size)[0]);
-      if (pick?.part) {
-        candidates.push({
-          uid: msg.uid,
-          whenMs: msg?.internalDate ? new Date(msg.internalDate).getTime() : 0,
-          partId: pick.part,
-          filename: filenameFromPart(pick) || '(no filename)',
-          subject: (msg?.envelope?.subject || '(no subject)').toString(),
-        });
-        console.log(`[bruteforce @ ${mailbox}] uid=${msg.uid} → PICK part ${pick.part} "${filenameFromPart(pick) || '(no filename)'}"`);
-      }
+    const top = attachy[0];
+    const whenMs = msg?.internalDate ? new Date(msg.internalDate).getTime() : 0;
+    if (!candidate || whenMs > candidate.whenMs) {
+      candidate = {
+        uid: msg.uid,
+        mailbox,
+        whenMs,
+        partId: top.part,
+        filename: filenameFromPart(top) || '(no-filename)',
+        subject: (msg?.envelope?.subject || '(no subject)').toString(),
+        type: `${top.type}/${top.subtype}`,
+        size: top.size,
+      };
     }
-  } catch (e) {
-    console.warn(`[bruteforce @ ${mailbox}] fetch failed: ${e?.message || e}`);
   }
-
-  if (!candidates.length) return null;
-  candidates.sort((a, b) => b.whenMs - a.whenMs);
-  return candidates[0];
+  return candidate;
 }
 
 async function main() {
@@ -244,37 +266,34 @@ async function main() {
   try {
     const mailboxes = ['INBOX', '[Gmail]/All Mail'];
 
-    // Strategies
+    // Three strategies, both boxes
     const strategies = [
       {
         desc: 'subject+attach(21d)',
-        queryDesc: 'gmailRaw "subject:\\"AC Daily Facility\\" has:attachment newer_than:21d"',
-        makeQuery: () => ({ gmailRaw: 'subject:"AC Daily Facility" has:attachment newer_than:21d' }),
+        qDesc: 'X-GM-RAW subject:"AC Daily Facility" has:attachment newer_than:21d',
+        make: () => ({ gmailRaw: 'subject:"AC Daily Facility" has:attachment newer_than:21d' }),
       },
       {
         desc: 'attach(60d)',
-        queryDesc: 'gmailRaw "has:attachment newer_than:60d"',
-        makeQuery: () => ({ gmailRaw: 'has:attachment newer_than:60d' }),
+        qDesc: 'X-GM-RAW has:attachment newer_than:60d',
+        make: () => ({ gmailRaw: 'has:attachment newer_than:60d' }),
       },
       {
         desc: 'since(90d)',
-        queryDesc: 'SEARCH since 90 days',
-        makeQuery: () => ({ since: new Date(Date.now() - 90 * 24 * 3600 * 1000) }),
+        qDesc: 'SINCE 90 days',
+        make: () => ({ since: new Date(Date.now() - 90 * 24 * 3600 * 1000) }),
       },
     ];
 
     let chosen = null;
 
-    // For each strategy, search BOTH mailboxes and try to pick
     for (const strat of strategies) {
       for (const mb of mailboxes) {
-        const q = strat.makeQuery();
-        const uids = await listUids(client, mb, strat.queryDesc, q);
+        const uids = await searchUids(client, mb, strat.qDesc, strat.make());
         if (!uids.length) continue;
-
-        const pick = await inspectAndPick(client, mb, strat.desc, uids);
+        const pick = await inspectNewest(client, mb, strat.desc, uids);
         if (pick) {
-          chosen = { ...pick, mailbox: mb, strategy: strat.desc };
+          chosen = { ...pick, strategy: strat.desc };
           break;
         }
       }
@@ -282,12 +301,11 @@ async function main() {
       console.log(`No CSV found via strategy "${strat.desc}", trying next…`);
     }
 
-    // Brute-force as last resort
     if (!chosen) {
       console.log('No CSV found via normal strategies — trying brute-force on newest messages…');
       for (const mb of mailboxes) {
         const bf = await bruteForcePick(client, mb);
-        if (bf) { chosen = { ...bf, mailbox: mb, strategy: 'bruteforce' }; break; }
+        if (bf) { chosen = { ...bf, strategy: 'bruteforce' }; break; }
       }
     }
 
@@ -297,9 +315,10 @@ async function main() {
     }
 
     console.log(
-      `Chosen [${chosen.strategy}] from ${chosen.mailbox} → uid=${chosen.uid} | "${chosen.subject}" | part ${chosen.partId} | ${chosen.filename}`
+      `Chosen [${chosen.strategy}] ${chosen.mailbox} uid=${chosen.uid} part=${chosen.partId} type=${chosen.type} size=${chosen.size} "${chosen.filename}" subj="${chosen.subject}"`
     );
 
+    await ensureDir(OUT_CSV);
     await downloadCsv(client, chosen.uid, chosen.partId, OUT_CSV);
     console.log(`Saved CSV to ${OUT_CSV}`);
   } catch (err) {
