@@ -162,6 +162,34 @@ html,body{
 .page.slide-out{
   animation: slideOutLeft 400ms ease-in both;
 }
+/* Smooth single-card crossfade/slide (left) */
+.single-rotor .event {
+  transition: transform var(--dur) var(--ease), opacity var(--dur) var(--ease);
+  transform: translateX(0);
+  opacity: 1;
+}
+
+/* next enters from right */
+.single-rotor .event.is-enter {
+  transform: translateX(var(--shift));
+  opacity: 0;
+}
+.single-rotor .event.is-enter-active { /* just a hook; already has transition */ }
+.single-rotor .event.is-enter-to {
+  transform: translateX(0);
+  opacity: 1;
+}
+
+/* current exits to left */
+.single-rotor .event.is-exit {
+  transform: translateX(0);
+  opacity: 1;
+}
+.single-rotor .event.is-exit-active { /* hook */ }
+.single-rotor .event.is-exit-to {
+  transform: translateX(calc(-1 * var(--shift)));
+  opacity: 0;
+}
 
 @keyframes slideInLeft{
   from { transform: translateX(100%); opacity:.9; }
