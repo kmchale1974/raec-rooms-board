@@ -3,28 +3,19 @@ name: Build RAEC events json
 on:
   workflow_dispatch:
   schedule:
-    # NOTE: GitHub cron is UTC. Pick one:
-    # - For 08:03 AM America/Chicago during CST (UTC-6): 14:03 UTC
-    # - For 08:03 AM America/Chicago during CDT (UTC-5): 13:03 UTC
-    # If you want "08:03 local Chicago" year-round without DST math, see the comment below.
-    - cron: "3 14 * * *"  # 08:03 CST (will be 09:03 during CDT)
+    - cron: "3 13 * * *"  # 08:03 America/Chicago
 
 permissions:
   contents: write
 
-concurrency:
-  group: raec-events-build
-  cancel-in-progress: false
-
 jobs:
   build:
     runs-on: ubuntu-latest
-
     env:
-      IMAP_USER: ${{ vars.IMAP_USER }}     # or hardcode: raecroominfo.board@gmail.com
+      IMAP_USER: ${{ vars.IMAP_USER }} # or hardcode the email here
       OUT_CSV: data/inbox/latest.csv
       OUT_JSON: events.json
-      TZ: America/Chicago                  # affects node/process, not the scheduler
+      TZ: America/Chicago
 
     steps:
       - name: Checkout
@@ -32,48 +23,18 @@ jobs:
         with:
           fetch-depth: 0
 
-      - name: Use Node.js 20 (with npm cache)
+      - name: Use Node.js 20
         uses: actions/setup-node@v4
         with:
           node-version: "20"
-          cache: "npm"
 
-      - name: Show working dir and files
-        run: |
-          echo "PWD=$(pwd)"
-          ls -la
-
-      # Install deps (prefer ci if a lockfile is present, fall back to install)
-      - name: Install dependencies
-        id: install
-        run: |
-          if [ -f package-lock.json ]; then
-            echo "Lockfile present -> npm ci"
-            npm ci --no-audit --no-fund
-          else
-            echo "No lockfile -> npm install"
-            npm install --no-audit --no-fund
-          fi
+      - name: Install deps (lockfile-aware)
+        run: npm ci
 
       - name: Ensure data folders exist
         run: |
           mkdir -p data/inbox
           mkdir -p data/tmp
-
-      - name: Check required env/secret
-        run: |
-          set -e
-          echo "IMAP_USER='${IMAP_USER}'"
-          if [ -z "${IMAP_USER}" ]; then
-            echo "ERROR: IMAP_USER is empty. Set repo Variable 'IMAP_USER' or hardcode it in env." >&2
-            exit 1
-          fi
-          if [ -z "${IMAP_PASS}" ]; then
-            echo "ERROR: IMAP_PASS is empty. Add a repo Secret named IMAP_PASS." >&2
-            exit 1
-          fi
-        env:
-          IMAP_PASS: ${{ secrets.IMAP_PASS }}
 
       - name: Fetch latest CSV from Gmail
         env:
@@ -95,23 +56,16 @@ jobs:
           test -s "$OUT_JSON" || (echo "events.json was not written" && exit 1)
           echo "Wrote $(wc -c < $OUT_JSON) bytes to $OUT_JSON"
 
-      - name: Commit events.json (rebase-safe, no destructive reset)
+      - name: Commit events.json (rebase-safe)
         run: |
           set -e
           git config user.name  "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
-
-          git fetch origin main
-          git checkout main
-          git pull --rebase origin main
-
-          # Now add the newly generated file(s)
-          git add "${OUT_JSON}"
-
+          git pull --rebase origin main || true
+          git add events.json
           if git diff --cached --quiet; then
             echo "No changes to commit."
             exit 0
           fi
-
           git commit -m "Update events.json [skip ci]"
           git push origin HEAD:main
