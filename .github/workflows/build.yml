@@ -3,7 +3,7 @@ name: Build RAEC events json
 on:
   workflow_dispatch:
   schedule:
-    - cron: "3 13 * * *"  # 08:03 America/Chicago
+    - cron: "3 13 * * *"  # runs 08:03 America/Chicago (cron is UTC)
 
 permissions:
   contents: write
@@ -12,7 +12,8 @@ jobs:
   build:
     runs-on: ubuntu-latest
     env:
-      IMAP_USER: ${{ vars.IMAP_USER }} # or hardcode the email here
+      # If you prefer, hardcode the email here instead of using a Variable.
+      IMAP_USER: ${{ vars.IMAP_USER }}
       OUT_CSV: data/inbox/latest.csv
       OUT_JSON: events.json
       TZ: America/Chicago
@@ -24,39 +25,50 @@ jobs:
           fetch-depth: 0
 
       - name: Use Node.js 20
-  uses: actions/setup-node@v4
-  with:
-    node-version: "20"
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
 
-- name: Install deps
-  run: npm ci
-  env:
-    NPM_CONFIG_FUND: "false"
-    NPM_CONFIG_AUDIT: "false"
+      - name: Install deps
+        run: npm ci
+        env:
+          NPM_CONFIG_FUND: "false"
+          NPM_CONFIG_AUDIT: "false"
 
-- name: Fetch latest CSV from Gmail
-  env:
-    IMAP_USER: ${{ vars.IMAP_USER }}
-    IMAP_PASS: ${{ secrets.IMAP_PASS }}
-    OUT_CSV:   ${{ env.OUT_CSV }}
-  run: npm run fetch
+      - name: Fetch latest CSV from Gmail
+        env:
+          IMAP_USER: ${{ env.IMAP_USER }}
+          IMAP_PASS: ${{ secrets.IMAP_PASS }}   # must be set in repo Secrets
+          OUT_CSV:   ${{ env.OUT_CSV }}
+          LOG_LEVEL: info
+          PRETTY_LOGS: "true"
+          SEARCH_SUBJECT: "AC Daily Facility"
+          SEARCH_DAYS: "30"
+          SEARCH_IN_ALLMAIL: "true"
+        run: npm run fetch
 
-- name: Transform CSV → events.json
-  env:
-    IN_CSV:   ${{ env.OUT_CSV }}
-    OUT_JSON: ${{ env.OUT_JSON }}
-  run: npm run transform
+      - name: Transform CSV → events.json
+        env:
+          IN_CSV:   ${{ env.OUT_CSV }}
+          OUT_JSON: ${{ env.OUT_JSON }}
+        run: npm run transform
 
       - name: Commit events.json (rebase-safe)
         run: |
           set -e
           git config user.name  "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
-          git pull --rebase origin main || true
+
+          # Make sure we're on main and up to date
+          git fetch origin main
+          git checkout main
+          git pull --rebase origin main
+
           git add events.json
           if git diff --cached --quiet; then
             echo "No changes to commit."
             exit 0
           fi
+
           git commit -m "Update events.json [skip ci]"
           git push origin HEAD:main
