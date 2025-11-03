@@ -5,14 +5,13 @@
 import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
-import { parse } from 'csv-parse/sync'; // <-- correct import
 
 // ---------- Utilities ----------
 const __filename = fileURLToPath(import.meta.url);
 const __dirname  = path.dirname(__filename);
 
-const INPUT_CSV   = process.env.IN_CSV   || path.join(__dirname, '..', 'data', 'inbox', 'latest.csv');
-const OUTPUT_JSON = process.env.OUT_JSON || path.join(__dirname, '..', 'events.json');
+const INPUT_CSV  = process.env.IN_CSV  || path.join(__dirname, '..', 'data', 'inbox', 'latest.csv');
+const OUTPUT_JSON= path.join(__dirname, '..', 'events.json');
 
 // Minutes from "h:mmam - h:mmpm"
 function parseRangeToMinutes(text) {
@@ -49,9 +48,9 @@ function nthWeekdayOfMonth(year, monthIdx, weekday, n) {
 
 function isCourtSeason(d = new Date()) {
   const y = d.getFullYear();
-  const thirdMonMar = nthWeekdayOfMonth(y, 2, 1, 3); // March, Monday
-  const secondMonNov= nthWeekdayOfMonth(y,10, 1, 2); // November, Monday
-  if (!thirdMonMar || !secondMonNov) return true; // safety
+  const thirdMonMar = nthWeekdayOfMonth(y, 2, 1, 3);
+  const secondMonNov= nthWeekdayOfMonth(y,10, 1, 2);
+  if (!thirdMonMar || !secondMonNov) return true;
   return (d >= thirdMonMar && d < secondMonNov);
 }
 
@@ -62,25 +61,32 @@ function cleanWhitespace(s) {
 
 function normalizeReservee(raw) {
   const s = cleanWhitespace(raw);
+
   if (/^catch\s*corner/i.test(s) || /^catchcorner/i.test(s)) {
     return { type: 'catch', org: 'Catch Corner', contact: '' };
   }
+
   if (/raec\s*front\s*desk/i.test(s)) {
     return { type: 'system', org: 'RAEC Front Desk', contact: '' };
   }
+
   const parts = s.split(',').map(x => x.trim());
   if (parts.length >= 2) {
     const left = parts[0];
     const right = parts.slice(1).join(', ');
+
     if (/\b(Club|Elite|Training|Athletics|Sport|Sports|Basketball|Volleyball|Flight|Academy|United|Pink)\b/i.test(left)) {
       return { type: 'org+contact', org: left, contact: right };
     }
+
     if (/^[A-Za-z'.-]+\s+[A-Za-z'.-]+/.test(right) && /^[A-Za-z'.-]+$/.test(left)) {
       const firstLast = `${right} ${left}`.replace(/\s+/g, ' ').trim();
       return { type: 'person', person: firstLast, org: '', contact: '' };
     }
+
     return { type: 'org+contact', org: left, contact: right };
   }
+
   return { type: 'org', org: s, contact: '' };
 }
 
@@ -97,7 +103,8 @@ function isPickleball(purpose, reservee) {
 }
 
 function mapFacilityToRooms(facility) {
-  // exact-name maps first
+  const f = cleanWhitespace(facility).toLowerCase();
+
   if (/^ac gym - half court 1a$/i.test(facility)) return ['1A'];
   if (/^ac gym - half court 1b$/i.test(facility)) return ['1B'];
   if (/^ac gym - court 1-ab$/i.test(facility))    return ['1A','1B'];
@@ -140,7 +147,6 @@ function makeSlot(roomId, startMin, endMin, title, subtitle, org = '', contact =
 
 // ---------- Main ----------
 async function main() {
-  // If CSV missing/empty → scaffold
   if (!fs.existsSync(INPUT_CSV) || fs.statSync(INPUT_CSV).size === 0) {
     const scaffold = {
       dayStartMin: 360,
@@ -164,32 +170,65 @@ async function main() {
       slots: []
     };
     fs.writeFileSync(OUTPUT_JSON, JSON.stringify(scaffold, null, 2));
-    console.log('Empty CSV; wrote scaffold events.json');
     return;
   }
 
-  const raw = fs.readFileSync(INPUT_CSV);
-  const records = parse(raw, {
-    columns: true,
-    skip_empty_lines: true,
-    bom: true,
-    trim: true
-  });
+  const raw = fs.readFileSync(INPUT_CSV, 'utf8');
+  const lines = raw.split(/\r?\n/).filter(l => l.trim().length > 0);
+  if (!lines.length) {
+    const scaffold = {
+      dayStartMin: 360,
+      dayEndMin: 1380,
+      rooms: [
+        { id: '1A', label: '1A', group: 'south' },
+        { id: '1B', label: '1B', group: 'south' },
+        { id: '2A', label: '2A', group: 'south' },
+        { id: '2B', label: '2B', group: 'south' },
+        { id: '3',  label: '3',  group: 'fieldhouse' },
+        { id: '4',  label: '4',  group: 'fieldhouse' },
+        { id: '5',  label: '5',  group: 'fieldhouse' },
+        { id: '6',  label: '6',  group: 'fieldhouse' },
+        { id: '7',  label: '7',  group: 'fieldhouse' },
+        { id: '8',  label: '8',  group: 'fieldhouse' },
+        { id: '9A', label: '9A', group: 'north' },
+        { id: '9B', label: '9B', group: 'north' },
+        { id: '10A',label: '10A',group: 'north' },
+        { id: '10B',label: '10B',group: 'north' }
+      ],
+      slots: []
+    };
+    fs.writeFileSync(OUTPUT_JSON, JSON.stringify(scaffold, null, 2));
+    return;
+  }
+
+  const header = lines[0].split(',');
+  const idx = (name) => header.findIndex(h => h.trim().toLowerCase() === name.toLowerCase());
+  const iLocation  = idx('Location:');
+  const iFacility  = idx('Facility');
+  const iTime      = idx('Reserved Time');
+  const iReservee  = idx('Reservee');
+  const iPurpose   = idx('Reservation Purpose');
 
   const courtMode = isCourtSeason(new Date());
-  const items = [];
 
-  for (const rec of records) {
-    const location = cleanWhitespace(rec['Location:'] || rec['Location'] || '');
-    const facility = cleanWhitespace(rec['Facility'] || '');
-    const timeText = cleanWhitespace(rec['Reserved Time'] || rec['Time'] || '');
-    const reservee = cleanWhitespace(rec['Reservee'] || '');
-    const purpose  = cleanWhitespace(rec['Reservation Purpose'] || rec['Purpose'] || '');
+  const items = [];
+  for (let i=1; i<lines.length; i++) {
+    const row = lines[i].split(',');
+
+    const location  = cleanWhitespace(row[iLocation]  || '');
+    const facility  = cleanWhitespace(row[iFacility]  || '');
+    const timeText  = cleanWhitespace(row[iTime]      || '');
+    const reservee  = cleanWhitespace(row[iReservee]  || '');
+    const purpose   = cleanWhitespace(row[iPurpose]   || '');
 
     if (!facility || !timeText) continue;
-    if (location && !/athletic\s*&\s*event\s*center/i.test(location)) continue;
+    if (location && !/athletic\s*&\s*event\s*center/i.test(location)) {
+      continue;
+    }
 
-    if (courtMode && /fieldhouse.*turf/i.test(facility)) continue;
+    if (courtMode && /fieldhouse.*turf/i.test(facility)) {
+      continue;
+    }
 
     const range = parseRangeToMinutes(timeText);
     if (!range) continue;
@@ -200,7 +239,8 @@ async function main() {
     const who = normalizeReservee(reservee);
     const pur = cleanPurpose(purpose);
 
-    let title = '', subtitle = '', org = '', contact = '';
+    let title = '', subtitle = '';
+    let org = '', contact = '';
 
     if (isPickleball(purpose, reservee)) {
       title = 'Open Pickleball';
@@ -228,30 +268,40 @@ async function main() {
       rooms,
       startMin: range.startMin,
       endMin:   range.endMin,
-      title, subtitle, org, contact
+      title, subtitle, org, contact,
+      rawFacility: facility,
+      rawReservee: reservee
     });
   }
 
-  // Dedup blanket vs specific for Fieldhouse
   const resultSlots = [];
-  const specifics = items.filter(it => it.rooms.some(r => /^[3-8]$/.test(r)) && it.rooms.length <= 2);
 
-  function overlaps(a, b) { return a.startMin < b.endMin && b.startMin < a.endMin; }
+  function overlaps(a, b) {
+    return a.startMin < b.endMin && b.startMin < a.endMin;
+  }
+
+  const specifics = items.filter(it => it.rooms.length <= 2 || it.rooms.some(r => /^[3-8]$/.test(r)));
 
   for (const it of items) {
-    const isBlanketFH = it.rooms.every(r => /^[3-8]$/.test(r)) && it.rooms.length >= 4;
-    if (isBlanketFH) {
-      const keep = it.rooms.filter(r => {
-        return !specifics.some(sp =>
+    if (it.rooms.every(r => /^[3-8]$/.test(r)) && it.rooms.length >= 4) {
+      const keepRooms = it.rooms.filter(r => {
+        const conflict = specifics.some(sp =>
+          sp !== it &&
           sp.org.toLowerCase() === it.org.toLowerCase() &&
           overlaps(sp, it) &&
           sp.rooms.includes(r)
         );
+        return !conflict;
       });
-      for (const r of keep) resultSlots.push(makeSlot(r, it.startMin, it.endMin, it.title, it.subtitle, it.org, it.contact));
+      for (const r of keepRooms) {
+        resultSlots.push(makeSlot(r, it.startMin, it.endMin, it.title, it.subtitle, it.org, it.contact));
+      }
       continue;
     }
-    for (const r of it.rooms) resultSlots.push(makeSlot(r, it.startMin, it.endMin, it.title, it.subtitle, it.org, it.contact));
+
+    for (const r of it.rooms) {
+      resultSlots.push(makeSlot(r, it.startMin, it.endMin, it.title, it.subtitle, it.org, it.contact));
+    }
   }
 
   const json = {
