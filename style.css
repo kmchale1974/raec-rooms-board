@@ -13,6 +13,11 @@
   --chip:#263043;
   --chip-text:#e7eaf1;
   --ok:#1f9d6a;
+
+  /* animation/timing vars used by JS hooks */
+  --ease: cubic-bezier(.22,.61,.36,1);
+  --dur: 740ms;
+  --shift: 60px;
 }
 
 /* ---- Base ---- */
@@ -21,17 +26,16 @@ html,body{
   background:var(--bg); color:var(--ink);
   font-family: Inter, "SF Pro Text", Segoe UI, Roboto, Arial, sans-serif;
   -webkit-font-smoothing:antialiased; -moz-osx-font-smoothing:grayscale;
-  cursor: none; /* Hide cursor for kiosk */
+  cursor: none; /* kiosk */
 }
 
 /* ---- Fixed canvas (scaled by JS) ---- */
+.viewport{ position:fixed; inset:0; display:flex; justify-content:center; align-items:flex-start; padding:16px; box-sizing:border-box; }
 .stage{
   width:1920px; height:1080px;
-  padding:36px;               /* generous edge padding to avoid clipping */
-  box-sizing:border-box;
-  display:grid;
-  grid-template-rows: 120px 1fr;
-  gap:24px;
+  padding:36px; box-sizing:border-box;
+  display:grid; grid-template-rows: 120px 1fr; gap:24px;
+  background:var(--bg);
 }
 
 /* ---- Header ---- */
@@ -41,9 +45,7 @@ html,body{
   align-items:center;
   gap:24px;
 }
-.brand{
-  display:flex; align-items:center; gap:16px;
-}
+.brand{ display:flex; align-items:center; gap:16px; }
 .brand img{ height:80px; width:auto; object-fit:contain; }
 
 .dateclock{ justify-self:center; text-align:center; }
@@ -51,73 +53,59 @@ html,body{
 #headerClock{ font-size:28px; color:var(--muted); margin-top:6px; font-weight:600; }
 
 .wifi{
-  justify-self:end;
-  background:var(--panel); border:1px solid var(--grid);
+  justify-self:end; background:var(--panel); border:1px solid var(--grid);
   border-radius:14px; padding:14px 16px; min-width:340px;
 }
-.wifi .title{
-  font-size:16px; color:var(--muted);
-  letter-spacing:.08em; text-transform:uppercase;
-}
-.wifi .row{
-  display:flex; justify-content:space-between; gap:12px; margin-top:6px;
-}
+.wifi .title{ font-size:16px; color:var(--muted); letter-spacing:.08em; text-transform:uppercase; }
+.wifi .row{ display:flex; justify-content:space-between; gap:12px; margin-top:6px; }
 .wifi .row span:first-child{ color:var(--muted); }
 .wifi .row span:last-child{ font-weight:700; }
 
-/* ---- Three-column board: South | Fieldhouse | North ---- */
-.grid{
-  display:grid;
-  grid-template-columns: 1fr 1.5fr 1fr;
-  gap:24px;
-  height:100%;
-}
+/* ---- Three-column board ---- */
+.grid{ display:grid; grid-template-columns: 1fr 1.5fr 1fr; gap:24px; height:100%; }
 
 /* Group panels */
 .group{
-  background:var(--panel);
-  border:1px solid var(--grid);
-  border-radius:18px;
-  padding:16px;
-  display:grid;
-  grid-template-rows: 44px 1fr;
-  gap:12px;
-  overflow:hidden;
+  background:var(--panel); border:1px solid var(--grid); border-radius:18px;
+  padding:16px; display:grid; grid-template-rows: 44px 1fr; gap:12px; overflow:hidden;
 }
 .group .title{
-  font-size:18px; color:var(--muted);
-  letter-spacing:.1em; text-transform:uppercase;
-  border-bottom:1px solid var(--grid);
-  display:flex; align-items:center;
-  padding-bottom:6px;
+  font-size:18px; color:var(--muted); letter-spacing:.1em; text-transform:uppercase;
+  border-bottom:1px solid var(--grid); display:flex; align-items:center; padding-bottom:6px;
 }
 
 /* South/North stacks (1..2) and (9..10) */
-.rooms-stack{
-  display:grid;
-  grid-template-rows: 1fr 1fr;
-  gap:12px;
-  min-height:0; /* allow children to size */
-}
+.rooms-stack{ display:grid; grid-template-rows: 1fr 1fr; gap:12px; min-height:0; }
+.row-2cols{ display:grid; grid-template-columns: 1fr 1fr; gap:12px; }
 
-/* Fieldhouse 3..8 = 2 rows × 3 cols */
-.rooms-fieldhouse{
-  display:grid;
-  grid-template-columns: repeat(3, 1fr);
-  grid-template-rows: 1fr 1fr;
-  gap:12px;
-  min-height:0;
+/* Fieldhouse grid (3..8) */
+.rooms-fieldhouse{ position:relative; min-height:0; }
+.rooms-fieldhouse .page{
+  position:absolute; inset:0;
+  display:grid; grid-template-columns: repeat(3, 1fr); grid-template-rows: 1fr 1fr;
+  gap:12px; padding:0; box-sizing:border-box;
+
+  transform: translateX(100%);
+  opacity: 0;
+  transition: transform var(--dur) var(--ease), opacity var(--dur) var(--ease);
+  will-change: transform, opacity;
+}
+.rooms-fieldhouse .page.is-active{
+  transform: translateX(0);
+  opacity: 1;
+  z-index: 2;
+}
+.rooms-fieldhouse .page.is-leaving{
+  transform: translateX(-100%);
+  opacity: 0;
+  z-index: 1;
 }
 
 /* ---- Room cards ---- */
 .room{
-  border:1px solid var(--grid);
-  border-radius:14px;
-  padding:14px;
-  display:flex; flex-direction:column;
-  gap:10px;
-  min-height:0;     /* so inner pager can flex */
-  overflow:hidden;
+  border:1px solid var(--grid); border-radius:14px; padding:14px;
+  display:flex; flex-direction:column; gap:10px;
+  min-height:0; overflow:hidden;
   background:linear-gradient(180deg, rgba(255,255,255,0.02), rgba(0,0,0,0));
 }
 .roomHeader{
@@ -126,18 +114,12 @@ html,body{
 }
 .roomHeader .id{ font-size:30px; font-weight:800; letter-spacing:.04em; }
 .roomHeader .count{ font-size:13px; color:var(--muted); }
+.roomHeader .count em{ font-style:normal; color:var(--ink); font-weight:700; }
 
-/* ---- Paged events inside a room ---- */
-.eventsPager{
-  position:relative; flex:1 1 auto; min-height:0;
-  overflow:hidden; /* no scrollbars on signage */
-}
-
-.page{
-  position:absolute; inset:0;
-  display:flex; flex-direction:column; gap:10px;
-  padding-bottom:10px;         /* keep last chip from clipping */
-}
+/* ---- Event areas ---- */
+.events{ position:relative; flex:1 1 auto; min-height:0; overflow:hidden; }
+.events-list{ display:flex; flex-direction:column; gap:10px; height:100%; }
+.single-rotor{ position:relative; height:100%; width:100%; }
 
 /* Event chip */
 .event{
@@ -150,61 +132,22 @@ html,body{
 .event .who{ font-size:20px; font-weight:800; line-height:1.15; }
 .event .what{ font-size:16px; color:var(--muted); line-height:1.2; }
 .event .when{ font-size:15px; color:#b7c0cf; font-weight:600; }
+.who,.what{ word-wrap:break-word; overflow-wrap:anywhere; }
 
-/* Long text wraps (no ellipses; you wanted full details) */
-.who, .what{ word-wrap:break-word; overflow-wrap:anywhere; }
-
-/* ---- Slide-left animation (always left) ---- */
-.page{ transform:translateX(0); }
-.page.slide-in{
-  animation: slideInLeft 400ms ease-out both;
-}
-.page.slide-out{
-  animation: slideOutLeft 400ms ease-in both;
-}
-/* Smooth single-card crossfade/slide (left) */
-.single-rotor .event {
+/* ------ single-card smooth slide/fade hooks ------ */
+.single-rotor .event{
+  position:absolute; inset:0;
+  display:flex; flex-direction:column; gap:6px;
   transition: transform var(--dur) var(--ease), opacity var(--dur) var(--ease);
   transform: translateX(0);
   opacity: 1;
+  will-change: transform, opacity;
 }
+.single-rotor .event.is-enter{ transform: translateX(var(--shift)); opacity: 0; }
+.single-rotor .event.is-enter-to{ transform: translateX(0); opacity: 1; }
+.single-rotor .event.is-exit{ transform: translateX(0); opacity: 1; }
+.single-rotor .event.is-exit-to{ transform: translateX(calc(-1 * var(--shift))); opacity: 0; }
 
-/* next enters from right */
-.single-rotor .event.is-enter {
-  transform: translateX(var(--shift));
-  opacity: 0;
-}
-.single-rotor .event.is-enter-active { /* just a hook; already has transition */ }
-.single-rotor .event.is-enter-to {
-  transform: translateX(0);
-  opacity: 1;
-}
-
-/* current exits to left */
-.single-rotor .event.is-exit {
-  transform: translateX(0);
-  opacity: 1;
-}
-.single-rotor .event.is-exit-active { /* hook */ }
-.single-rotor .event.is-exit-to {
-  transform: translateX(calc(-1 * var(--shift)));
-  opacity: 0;
-}
-
-@keyframes slideInLeft{
-  from { transform: translateX(100%); opacity:.9; }
-  to   { transform: translateX(0);    opacity:1;  }
-}
-@keyframes slideOutLeft{
-  from { transform: translateX(0);     opacity:1;  }
-  to   { transform: translateX(-100%); opacity:.9; }
-}
-
-/* ---- Tiny legend (optional) ---- */
-.legend{
-  position:absolute; right:24px; bottom:18px; color:var(--muted); font-size:12px;
-}
-
-/* ---- Safety: never show scrollbars (kiosk aesthetic) ---- */
+/* ---- No scrollbars ---- */
 *::-webkit-scrollbar{ display:none; }
 *{ scrollbar-width:none; }
