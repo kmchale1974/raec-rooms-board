@@ -3,7 +3,7 @@ name: Build RAEC events json
 on:
   workflow_dispatch:
   schedule:
-    - cron: "3 13 * * *"  # runs 08:03 America/Chicago (cron is UTC)
+    - cron: "3 13 * * *"  # 08:03 America/Chicago
 
 permissions:
   contents: write
@@ -11,18 +11,12 @@ permissions:
 jobs:
   build:
     runs-on: ubuntu-latest
-    env:
-      # If you prefer, hardcode the email here instead of using a Variable.
-      IMAP_USER: ${{ vars.IMAP_USER }}
-      OUT_CSV: data/inbox/latest.csv
-      OUT_JSON: events.json
-      TZ: America/Chicago
-
     steps:
       - name: Checkout
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
+          ref: main
 
       - name: Use Node.js 20
         uses: actions/setup-node@v4
@@ -36,33 +30,30 @@ jobs:
           NPM_CONFIG_AUDIT: "false"
 
       - name: Fetch latest CSV from Gmail
-        env:
-          IMAP_USER: ${{ env.IMAP_USER }}
-          IMAP_PASS: ${{ secrets.IMAP_PASS }}   # must be set in repo Secrets
-          OUT_CSV:   ${{ env.OUT_CSV }}
-          LOG_LEVEL: info
-          PRETTY_LOGS: "true"
-          SEARCH_SUBJECT: "AC Daily Facility"
-          SEARCH_DAYS: "30"
-          SEARCH_IN_ALLMAIL: "true"
         run: npm run fetch
+        env:
+          IMAP_USER: ${{ vars.IMAP_USER }}
+          IMAP_PASS: ${{ secrets.IMAP_PASS }}
+          OUT_CSV:   data/inbox/latest.csv
 
       - name: Transform CSV → events.json
-        env:
-          IN_CSV:   ${{ env.OUT_CSV }}
-          OUT_JSON: ${{ env.OUT_JSON }}
         run: npm run transform
+        env:
+          IN_CSV:   data/inbox/latest.csv
+          OUT_JSON: events.json
 
-      - name: Commit events.json (rebase-safe)
+      # >>> PUT THE NEW STEP RIGHT HERE, replacing your old commit step <<<
+      - name: Commit events.json (rebase-safe, auto-retry)
+        shell: bash
         run: |
-          set -e
+          set -euo pipefail
           git config user.name  "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
+          git config pull.rebase true
+          git config rebase.autoStash true
 
-          # Make sure we're on main and up to date
-          git fetch origin main
-          git checkout main
-          git pull --rebase origin main
+          git fetch origin main --prune
+          git checkout -B main origin/main
 
           git add events.json
           if git diff --cached --quiet; then
@@ -71,4 +62,18 @@ jobs:
           fi
 
           git commit -m "Update events.json [skip ci]"
-          git push origin HEAD:main
+
+          tries=0
+          until [ $tries -ge 5 ]
+          do
+            if git pull --rebase origin main && git push origin HEAD:main; then
+              echo "Pushed successfully."
+              exit 0
+            fi
+            tries=$((tries+1))
+            echo "Push race detected, retry $tries/5 after short backoff…"
+            sleep $((2 * tries))
+          done
+
+          echo "Failed to push after retries."
+          exit 1
