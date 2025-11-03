@@ -1,254 +1,284 @@
-/* global window, document, fetch */
-const TICK_MS = 1000;
-const ROTOR_MS = 7000;       // per-room event change
-const PAGE_MS  = 15000;      // fieldhouse page swap
-const NOW = () => new Date();
+// app.js (drop-in)
+// Smooth single-card rotors + fieldhouse pager + filtering
 
-async function loadData() {
-  const r = await fetch('./events.json', { cache: 'no-store' });
-  if (!r.ok) throw new Error('failed to load events.json');
-  return r.json();
+const DUR_MS = 740;           // keep aligned with --dur
+const ROTOR_STAY_MS = 7000;   // time a card is fully visible
+const PAGER_STAY_MS = 9000;   // time a fieldhouse page is fully visible
+
+const ROOMS_SOUTH = ["1A","1B","2A","2B"];
+const ROOMS_NORTH = ["9A","9B","10A","10B"];
+const ROOMS_FIELD = ["3","4","5","6","7","8"];
+
+const q = (sel, el=document) => el.querySelector(sel);
+const qa = (sel, el=document) => Array.from(el.querySelectorAll(sel));
+
+// --- Clock / Date ---
+function startClock() {
+  const dateEl = q('#headerDate');
+  const clockEl = q('#headerClock');
+  const fmtDate = (d) =>
+    d.toLocaleDateString('en-US', { weekday:'long', month:'long', day:'numeric' });
+  const fmtTime = (d) =>
+    d.toLocaleTimeString('en-US', { hour:'numeric', minute:'2-digit' });
+
+  function tick() {
+    const now = new Date();
+    if (dateEl) dateEl.textContent = fmtDate(now);
+    if (clockEl) clockEl.textContent = fmtTime(now);
+  }
+  tick();
+  setInterval(tick, 1000);
 }
 
-function setHeaderClock() {
-  const dateEl = document.getElementById('headerDate');
-  const clockEl = document.getElementById('headerClock');
-  const d = NOW();
-  const dateFmt = d.toLocaleDateString(undefined, { weekday:'long', month:'long', day:'numeric' });
-  const timeFmt = d.toLocaleTimeString(undefined, { hour:'2-digit', minute:'2-digit' });
-  if (dateEl) dateEl.textContent = dateFmt;
-  if (clockEl) clockEl.textContent = timeFmt;
+// --- Data loading ---
+async function loadEvents() {
+  const res = await fetch('./events.json', { cache: 'no-store' });
+  if (!res.ok) throw new Error('Failed to load events.json');
+  return res.json();
 }
 
-function minutesSinceMidnight(d = NOW()) {
+// --- Helpers ---
+function nowMinutes() {
+  const d = new Date();
   return d.getHours() * 60 + d.getMinutes();
 }
-
-function byRoom(slots) {
+function formatTime(mins) {
+  let h = Math.floor(mins/60);
+  const m = mins%60;
+  const mer = h >= 12 ? 'PM' : 'AM';
+  if (h === 0) h = 12;
+  else if (h > 12) h -= 12;
+  return `${h}:${m.toString().padStart(2,'0')} ${mer}`;
+}
+function groupByRoom(slots) {
   const map = new Map();
   for (const s of slots) {
     if (!map.has(s.roomId)) map.set(s.roomId, []);
     map.get(s.roomId).push(s);
   }
+  for (const [k, arr] of map) {
+    arr.sort((a,b) => a.startMin - b.startMin || a.endMin - b.endMin);
+  }
   return map;
 }
 
-function formatWhen(s) {
-  function fromMin(m) {
-    const h = Math.floor(m / 60), mm = (m % 60).toString().padStart(2, '0');
-    const mer = h >= 12 ? 'PM' : 'AM';
-    const h12 = ((h + 11) % 12) + 1;
-    return `${h12}:${mm}${mer}`;
-  }
-  return `${fromMin(s.startMin)} – ${fromMin(s.endMin)}`;
-}
-
-function mountSingleRotor(container, events) {
-  // Creates a fading slider that always slides left (matches CSS fade-enter/exit)
-  let idx = 0;
-  let current = null;
-
-  function renderEvent(e) {
-    const node = document.createElement('div');
-    node.className = 'event fade-enter';
-    node.innerHTML = `
-      <div class="who">${e.title || ''}</div>
-      ${e.subtitle ? `<div class="what">${e.subtitle}</div>` : ''}
-      <div class="when">${formatWhen(e)}</div>
-    `;
-    return node;
+// --- Rotor (one visible card, smooth enter/exit) ---
+class SingleRotor {
+  constructor(container, items) {
+    this.container = container;
+    this.items = items;
+    this.idx = 0;
+    this.timer = null;
+    this.running = false;
   }
 
-  function showNext() {
-    if (!events.length) return;
-    const next = renderEvent(events[idx]);
-    container.appendChild(next);
+  makeCard(item) {
+    const el = document.createElement('div');
+    el.className = 'event';
+    const who = document.createElement('div');
+    who.className = 'who';
+    who.textContent = item.title || '';
+    const what = document.createElement('div');
+    what.className = 'what';
+    what.textContent = item.subtitle || '';
+    const when = document.createElement('div');
+    when.className = 'when';
+    when.textContent = `${formatTime(item.startMin)} – ${formatTime(item.endMin)}`;
+    el.append(who, what, when);
+    return el;
+  }
 
-    // enter
+  // Animate: current -> exit, next -> enter (left slide & crossfade)
+  swapTo(nextIdx) {
+    const current = this.container.querySelector('.event');
+    const nextData = this.items[nextIdx];
+    const nextEl = this.makeCard(nextData);
+
+    // prepare next (offstage-right)
+    nextEl.classList.add('is-enter');
+    this.container.appendChild(nextEl);
+
+    // force reflow to allow transition
+    // eslint-disable-next-line no-unused-expressions
+    nextEl.offsetWidth;
+
+    // arm transitions
+    nextEl.classList.add('is-enter-active');
     requestAnimationFrame(() => {
-      next.classList.add('fade-enter-active');
-      next.classList.remove('fade-enter');
+      nextEl.classList.remove('is-enter');
+      nextEl.classList.add('is-enter-to');
     });
 
-    // exit old
     if (current) {
-      current.classList.add('fade-exit', 'fade-exit-active');
-      setTimeout(() => {
-        if (current && current.parentNode) current.parentNode.removeChild(current);
-      }, 740); // matches --dur in CSS
+      current.classList.add('is-exit');
+      // eslint-disable-next-line no-unused-expressions
+      current.offsetWidth;
+      current.classList.add('is-exit-active');
+      requestAnimationFrame(() => {
+        current.classList.add('is-exit-to');
+      });
+
+      const onEnd = () => {
+        current.removeEventListener('transitionend', onEnd);
+        current.remove();
+      };
+      current.addEventListener('transitionend', onEnd);
     }
 
-    current = next;
-    idx = (idx + 1) % events.length;
+    this.idx = nextIdx;
   }
 
-  // initial
-  container.innerHTML = '';
-  showNext();
-  return setInterval(showNext, ROTOR_MS);
+  tick = () => {
+    if (!this.running) return;
+    const next = (this.idx + 1) % this.items.length;
+    this.swapTo(next);
+    this.timer = setTimeout(this.tick, ROTOR_STAY_MS + DUR_MS);
+  };
+
+  start() {
+    if (!this.items.length) return;
+    if (this.running) return;
+    this.running = true;
+    // mount first immediately (no animation)
+    const first = this.makeCard(this.items[this.idx]);
+    this.container.innerHTML = '';
+    this.container.appendChild(first);
+    this.timer = setTimeout(this.tick, ROTOR_STAY_MS);
+  }
+
+  stop() {
+    this.running = false;
+    if (this.timer) clearTimeout(this.timer);
+  }
 }
 
-function updateRoom(roomId, futureEvents) {
-  const roomEl = document.getElementById(`room-${roomId}`);
-  if (!roomEl) return;
-  const countEl = roomEl.querySelector('.roomHeader .count em');
-  const rotor = roomEl.querySelector('.single-rotor');
-
-  // Sort by start time
-  futureEvents.sort((a,b) => a.startMin - b.startMin);
-
-  // update count
-  if (countEl) countEl.textContent = String(futureEvents.length);
-
-  // handle empty
-  if (!futureEvents.length) {
-    rotor.innerHTML = `
-      <div class="event">
-        <div class="who">No reservations</div>
-        <div class="when">—</div>
-      </div>`;
-    return null;
+// --- Fieldhouse pager (3x2 pages sliding left) ---
+class Pager {
+  constructor(host, pages) {
+    this.host = host;
+    this.pages = pages;
+    this.pageEls = [];
+    this.idx = 0;
+    this.timer = null;
+    this.running = false;
   }
 
-  // mount rotor
-  return mountSingleRotor(rotor, futureEvents);
-}
+  render() {
+    this.host.innerHTML = '';
+    this.pageEls = this.pages.map((page) => {
+      const el = document.createElement('div');
+      el.className = 'page';
+      // six boxes (3x2) expected; each a rotor or empty state
+      page.forEach(cell => {
+        const room = document.createElement('div');
+        room.className = 'room';
+        const header = document.createElement('div');
+        header.className = 'roomHeader';
+        header.innerHTML = `<div class="id">${cell.id}</div><div class="count">reservations: <em>${cell.items.length}</em></div>`;
+        const events = document.createElement('div');
+        events.className = 'events';
+        const rotorWrap = document.createElement('div');
+        rotorWrap.className = 'single-rotor';
+        events.appendChild(rotorWrap);
+        room.append(header, events);
+        el.appendChild(room);
 
-function buildFieldhousePages(container, roomsOrder, roomMap, nowMin) {
-  container.innerHTML = '';
-
-  // 6 tiles per page (3x2)
-  const pages = [];
-  let cur = [];
-  for (const rid of roomsOrder) {
-    cur.push(rid);
-    if (cur.length === 6) { pages.push(cur); cur = []; }
-  }
-  if (cur.length) pages.push(cur);
-
-  const pageEls = [];
-  for (const group of pages) {
-    const page = document.createElement('div');
-    page.className = 'page';
-    for (const rid of group) {
-      const box = document.createElement('div');
-      box.className = 'room';
-      box.innerHTML = `
-        <div class="roomHeader">
-          <div class="id">${rid}</div>
-          <div class="count">reservations: <em>—</em></div>
-        </div>
-        <div class="events"><div class="single-rotor"></div></div>
-      `;
-      page.appendChild(box);
-
-      // feed future events into each box
-      const events = (roomMap.get(rid) || []).filter(e => e.endMin > nowMin).sort((a,b)=>a.startMin-b.startMin);
-      const countEl = box.querySelector('.roomHeader .count em');
-      if (countEl) countEl.textContent = String(events.length);
-
-      const rotor = box.querySelector('.single-rotor');
-      if (!events.length) {
-        rotor.innerHTML = `
-          <div class="event">
-            <div class="who">No reservations</div>
-            <div class="when">—</div>
-          </div>`;
-      } else {
-        mountSingleRotor(rotor, events);
-      }
-    }
-    container.appendChild(page);
-    pageEls.push(page);
-  }
-
-  // pager animation
-  if (pageEls.length <= 1) {
-    if (pageEls[0]) pageEls[0].classList.add('is-active');
-    return null;
-  }
-
-  let p = 0;
-  function showPage(i) {
-    pageEls.forEach((el, idx) => {
-      el.classList.remove('is-active', 'is-leaving');
-      if (idx === i) el.classList.add('is-active');
+        // mount rotor
+        const rotor = new SingleRotor(rotorWrap, cell.items);
+        // show first card immediately to avoid empties
+        rotor.start();
+      });
+      this.host.appendChild(el);
+      return el;
     });
   }
-  function leavePage(i) {
-    pageEls[i].classList.add('is-leaving');
+
+  show(idx) {
+    this.pageEls.forEach((p, i) => {
+      p.classList.remove('is-active','is-leaving');
+      if (i === idx) p.classList.add('is-active');
+    });
   }
 
-  showPage(0);
-  return setInterval(() => {
-    const curIdx = p;
-    const nextIdx = (p + 1) % pageEls.length;
-    leavePage(curIdx);
-    showPage(nextIdx);
-    p = nextIdx;
-  }, PAGE_MS);
+  next() {
+    const cur = this.idx;
+    const nxt = (cur + 1) % this.pageEls.length;
+    const curEl = this.pageEls[cur];
+    const nxtEl = this.pageEls[nxt];
+    if (!nxtEl || !curEl) return;
+
+    // prepare next (offstage-right)
+    nxtEl.classList.remove('is-active','is-leaving');
+    // force reflow
+    // eslint-disable-next-line no-unused-expressions
+    nxtEl.offsetWidth;
+    nxtEl.classList.add('is-active');
+
+    // mark current as leaving (slides left)
+    curEl.classList.add('is-leaving');
+
+    this.idx = nxt;
+  }
+
+  start() {
+    if (!this.pages.length) return;
+    this.render();
+    this.show(this.idx);
+    if (this.pages.length > 1) {
+      this.running = true;
+      this.timer = setInterval(() => this.next(), PAGER_STAY_MS);
+    }
+  }
 }
 
-function uniqueByKey(arr, keyFn) {
-  const out = [];
-  const seen = new Set();
-  for (const x of arr) {
-    const k = keyFn(x);
-    if (!seen.has(k)) { seen.add(k); out.push(x); }
+// Build pages of 3x2 from rooms 3..8
+function buildFieldhousePages(roomMap) {
+  const cells = ROOMS_FIELD.map(id => ({
+    id,
+    items: (roomMap.get(id) || [])
+  }));
+  const pages = [];
+  for (let i=0; i<cells.length; i+=6) {
+    const slice = cells.slice(i, i+6);
+    // ensure 6 cells
+    while (slice.length < 6) slice.push({ id:'', items:[] });
+    pages.push(slice);
   }
-  return out;
+  return pages;
 }
 
-async function boot() {
-  setHeaderClock();
-  setInterval(setHeaderClock, TICK_MS);
+// --- Mount everything ---
+async function main() {
+  startClock();
 
-  const data = await loadData();
-  const nowMin = minutesSinceMidnight();
+  const data = await loadEvents();
 
-  // Future only
-  const future = data.slots.filter(s => s.endMin > nowMin);
+  // Filter: only events that haven't ended yet
+  const nowMin = nowMinutes();
+  const upcoming = (data.slots || []).filter(s => s.endMin > nowMin);
 
-  // De-dup again defensively
-  const slots = uniqueByKey(
-    future,
-    s => `${s.roomId}|${s.startMin}|${s.endMin}|${(s.title||'').toLowerCase()}|${(s.subtitle||'').toLowerCase()}`
-  );
+  // Group by room
+  const byRoom = groupByRoom(upcoming);
 
-  const roomMap = byRoom(slots);
-
-  // South: 1A/1B/2A/2B
-  const southIds = ['1A','1B','2A','2B'];
-  const southTimers = [];
-  for (const rid of southIds) {
-    const evs = (roomMap.get(rid) || []).filter(e => e.endMin > nowMin);
-    const t = updateRoom(rid, evs);
-    if (t) southTimers.push(t);
+  // SOUTH & NORTH rotors
+  for (const id of ROOMS_SOUTH.concat(ROOMS_NORTH)) {
+    const container = q(`#room-${id} .single-rotor`);
+    const countEl = q(`#room-${id} .roomHeader .count em`);
+    const items = (byRoom.get(id) || []);
+    if (countEl) countEl.textContent = String(items.length);
+    if (container) {
+      const rotor = new SingleRotor(container, items);
+      rotor.start();
+    }
   }
 
-  // North: 9A/9B/10A/10B
-  const northIds = ['9A','9B','10A','10B'];
-  const northTimers = [];
-  for (const rid of northIds) {
-    const evs = (roomMap.get(rid) || []).filter(e => e.endMin > nowMin);
-    const t = updateRoom(rid, evs);
-    if (t) northTimers.push(t);
-  }
-
-  // Fieldhouse pager: courts 3..8
-  const fieldhouseOrder = ['3','4','5','6','7','8'];
-  const pagerEl = document.getElementById('fieldhousePager');
-  let pagerTimer = null;
-  if (pagerEl) {
-    pagerTimer = buildFieldhousePages(pagerEl, fieldhouseOrder, roomMap, nowMin);
-  }
-
-  // (Optional) refresh every minute to drop finished items and update counts/clock smoothly
-  setInterval(() => window.location.reload(), 60 * 1000);
+  // FIELDHOUSE pager (3..8 => pages of 6)
+  const pagerHost = q('#fieldhousePager');
+  const pages = buildFieldhousePages(byRoom);
+  const pager = new Pager(pagerHost, pages);
+  pager.start();
 }
 
-document.addEventListener('DOMContentLoaded', () => {
-  boot().catch(err => {
-    console.error(err);
-  });
+main().catch(err => {
+  console.error(err);
 });
