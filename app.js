@@ -1,284 +1,199 @@
-// app.js (drop-in)
-// Smooth single-card rotors + fieldhouse pager + filtering
+// RAEC Rooms Board front-end
+const NOW_TICK_MS = 1000;           // clock tick
+const ROTATE_MS   = 6000;           // per-room event rotation
+const PAGE_MS     = 8000;           // fieldhouse page dwell (we have one page but keep logic)
+const REFRESH_MS  = 60 * 1000;      // re-pull events.json every minute
 
-const DUR_MS = 740;           // keep aligned with --dur
-const ROTOR_STAY_MS = 7000;   // time a card is fully visible
-const PAGER_STAY_MS = 9000;   // time a fieldhouse page is fully visible
+const roomsSouth = ['1A','1B','2A','2B'];
+const roomsField = ['3','4','5','6','7','8'];
+const roomsNorth = ['9A','9B','10A','10B'];
 
-const ROOMS_SOUTH = ["1A","1B","2A","2B"];
-const ROOMS_NORTH = ["9A","9B","10A","10B"];
-const ROOMS_FIELD = ["3","4","5","6","7","8"];
+const roomAll = [...roomsSouth, ...roomsField, ...roomsNorth];
 
-const q = (sel, el=document) => el.querySelector(sel);
-const qa = (sel, el=document) => Array.from(el.querySelectorAll(sel));
-
-// --- Clock / Date ---
-function startClock() {
-  const dateEl = q('#headerDate');
-  const clockEl = q('#headerClock');
-  const fmtDate = (d) =>
-    d.toLocaleDateString('en-US', { weekday:'long', month:'long', day:'numeric' });
-  const fmtTime = (d) =>
-    d.toLocaleTimeString('en-US', { hour:'numeric', minute:'2-digit' });
-
-  function tick() {
-    const now = new Date();
-    if (dateEl) dateEl.textContent = fmtDate(now);
-    if (clockEl) clockEl.textContent = fmtTime(now);
-  }
-  tick();
-  setInterval(tick, 1000);
-}
-
-// --- Data loading ---
-async function loadEvents() {
-  const res = await fetch('./events.json', { cache: 'no-store' });
-  if (!res.ok) throw new Error('Failed to load events.json');
-  return res.json();
-}
-
-// --- Helpers ---
-function nowMinutes() {
+function pad2(n){ return String(n).padStart(2,'0'); }
+function minutesNowLocal(){
   const d = new Date();
   return d.getHours() * 60 + d.getMinutes();
 }
-function formatTime(mins) {
-  let h = Math.floor(mins/60);
-  const m = mins%60;
-  const mer = h >= 12 ? 'PM' : 'AM';
-  if (h === 0) h = 12;
-  else if (h > 12) h -= 12;
-  return `${h}:${m.toString().padStart(2,'0')} ${mer}`;
-}
-function groupByRoom(slots) {
-  const map = new Map();
-  for (const s of slots) {
-    if (!map.has(s.roomId)) map.set(s.roomId, []);
-    map.get(s.roomId).push(s);
-  }
-  for (const [k, arr] of map) {
-    arr.sort((a,b) => a.startMin - b.startMin || a.endMin - b.endMin);
-  }
-  return map;
+
+function setHeaderClock(){
+  const d = new Date();
+  const dow = d.toLocaleDateString(undefined, { weekday: 'long' });
+  const mon = d.toLocaleDateString(undefined, { month: 'long' });
+  const date = d.getDate();
+  const yr = d.getFullYear();
+  const h = d.getHours();
+  const m = pad2(d.getMinutes());
+  const s = pad2(d.getSeconds());
+  const ampm = h >= 12 ? 'PM' : 'AM';
+  const hh = ((h + 11) % 12) + 1;
+  document.getElementById('headerDate').textContent = `${dow}, ${mon} ${date}, ${yr}`;
+  document.getElementById('headerClock').textContent = `${hh}:${m}:${s} ${ampm}`;
 }
 
-// --- Rotor (one visible card, smooth enter/exit) ---
-class SingleRotor {
-  constructor(container, items) {
-    this.container = container;
-    this.items = items;
-    this.idx = 0;
-    this.timer = null;
-    this.running = false;
-  }
+function makeEventChip(slot){
+  const el = document.createElement('div');
+  el.className = 'event';
+  const who = document.createElement('div');
+  who.className = 'who';
+  who.textContent = slot.title || 'Reservation';
 
-  makeCard(item) {
-    const el = document.createElement('div');
-    el.className = 'event';
-    const who = document.createElement('div');
-    who.className = 'who';
-    who.textContent = item.title || '';
-    const what = document.createElement('div');
-    what.className = 'what';
-    what.textContent = item.subtitle || '';
-    const when = document.createElement('div');
-    when.className = 'when';
-    when.textContent = `${formatTime(item.startMin)} – ${formatTime(item.endMin)}`;
-    el.append(who, what, when);
-    return el;
-  }
+  const what = document.createElement('div');
+  what.className = 'what';
+  what.textContent = slot.subtitle || '';
 
-  // Animate: current -> exit, next -> enter (left slide & crossfade)
-  swapTo(nextIdx) {
-    const current = this.container.querySelector('.event');
-    const nextData = this.items[nextIdx];
-    const nextEl = this.makeCard(nextData);
-
-    // prepare next (offstage-right)
-    nextEl.classList.add('is-enter');
-    this.container.appendChild(nextEl);
-
-    // force reflow to allow transition
-    // eslint-disable-next-line no-unused-expressions
-    nextEl.offsetWidth;
-
-    // arm transitions
-    nextEl.classList.add('is-enter-active');
-    requestAnimationFrame(() => {
-      nextEl.classList.remove('is-enter');
-      nextEl.classList.add('is-enter-to');
-    });
-
-    if (current) {
-      current.classList.add('is-exit');
-      // eslint-disable-next-line no-unused-expressions
-      current.offsetWidth;
-      current.classList.add('is-exit-active');
-      requestAnimationFrame(() => {
-        current.classList.add('is-exit-to');
-      });
-
-      const onEnd = () => {
-        current.removeEventListener('transitionend', onEnd);
-        current.remove();
-      };
-      current.addEventListener('transitionend', onEnd);
-    }
-
-    this.idx = nextIdx;
-  }
-
-  tick = () => {
-    if (!this.running) return;
-    const next = (this.idx + 1) % this.items.length;
-    this.swapTo(next);
-    this.timer = setTimeout(this.tick, ROTOR_STAY_MS + DUR_MS);
+  const when = document.createElement('div');
+  when.className = 'when';
+  const t = (min)=> {
+    let h = Math.floor(min/60), m = min%60;
+    const ampm = h >= 12 ? 'PM' : 'AM';
+    h = ((h + 11) % 12) + 1;
+    return `${h}:${pad2(m)} ${ampm}`;
   };
+  when.textContent = `${t(slot.startMin)} – ${t(slot.endMin)}`;
 
-  start() {
-    if (!this.items.length) return;
-    if (this.running) return;
-    this.running = true;
-    // mount first immediately (no animation)
-    const first = this.makeCard(this.items[this.idx]);
-    this.container.innerHTML = '';
-    this.container.appendChild(first);
-    this.timer = setTimeout(this.tick, ROTOR_STAY_MS);
+  el.appendChild(who);
+  if (what.textContent.trim()) el.appendChild(what);
+  el.appendChild(when);
+  return el;
+}
+
+// Smooth single-card rotor (always keep one .event on screen)
+function startRotor(root, events){
+  if (!root) return;
+  root.innerHTML = '';
+  if (!events || events.length === 0){
+    const empty = document.createElement('div');
+    empty.className = 'event';
+    empty.innerHTML = `<div class="who">—</div><div class="what">No upcoming reservations</div>`;
+    root.appendChild(empty);
+    return;
   }
 
-  stop() {
-    this.running = false;
-    if (this.timer) clearTimeout(this.timer);
+  let idx = 0;
+  let cur = makeEventChip(events[idx]);
+  root.appendChild(cur);
+
+  setInterval(()=> {
+    const nextIdx = (idx + 1) % events.length;
+    const next = makeEventChip(events[nextIdx]);
+
+    // prepare states
+    next.classList.add('is-enter');
+    root.appendChild(next);
+    // force reflow so transitions apply
+    void next.offsetWidth;
+
+    // animate
+    cur.classList.add('is-exit');
+    next.classList.add('is-enter-to');
+
+    // after transition, finalize and cleanup
+    setTimeout(()=>{
+      cur.remove();
+      next.classList.remove('is-enter','is-enter-to');
+      idx = nextIdx;
+      cur = next;
+    }, 740); // must match --dur
+  }, ROTATE_MS);
+}
+
+function updateCounts(roomId, count){
+  const el = document.querySelector(`#room-${CSS.escape(roomId)} .roomHeader .count em`);
+  if (el) el.textContent = String(count);
+}
+
+function systemFilter(slot){
+  // Drop system/holds/turf install lines that should not display
+  const t = (slot.title || '').toLowerCase();
+  const s = (slot.subtitle || '').toLowerCase();
+  if (t.includes('raec front desk')) return false;
+  if (s.includes('turf install per nm')) return false;
+  if (s.includes('internal hold per nm')) return false;
+  return true;
+}
+
+function timeFilter(slot, nowMin){
+  // show ongoing or upcoming (hide if ended)
+  return slot.endMin > nowMin;
+}
+
+async function loadData(){
+  const bust = `?v=${Date.now()}`;
+  const res = await fetch(`./events.json${bust}`, { cache:'no-store' });
+  if (!res.ok) throw new Error('failed to fetch events.json');
+  return res.json();
+}
+
+function byStartThenTitle(a,b){
+  if (a.startMin !== b.startMin) return a.startMin - b.startMin;
+  return (a.title||'').localeCompare(b.title||'');
+}
+
+// Build the fieldhouse pager (single page 3..8; but keep pager hooks for future)
+function buildFieldhousePage(){
+  const pager = document.getElementById('fieldhousePager');
+  pager.innerHTML = '';
+  const page = document.createElement('div');
+  page.className = 'page is-active';
+  const ids = roomsField;
+  for (const id of ids){
+    const card = document.createElement('div');
+    card.className = 'room';
+    card.id = `room-${id}`;
+    card.innerHTML = `
+      <div class="roomHeader">
+        <div class="id">${id}</div>
+        <div class="count">reservations: <em>—</em></div>
+      </div>
+      <div class="events"><div class="single-rotor"></div></div>
+    `;
+    page.appendChild(card);
+  }
+  pager.appendChild(page);
+}
+
+async function render(){
+  setHeaderClock();
+
+  // ensure fieldhouse grid exists
+  buildFieldhousePage();
+
+  const data = await loadData();
+
+  const nowMin = minutesNowLocal();
+
+  // index slots per room
+  const slotsByRoom = {};
+  for (const r of roomAll) slotsByRoom[r] = [];
+
+  for (const s of (data.slots || [])){
+    if (!s || !s.roomId) continue;
+    if (!roomAll.includes(s.roomId)) continue;
+
+    if (!systemFilter(s)) continue;
+    if (!timeFilter(s, nowMin)) continue;
+
+    slotsByRoom[s.roomId].push(s);
+  }
+
+  // sort and mount rotors
+  for (const r of roomAll){
+    const container = document.querySelector(`#room-${CSS.escape(r)} .single-rotor`);
+    const arr = (slotsByRoom[r] || []).sort(byStartThenTitle);
+    updateCounts(r, arr.length);
+    startRotor(container, arr);
   }
 }
 
-// --- Fieldhouse pager (3x2 pages sliding left) ---
-class Pager {
-  constructor(host, pages) {
-    this.host = host;
-    this.pages = pages;
-    this.pageEls = [];
-    this.idx = 0;
-    this.timer = null;
-    this.running = false;
-  }
+function start(){
+  // live clock
+  setHeaderClock();
+  setInterval(setHeaderClock, NOW_TICK_MS);
 
-  render() {
-    this.host.innerHTML = '';
-    this.pageEls = this.pages.map((page) => {
-      const el = document.createElement('div');
-      el.className = 'page';
-      // six boxes (3x2) expected; each a rotor or empty state
-      page.forEach(cell => {
-        const room = document.createElement('div');
-        room.className = 'room';
-        const header = document.createElement('div');
-        header.className = 'roomHeader';
-        header.innerHTML = `<div class="id">${cell.id}</div><div class="count">reservations: <em>${cell.items.length}</em></div>`;
-        const events = document.createElement('div');
-        events.className = 'events';
-        const rotorWrap = document.createElement('div');
-        rotorWrap.className = 'single-rotor';
-        events.appendChild(rotorWrap);
-        room.append(header, events);
-        el.appendChild(room);
-
-        // mount rotor
-        const rotor = new SingleRotor(rotorWrap, cell.items);
-        // show first card immediately to avoid empties
-        rotor.start();
-      });
-      this.host.appendChild(el);
-      return el;
-    });
-  }
-
-  show(idx) {
-    this.pageEls.forEach((p, i) => {
-      p.classList.remove('is-active','is-leaving');
-      if (i === idx) p.classList.add('is-active');
-    });
-  }
-
-  next() {
-    const cur = this.idx;
-    const nxt = (cur + 1) % this.pageEls.length;
-    const curEl = this.pageEls[cur];
-    const nxtEl = this.pageEls[nxt];
-    if (!nxtEl || !curEl) return;
-
-    // prepare next (offstage-right)
-    nxtEl.classList.remove('is-active','is-leaving');
-    // force reflow
-    // eslint-disable-next-line no-unused-expressions
-    nxtEl.offsetWidth;
-    nxtEl.classList.add('is-active');
-
-    // mark current as leaving (slides left)
-    curEl.classList.add('is-leaving');
-
-    this.idx = nxt;
-  }
-
-  start() {
-    if (!this.pages.length) return;
-    this.render();
-    this.show(this.idx);
-    if (this.pages.length > 1) {
-      this.running = true;
-      this.timer = setInterval(() => this.next(), PAGER_STAY_MS);
-    }
-  }
+  // initial render + refresh loop
+  render().catch(console.error);
+  setInterval(()=> render().catch(console.error), REFRESH_MS);
 }
 
-// Build pages of 3x2 from rooms 3..8
-function buildFieldhousePages(roomMap) {
-  const cells = ROOMS_FIELD.map(id => ({
-    id,
-    items: (roomMap.get(id) || [])
-  }));
-  const pages = [];
-  for (let i=0; i<cells.length; i+=6) {
-    const slice = cells.slice(i, i+6);
-    // ensure 6 cells
-    while (slice.length < 6) slice.push({ id:'', items:[] });
-    pages.push(slice);
-  }
-  return pages;
-}
-
-// --- Mount everything ---
-async function main() {
-  startClock();
-
-  const data = await loadEvents();
-
-  // Filter: only events that haven't ended yet
-  const nowMin = nowMinutes();
-  const upcoming = (data.slots || []).filter(s => s.endMin > nowMin);
-
-  // Group by room
-  const byRoom = groupByRoom(upcoming);
-
-  // SOUTH & NORTH rotors
-  for (const id of ROOMS_SOUTH.concat(ROOMS_NORTH)) {
-    const container = q(`#room-${id} .single-rotor`);
-    const countEl = q(`#room-${id} .roomHeader .count em`);
-    const items = (byRoom.get(id) || []);
-    if (countEl) countEl.textContent = String(items.length);
-    if (container) {
-      const rotor = new SingleRotor(container, items);
-      rotor.start();
-    }
-  }
-
-  // FIELDHOUSE pager (3..8 => pages of 6)
-  const pagerHost = q('#fieldhousePager');
-  const pages = buildFieldhousePages(byRoom);
-  const pager = new Pager(pagerHost, pages);
-  pager.start();
-}
-
-main().catch(err => {
-  console.error(err);
-});
+document.addEventListener('DOMContentLoaded', start);
