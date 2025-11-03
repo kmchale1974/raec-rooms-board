@@ -24,37 +24,28 @@ jobs:
           fetch-depth: 0
 
       - name: Use Node.js 20
-        uses: actions/setup-node@v4
-        with:
-          node-version: "20"
+  uses: actions/setup-node@v4
+  with:
+    node-version: "20"
 
-      - name: Install deps (lockfile-aware)
-        run: npm ci
+- name: Install deps
+  run: npm ci
+  env:
+    NPM_CONFIG_FUND: "false"
+    NPM_CONFIG_AUDIT: "false"
 
-      - name: Ensure data folders exist
-        run: |
-          mkdir -p data/inbox
-          mkdir -p data/tmp
+- name: Fetch latest CSV from Gmail
+  env:
+    IMAP_USER: ${{ vars.IMAP_USER }}
+    IMAP_PASS: ${{ secrets.IMAP_PASS }}
+    OUT_CSV:   ${{ env.OUT_CSV }}
+  run: npm run fetch
 
-      - name: Fetch latest CSV from Gmail
-        env:
-          IMAP_PASS: ${{ secrets.IMAP_PASS }}
-          IMAP_USER: ${{ env.IMAP_USER }}
-          OUT_CSV:  ${{ env.OUT_CSV }}
-        run: |
-          set -e
-          node scripts/fetch_email.js
-          ls -l "$OUT_CSV" || (echo "No CSV downloaded" && exit 1)
-
-      - name: Transform CSV → events.json
-        env:
-          IN_CSV:   ${{ env.OUT_CSV }}
-          OUT_JSON: ${{ env.OUT_JSON }}
-        run: |
-          set -e
-          node scripts/transform.mjs
-          test -s "$OUT_JSON" || (echo "events.json was not written" && exit 1)
-          echo "Wrote $(wc -c < $OUT_JSON) bytes to $OUT_JSON"
+- name: Transform CSV → events.json
+  env:
+    IN_CSV:   ${{ env.OUT_CSV }}
+    OUT_JSON: ${{ env.OUT_JSON }}
+  run: npm run transform
 
       - name: Commit events.json (rebase-safe)
         run: |
