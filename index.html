@@ -5,157 +5,7 @@
   <title>RAEC Rooms Board</title>
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <link rel="icon" href="data:,">
-
-  <style>
-    :root{
-      --bg:#0f1115;
-      --panel:#12151c;
-      --ink:#e7eaf1;
-      --muted:#9aa3b2;
-      --accent:#2b87ff;
-      --grid:#1b202a;
-      --chip:#263043;
-      --chip-text:#e7eaf1;
-      --ease:cubic-bezier(.22,.61,.36,1); /* smoother */
-      --dur:740ms;                        /* a bit longer */
-      --shift:60px;                       /* slide distance */
-    }
-
-    html,body{
-      margin:0; height:100%;
-      background:var(--bg); color:var(--ink);
-      font-family: Inter, "SF Pro Text", Segoe UI, Roboto, Arial, sans-serif;
-      overflow:hidden;
-    }
-
-    .viewport{
-      position:fixed; inset:0;
-      display:flex; align-items:flex-start; justify-content:center;
-      padding:16px; box-sizing:border-box;
-    }
-    .stage{
-      width:1920px; height:1080px;
-      padding:32px; box-sizing:border-box;
-      display:grid; grid-template-rows: 120px 1fr; gap:24px;
-      background:var(--bg);
-      border-radius:16px;
-    }
-
-    .header{
-      display:grid; grid-template-columns: 360px 1fr 360px; align-items:center;
-      gap:16px;
-    }
-    .brand{ display:flex; align-items:center; gap:16px; }
-    .brand img{ height:80px; width:auto; object-fit:contain; }
-
-    .dateclock{ justify-self:center; text-align:center; }
-    #headerDate{ font-size:44px; font-weight:800; letter-spacing:.02em; }
-    #headerClock{ font-size:28px; color:var(--muted); margin-top:6px; font-weight:600; }
-
-    .wifi{
-      justify-self:end; background:var(--panel); border:1px solid var(--grid);
-      border-radius:14px; padding:14px 16px; min-width:320px;
-    }
-    .wifi .title{ font-size:16px; color:var(--muted); letter-spacing:.08em; text-transform:uppercase; }
-    .wifi .row{ display:flex; justify-content:space-between; gap:12px; margin-top:6px; }
-    .wifi .row span:first-child{ color:var(--muted); }
-    .wifi .row span:last-child{ font-weight:700; }
-
-    .grid{
-      height:100%; min-height:0;
-      display:grid; grid-template-columns: 1fr 1.5fr 1fr; gap:24px;
-    }
-
-    .group{
-      background:var(--panel); border:1px solid var(--grid); border-radius:18px;
-      padding:16px; display:flex; flex-direction:column; gap:12px;
-      overflow:hidden; min-height:0;
-    }
-    .group .title{
-      font-size:18px; color:var(--muted); letter-spacing:.1em; text-transform:uppercase;
-      border-bottom:1px solid var(--grid); padding-bottom:6px;
-      flex:0 0 auto;
-    }
-    .group .body{ flex:1 1 auto; min-height:0; }
-
-    .rooms-stack{
-      height:100%; min-height:0;
-      display:grid; grid-template-rows: 1fr 1fr; gap:12px;
-    }
-    .row-2cols{
-      height:100%; min-height:0;
-      display:grid; grid-template-columns: 1fr 1fr; gap:12px;
-    }
-
-    .rooms-fieldhouse{
-      position:relative; height:100%; min-height:0;
-    }
-    .rooms-fieldhouse .page{
-      position:absolute; inset:0;
-      display:grid; grid-template-columns: repeat(3, 1fr);
-      grid-template-rows: 1fr 1fr;
-      gap:12px; padding:0; box-sizing:border-box;
-      transform:translateX(100%); opacity:0;
-      transition: transform var(--dur) var(--ease), opacity var(--dur) var(--ease);
-      will-change: transform, opacity;
-    }
-    .rooms-fieldhouse .page.is-active{ transform:translateX(0); opacity:1; z-index:2; }
-    .rooms-fieldhouse .page.is-leaving{ transform:translateX(-100%); opacity:0; z-index:1; }
-
-    .room{
-      border:1px solid var(--grid); border-radius:14px; padding:14px;
-      display:flex; flex-direction:column; gap:10px;
-      min-height:0; overflow:hidden;
-      background:linear-gradient(180deg, rgba(255,255,255,0.02), rgba(0,0,0,0));
-    }
-    .roomHeader{
-      display:flex; align-items:center; justify-content:space-between; gap:12px;
-      border-bottom:1px dashed var(--grid); padding-bottom:8px; flex:0 0 auto;
-    }
-    .roomHeader .id{ font-size:28px; font-weight:800; letter-spacing:.04em; }
-    .roomHeader .count{ font-size:13px; color:var(--muted); }
-    .roomHeader .count em{ font-style:normal; color:var(--ink); font-weight:700; }
-
-    .events{
-      position:relative; flex:1 1 auto; min-height:0; height:100%;
-      overflow:hidden;
-    }
-
-    .single-rotor{
-      position:relative; height:100%; width:100%;
-    }
-    .single-rotor .event{
-      position:absolute; inset:0;
-      display:flex; flex-direction:column; gap:6px;
-      background:var(--chip); border:1px solid var(--grid); border-radius:12px;
-      padding:10px 12px; box-sizing:border-box;
-      /* GPU hinting for smoother anim */
-      will-change:transform,opacity; backface-visibility:hidden; transform:translateZ(0);
-    }
-
-    .events-list{
-      display:flex; flex-direction:column; gap:10px;
-      height:100%; min-height:0; overflow:hidden;
-    }
-    .events-list .event{
-      background:var(--chip); border:1px solid var(--grid); border-radius:12px;
-      padding:10px 12px; display:flex; flex-direction:column; gap:6px;
-    }
-
-    .who{ font-size:18px; font-weight:800; line-height:1.1; }
-    .what{ font-size:15px; color:var(--muted); line-height:1.2; }
-    .when{ font-size:14px; color:#b7c0cf; font-weight:600; }
-    .who,.what{ word-wrap:break-word; overflow-wrap:anywhere; }
-
-    /* Always-left slide: enter from +shift, exit to -shift */
-    .fade-enter{ opacity:0; transform:translateX(var(--shift)); }
-    .fade-enter-active{ transition:opacity var(--dur) var(--ease), transform var(--dur) var(--ease); }
-    .fade-exit{ opacity:1; transform:translateX(0); }
-    .fade-exit-active{
-      opacity:0; transform:translateX(calc(-1 * var(--shift)));
-      transition:opacity var(--dur) var(--ease), transform var(--dur) var(--ease);
-    }
-  </style>
+  <link rel="stylesheet" href="./style.css">
 </head>
 <body>
   <div class="viewport">
@@ -211,7 +61,9 @@
         <section class="group">
           <div class="title">Fieldhouse</div>
           <div class="body">
-            <div class="rooms-fieldhouse" id="fieldhousePager"></div>
+            <div class="rooms-fieldhouse" id="fieldhousePager">
+              <!-- pager pages will be injected -->
+            </div>
           </div>
         </section>
 
@@ -251,6 +103,7 @@
   <script type="module" src="./app.js"></script>
 
   <script>
+    // Fit 1920×1080 canvas to viewport without distortion
     (function fitStageSetup(){
       const W = 1920, H = 1080;
       function fit() {
