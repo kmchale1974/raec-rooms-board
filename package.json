@@ -3,16 +3,16 @@
   "version": "1.0.0",
   "private": true,
   "type": "module",
-  "engines": { "node": ">=20.10" },
   "scripts": {
-    "fetch-email": "node scripts/fetch_email.js"
+    "build": "node scripts/fetch_email.js"
   },
   "dependencies": {
-    "date-fns": "3.6.0",
-    "dotenv": "16.6.1",
-    "imapflow": "1.0.164",
-    "mailparser": "3.9.0",
-    "pino": "10.0.0",
-    "pino-pretty": "11.3.0"
+    "imapflow": "^1.0.164",
+    "mailparser": "^3.7.5",
+    "dotenv": "^16.6.1",
+    "date-fns": "^3.6.0",
+    "pino": "^9.14.0",
+    "pino-pretty": "^11.3.0",
+    "iconv-lite": "^0.7.0"
   }
 }
