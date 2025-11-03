@@ -35,4 +35,4 @@ jobs:
           SEARCH_SUBJECT: "AC Daily Facility"
           SEARCH_DAYS: "30"
           SEARCH_IN_ALLMAIL: "true"
-        run: npm run fetch-email
+        - run: npm run fetch
