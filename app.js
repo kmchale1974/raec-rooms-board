@@ -1,237 +1,201 @@
 // app.js
-// Defensive renderer that (1) loads events.json, (2) builds the skeleton into .grid,
-// then (3) renders reservations. Avoids "Cannot set properties of null" by not
-// assuming containers exist ahead of time.
+const EVENTS_URL = `./events.json?ts=${Date.now()}`;
 
-const QS  = (sel, el = document) => el.querySelector(sel);
-const QSA = (sel, el = document) => Array.from(el.querySelectorAll(sel));
-
-const fmtTime12 = (mins) => {
-  const h24 = Math.floor(mins / 60);
-  const m = mins % 60;
-  const h12 = ((h24 + 11) % 12) + 1;
-  const ampm = h24 >= 12 ? "PM" : "AM";
-  return `${h12}:${m.toString().padStart(2,"0")}${ampm.toLowerCase()}`;
-};
-
-const NOW_MIN = (() => {
+// ---------- Time helpers ----------
+function minToClock(m) {
+  if (m == null) return '—';
+  let h = Math.floor(m / 60);
+  const mm = String(m % 60).padStart(2, '0');
+  const mer = h >= 12 ? 'PM' : 'AM';
+  h = h % 12 || 12;
+  return `${h}:${mm} ${mer}`;
+}
+function tickClock() {
   const d = new Date();
-  return d.getHours() * 60 + d.getMinutes();
-})();
-
-async function loadData() {
-  const url = `./events.json?ts=${Date.now()}`;
-  const resp = await fetch(url, { cache: 'no-store' });
-  const data = await resp.json();
-  console.log('Loaded events.json', data && typeof data === 'object' ? data : {});
-  return data || {};
+  const dateEl = document.getElementById('headerDate');
+  const clockEl = document.getElementById('headerClock');
+  if (dateEl) {
+    const dow = d.toLocaleDateString(undefined, { weekday: 'long' });
+    const mdy = d.toLocaleDateString(undefined, { month: 'long', day: 'numeric', year: 'numeric' });
+    dateEl.textContent = `${dow}, ${mdy}`;
+  }
+  if (clockEl) {
+    clockEl.textContent = d.toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' });
+  }
 }
 
-function safeSetText(id, val) {
-  const el = document.getElementById(id);
-  if (el) el.textContent = val;
+// ---------- Render helpers ----------
+function el(tag, attrs = {}, kids = []) {
+  const n = document.createElement(tag);
+  for (const [k, v] of Object.entries(attrs)) {
+    if (k === 'class') n.className = v;
+    else if (k === 'text') n.textContent = v;
+    else n.setAttribute(k, v);
+  }
+  for (const k of ([]).concat(kids)) {
+    if (k == null) continue;
+    n.appendChild(typeof k === 'string' ? document.createTextNode(k) : k);
+  }
+  return n;
 }
 
-function updateHeaderClock() {
-  const d = new Date();
-  const dateStr = d.toLocaleDateString(undefined, { weekday:'long', month:'long', day:'numeric' });
-  const timeStr = d.toLocaleTimeString(undefined, { hour: 'numeric', minute:'2-digit' });
-  safeSetText('headerDate', dateStr);
-  safeSetText('headerClock', timeStr);
+function renderEventCard(slot) {
+  // slot: { roomId, startMin, endMin, title, subtitle }
+  const when = `${minToClock(slot.startMin)} – ${minToClock(slot.endMin)}`;
+  return el('div', { class: 'event' }, [
+    el('div', { class: 'who', text: slot.title || 'Reservation' }),
+    slot.subtitle ? el('div', { class: 'what', text: slot.subtitle }) : null,
+    el('div', { class: 'when', text: when })
+  ]);
 }
 
-function buildSkeletonFromData(data) {
-  // Build the entire board into .grid, based on data.rooms[].group and id/label
-  const gridRoot = QS('.grid');
-  if (!gridRoot) return;
+function mountRoom(roomId, slotsForRoom) {
+  const room = document.getElementById(`room-${roomId}`);
+  if (!room) return;
+  // update count
+  const countEl = room.querySelector('.roomHeader .count em');
+  if (countEl) countEl.textContent = String(slotsForRoom.length);
 
-  const rooms = Array.isArray(data.rooms) ? data.rooms : [];
-  const byGroup = {
-    south: rooms.filter(r => r.group === 'south'),
-    fieldhouse: rooms.filter(r => r.group === 'fieldhouse'),
-    north: rooms.filter(r => r.group === 'north')
-  };
+  const eventsWrap = room.querySelector('.events');
+  if (!eventsWrap) return;
 
-  // Return block for a single room card
-  const roomCard = (room) => {
-    const rid = String(room.id);
-    return `
-      <div class="room" data-room-id="${rid}">
-        <div class="roomHeader">
-          <div class="id">${room.label || rid}</div>
-          <div class="count" id="count-${rid}" aria-live="polite"></div>
-        </div>
-        <div class="events" id="events-${rid}"></div>
-      </div>
-    `;
-  };
+  // Clear old
+  eventsWrap.innerHTML = '';
 
-  // South/North stack: keep order as provided
-  const stack = (arr) => `
-    <div class="rooms-stack">
-      ${arr.map(roomCard).join('')}
-    </div>
-  `;
-
-  // Fieldhouse: 3 columns x 2 rows (3..8) if we have 6 items; otherwise just flow
-  const fieldhouseGrid = (arr) => {
-    if (arr.length === 6) {
-      return `
-        <div class="rooms-fieldhouse">
-          ${arr.map(roomCard).join('')}
-        </div>
-      `;
+  if (slotsForRoom.length <= 1) {
+    // single rotor container (even if zero, keep structure)
+    const rotor = el('div', { class: 'single-rotor' });
+    if (slotsForRoom.length === 1) {
+      rotor.appendChild(renderEventCard(slotsForRoom[0]));
+    } else {
+      rotor.appendChild(
+        el('div', { class: 'event' }, [
+          el('div', { class: 'who', text: 'No reservations' }),
+          el('div', { class: 'what', text: '—' })
+        ])
+      );
     }
-    // Fallback: stack neatly if not exactly 6
-    return stack(arr);
-  };
-
-  const section = (title, id, inner) => `
-    <section class="group" id="${id}">
-      <div class="title">${title}</div>
-      ${inner}
-    </section>
-  `;
-
-  const southHTML = section('South Gym', 'group-south', stack(byGroup.south));
-  const fieldHTML = section('Fieldhouse', 'group-fieldhouse', fieldhouseGrid(byGroup.fieldhouse));
-  const northHTML = section('North Gym', 'group-north', stack(byGroup.north));
-
-  gridRoot.innerHTML = southHTML + fieldHTML + northHTML;
+    eventsWrap.appendChild(rotor);
+  } else {
+    // stacked list
+    const list = el('div', { class: 'events-list' });
+    for (const s of slotsForRoom) list.appendChild(renderEventCard(s));
+    eventsWrap.appendChild(list);
+  }
 }
 
-function normalizeReservation(slot) {
-  // Handles Pickleball & Catch Corner display rules and person-name flipping
-  const titleRaw = (slot.title || '').trim();
-  const subtitleRaw = (slot.subtitle || '').trim();
-  let title = titleRaw;
-  let subtitle = subtitleRaw;
-
-  // ---- Pickleball special rule ----
-  // Display as "Open Pickleball" (bold) and do not duplicate "internal" text
-  if (/pickleball/i.test(title) || /pickleball/i.test(subtitle)) {
-    return {
-      who: "Open Pickleball",
-      what: "",
-      when: `${fmtTime12(slot.startMin)} – ${fmtTime12(slot.endMin)}`
-    };
+function paginateFieldhouse(rooms, perPage = 6) {
+  const pages = [];
+  for (let i = 0; i < rooms.length; i += perPage) {
+    pages.push(rooms.slice(i, i + perPage));
   }
-
-  // ---- Catch Corner special rule ----
-  // Show bold "Catch Corner" and use "Reservation Purpose" details from subtitle,
-  // stripping a leading repeated "CatchCorner (" and any trailing ")"
-  if (/^catch\s*corner/i.test(title)) {
-    // remove leading "CatchCorner (" and trailing ")" if present
-    let clean = subtitle.replace(/^CatchCorner\s*\(\s*/i, '').replace(/\)\s*$/, '');
-    return {
-      who: "Catch Corner",
-      what: clean,
-      when: `${fmtTime12(slot.startMin)} – ${fmtTime12(slot.endMin)}`
-    };
-  }
-
-  // ---- Person-name detection ----
-  // If title looks like "Last, First", flip to "First Last" in bold
-  const m = title.match(/^\s*([A-Za-z'’\-]+)\s*,\s*([A-Za-z'’\-]+)\s*$/);
-  if (m) {
-    const first = m[2];
-    const last = m[1];
-    return {
-      who: `${first} ${last}`,
-      what: subtitle,
-      when: `${fmtTime12(slot.startMin)} – ${fmtTime12(slot.endMin)}`
-    };
-  }
-
-  // ---- Organization + contact (if present in slot.org / slot.contact) ----
-  const org = slot.org || title;
-  const contact = slot.contact || '';
-  let whatLine = subtitle;
-  if (contact && contact !== org) {
-    // If we have a distinct contact (like "Brandon Brown"), show under org name
-    whatLine = contact + (subtitle ? ` — ${subtitle}` : '');
-  }
-
-  return {
-    who: org,
-    what: whatLine,
-    when: `${fmtTime12(slot.startMin)} – ${fmtTime12(slot.endMin)}`
-  };
+  return pages;
 }
 
-function renderReservations(data) {
-  const slots = Array.isArray(data.slots) ? data.slots : [];
-
-  // Only show reservations that are still ongoing or upcoming
-  const filtered = slots.filter(s => Number.isFinite(s.endMin) && s.endMin > NOW_MIN);
-
-  // Group by roomId
-  const byRoom = new Map();
-  for (const s of filtered) {
-    const rid = String(s.roomId);
-    if (!byRoom.has(rid)) byRoom.set(rid, []);
-    byRoom.get(rid).push(s);
+function buildFieldhousePage(roomsBatch, slotsByRoom) {
+  const page = el('div', { class: 'page' });
+  for (const r of roomsBatch) {
+    const card = el('div', { class: 'room' }, [
+      el('div', { class: 'roomHeader' }, [
+        el('div', { class: 'id', text: r.label }),
+        el('div', { class: 'count' }, [
+          document.createTextNode('reservations: '),
+          el('em', {}, [])
+        ])
+      ]),
+      el('div', { class: 'events' })
+    ]);
+    page.appendChild(card);
   }
 
-  // Sort each room’s reservations by start time
-  for (const arr of byRoom.values()) {
+  // After mounting, populate counts & events
+  requestAnimationFrame(() => {
+    for (const r of roomsBatch) {
+      // find the card by title id text inside this page
+      // simpler: map by order
+    }
+    // Actually, simpler: assign ids to these temporary cards:
+    const cards = page.querySelectorAll('.room');
+    roomsBatch.forEach((r, idx) => {
+      // inject an id that mountRoom expects (room-<id>)
+      cards[idx].id = `room-${r.id}`;
+      mountRoom(r.id, slotsByRoom.get(r.id) || []);
+    });
+  });
+
+  return page;
+}
+
+function mountFieldhouse(roomsFH, slotsByRoom) {
+  const pager = document.getElementById('fieldhousePager');
+  if (!pager) return;
+
+  pager.innerHTML = '';
+
+  const batches = paginateFieldhouse(roomsFH, 6);
+  const pages = batches.map(batch => buildFieldhousePage(batch, slotsByRoom));
+
+  if (pages.length === 0) return;
+
+  // First page visible
+  pages[0].classList.add('is-active');
+  for (const p of pages) pager.appendChild(p);
+
+  if (pages.length === 1) return; // nothing to paginate
+
+  // Simple pager that slides every 12s
+  let i = 0;
+  setInterval(() => {
+    const cur = pages[i];
+    const nxt = pages[(i + 1) % pages.length];
+    cur.classList.remove('is-active');
+    cur.classList.add('is-leaving');
+    nxt.classList.add('is-active');
+    // clean leaving flag after transition
+    setTimeout(() => cur.classList.remove('is-leaving'), 800);
+    i = (i + 1) % pages.length;
+  }, 12000);
+}
+
+// ---------- Main ----------
+async function init() {
+  tickClock();
+  setInterval(tickClock, 1000);
+
+  let data;
+  try {
+    const res = await fetch(EVENTS_URL, { cache: 'no-store' });
+    data = await res.json();
+  } catch (e) {
+    console.error('Failed to load events.json', e);
+    return;
+  }
+
+  // data: { dayStartMin, dayEndMin, rooms:[{id,label,group}], slots:[...] }
+  const rooms = data.rooms || [];
+  const slots = data.slots || [];
+
+  // Group slots by roomId and sort by start time
+  const slotsByRoom = new Map();
+  for (const s of slots) {
+    if (!slotsByRoom.has(s.roomId)) slotsByRoom.set(s.roomId, []);
+    slotsByRoom.get(s.roomId).push(s);
+  }
+  for (const arr of slotsByRoom.values()) {
     arr.sort((a, b) => a.startMin - b.startMin || a.endMin - b.endMin);
   }
 
-  // Render
-  const roomIds = Array.isArray(data.rooms) ? data.rooms.map(r => String(r.id)) : [];
-  for (const rid of roomIds) {
-    const listEl = document.getElementById(`events-${rid}`);
-    const countEl = document.getElementById(`count-${rid}`);
-    if (!listEl) continue;
+  // South: 1A,1B,2A,2B
+  const south = rooms.filter(r => r.group === 'south');
+  south.forEach(r => mountRoom(r.id, slotsByRoom.get(r.id) || []));
 
-    const list = byRoom.get(rid) || [];
-    if (countEl) countEl.textContent = list.length ? `${list.length} reservation${list.length>1?'s':''}` : '';
+  // North: 9A,9B,10A,10B
+  const north = rooms.filter(r => r.group === 'north');
+  north.forEach(r => mountRoom(r.id, slotsByRoom.get(r.id) || []));
 
-    if (!list.length) {
-      listEl.innerHTML = `<div class="event"><div class="what" style="opacity:.7">No reservations</div></div>`;
-      continue;
-    }
-
-    // Build cards (one per reservation)
-    listEl.innerHTML = list.map(slot => {
-      const v = normalizeReservation(slot);
-      return `
-        <div class="event">
-          <div class="who">${v.who}</div>
-          ${v.what ? `<div class="what">${v.what}</div>` : ``}
-          <div class="when">${v.when}</div>
-        </div>
-      `;
-    }).join('');
-  }
-}
-
-function chooseWifiDefaults() {
-  // Feel free to customize if you set these elsewhere.
-  const ssid = 'RAEC-Public';
-  const pass = 'Publ!c00';
-  safeSetText('wifiSsid', ssid);
-  safeSetText('wifiPass', pass);
-}
-
-async function init() {
-  try {
-    const data = await loadData();
-
-    // Defensive: Make sure the header is populated even if index had IDs renamed/missing
-    updateHeaderClock();
-    chooseWifiDefaults();
-    setInterval(updateHeaderClock, 1000 * 30);
-
-    // Build skeleton fresh from data to ensure containers exist
-    buildSkeletonFromData(data);
-
-    // Render reservations
-    renderReservations(data);
-  } catch (err) {
-    console.error('Init failed:', err);
-  }
+  // Fieldhouse: 3..8 (paged 3x2)
+  const fieldhouse = rooms.filter(r => r.group === 'fieldhouse');
+  mountFieldhouse(fieldhouse, slotsByRoom);
 }
 
 document.addEventListener('DOMContentLoaded', init);
