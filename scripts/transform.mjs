@@ -1,43 +1,71 @@
 #!/usr/bin/env node
-// scripts/transform.mjs
-// Robust CSV -> events.json for RAEC board
+// Transform latest CSV -> events.json with RAEC rules
 
 import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
-import { parse } from 'csv-parse/sync';
 
 // ---------- Paths ----------
 const __filename = fileURLToPath(import.meta.url);
 const __dirname  = path.dirname(__filename);
 
 const INPUT_CSV   = process.env.IN_CSV   || path.join(__dirname, '..', 'data', 'inbox', 'latest.csv');
-const OUTPUT_JSON = path.join(__dirname, '..', 'events.json');
+const OUTPUT_JSON = process.env.OUT_JSON || path.join(__dirname, '..', 'events.json');
+
+// ---------- CSV parsing (simple/safe; no external deps) ----------
+function parseCsvLoose(text) {
+  // Handles commas and quoted fields with minimal fuss
+  const rows = [];
+  let i = 0, field = '', row = [], inQ = false;
+  const pushField = () => { row.push(field); field = ''; };
+  const pushRow = () => { rows.push(row); row = []; };
+  while (i < text.length) {
+    const c = text[i];
+    if (inQ) {
+      if (c === '"') {
+        // Peek for escaped quote
+        if (text[i + 1] === '"') { field += '"'; i += 2; continue; }
+        inQ = false; i++; continue;
+      }
+      field += c; i++; continue;
+    }
+    if (c === '"') { inQ = true; i++; continue; }
+    if (c === ',') { pushField(); i++; continue; }
+    if (c === '\n') { pushField(); pushRow(); i++; continue; }
+    if (c === '\r') { i++; continue; }
+    field += c; i++;
+  }
+  // flush
+  pushField();
+  if (row.length > 1 || (row.length === 1 && row[0] !== '')) pushRow();
+  return rows;
+}
 
 // ---------- Helpers ----------
-const clean = (s) => String(s ?? '').replace(/\s+/g, ' ').trim();
-
+function cleanWhitespace(s) {
+  return String(s || '').replace(/\s+/g, ' ').trim();
+}
+function daysSinceMidnightMinutes(date = new Date()) {
+  return date.getHours() * 60 + date.getMinutes();
+}
+function parseRangeToMinutes(text) {
+  if (!text) return null;
+  const m = String(text).trim().match(/(\d{1,2}:\d{2}\s*[ap]m)\s*-\s*(\d{1,2}:\d{2}\s*[ap]m)/i);
+  if (!m) return null;
+  return { startMin: toMin(m[1]), endMin: toMin(m[2]) };
+}
 function toMin(hhmmampm) {
-  const s = clean(hhmmampm).toLowerCase();
+  const s = String(hhmmampm).trim().toLowerCase();
   const m = s.match(/^(\d{1,2}):(\d{2})\s*([ap])m$/);
   if (!m) return null;
   let h = parseInt(m[1], 10), min = parseInt(m[2], 10);
+  const mer = m[3];
   if (h === 12) h = 0;
-  if (m[3] === 'p') h += 12;
+  if (mer === 'p') h += 12;
   return h * 60 + min;
 }
 
-function parseRangeToMinutes(text) {
-  if (!text) return null;
-  // Accept variations like "8:00 AM - 10:00 AM" or "8:00AM-10:00AM"
-  const m = String(text).trim().match(/(\d{1,2}:\d{2}\s*[AP]M)\s*-\s*(\d{1,2}:\d{2}\s*[AP]M)/i);
-  if (!m) return null;
-  const startMin = toMin(m[1]);
-  const endMin   = toMin(m[2]);
-  if (startMin == null || endMin == null) return null;
-  return { startMin, endMin };
-}
-
+// Court vs turf season
 function nthWeekdayOfMonth(year, monthIdx, weekday, n) {
   const d = new Date(year, monthIdx, 1);
   let count = 0;
@@ -50,117 +78,128 @@ function nthWeekdayOfMonth(year, monthIdx, weekday, n) {
   }
   return null;
 }
-
 function isCourtSeason(d = new Date()) {
   const y = d.getFullYear();
-  const thirdMonMar = nthWeekdayOfMonth(y, 2, 1, 3);
-  const secondMonNov= nthWeekdayOfMonth(y,10,1, 2);
+  const thirdMonMar  = nthWeekdayOfMonth(y, 2, 1, 3); // March, Monday, 3rd
+  const secondMonNov = nthWeekdayOfMonth(y, 10, 1, 2); // November, Monday, 2nd
   if (!thirdMonMar || !secondMonNov) return true;
   return (d >= thirdMonMar && d < secondMonNov);
 }
+const courtMode = isCourtSeason(new Date());
+
+// Pickleball detection
+function isPickleball(purpose, reservee) {
+  return /pickleball/i.test(purpose) || /pickleball/i.test(reservee || '');
+}
+
+// Normalize “Reservee”
+function normalizeReservee(raw) {
+  const s = cleanWhitespace(raw);
+
+  // Catch Corner
+  if (/^catch\s*corner/i.test(s) || /^catchcorner/i.test(s)) {
+    return { type: 'catch', org: 'Catch Corner', contact: '' };
+  }
+
+  // RAEC Front Desk (system entries)
+  if (/raec\s*front\s*desk/i.test(s)) {
+    return { type: 'system', org: 'RAEC Front Desk', contact: '' };
+  }
+
+  // "Org, Contact" or "Last, First"
+  const parts = s.split(',').map(x => x.trim());
+  if (parts.length >= 2) {
+    const left = parts[0];
+    const right = parts.slice(1).join(', ');
+
+    // Looks like person "Last, First"
+    if (/^[A-Za-z'.-]+\s+[A-Za-z'.-]+/.test(right) && /^[A-Za-z'.-]+$/.test(left)) {
+      const firstLast = `${right} ${left}`.replace(/\s+/g, ' ').trim(); // First Last
+      return { type: 'person', person: firstLast, org: '', contact: '' };
+    }
+
+    // Heuristic for org names
+    if (/\b(Club|Elite|Training|Athletics|Sport|Sports|Basketball|Volleyball|Flight|Academy|United|Pink)\b/i.test(left)) {
+      return { type: 'org+contact', org: left, contact: right };
+    }
+    // Default to org+contact
+    return { type: 'org+contact', org: left, contact: right };
+  }
+
+  // Single token
+  return { type: 'org', org: s, contact: '' };
+}
+
+// Robust facility -> rooms mapping (tolerant of spaces, dashes, “AB”, etc.)
+function mapFacilityToRooms(facility) {
+  const raw = String(facility || '');
+  const f = raw.toLowerCase().replace(/\s+/g, ' ').trim();
+  const fc = f.replace(/[^a-z0-9]+/g, ''); // collapsed
+
+  const has = (needle) => fc.includes(needle);
+
+  // --- South gym 1/2 ---
+  if (has('acgymhalfcourt1a')) return ['1A'];
+  if (has('acgymhalfcourt1b')) return ['1B'];
+  if (has('acgymcourt1ab') || has('acgymcourt1a1b') || /ac gym\b.*court\s*1[^0-9]*ab/.test(f)) return ['1A','1B'];
+
+  if (has('acgymhalfcourt2a')) return ['2A'];
+  if (has('acgymhalfcourt2b')) return ['2B'];
+  if (has('acgymcourt2ab') || has('acgymcourt2a2b') || /ac gym\b.*court\s*2[^0-9]*ab/.test(f)) return ['2A','2B'];
+
+  // Full gym / championship → 1A,1B,2A,2B
+  if (has('fullgym1ab2ab') || /full\s*gym\s*1\s*ab\s*&\s*2\s*ab/.test(f)) return ['1A','1B','2A','2B'];
+  if (has('championshipcourt')) return ['1A','1B','2A','2B'];
+
+  // --- North gym 9/10 ---
+  if (has('acgymhalfcourt9a')) return ['9A'];
+  if (has('acgymhalfcourt9b')) return ['9B'];
+  if (has('acgymcourt9ab') || has('acgymcourt9a9b') || /ac gym\b.*court\s*9[^0-9]*ab/.test(f)) return ['9A','9B'];
+
+  if (has('acgymhalfcourt10a')) return ['10A'];
+  if (has('acgymhalfcourt10b')) return ['10B'];
+  if (has('acgymcourt10ab') || has('acgymcourt10a10b') || /ac gym\b.*court\s*10[^0-9]*ab/.test(f)) return ['10A','10B'];
+
+  // “Full Court 9 & 10”, “Courts 9-10”
+  if (has('fullcourt9') && has('10')) return ['9A','9B','10A','10B'];
+  if (/full\s*court.*9.*10/.test(f) || /courts?\s*9\s*[-–&]\s*10/.test(f)) return ['9A','9B','10A','10B'];
+
+  // --- Fieldhouse (courts 3–8) ---
+  const mSingle = f.match(/fieldhouse\s*-\s*court\s*([3-8])\b/);
+  if (mSingle) return [mSingle[1]];
+  if (/fieldhouse\s*-\s*court\s*3\s*-\s*8\b/.test(f)) return ['3','4','5','6','7','8'];
+
+  // Turf (map regardless; season filter below decides show/hide)
+  if (/fieldhouse.*full\s*turf/.test(f)) return ['3','4','5','6','7','8'];
+  if (/fieldhouse.*half\s*turf\s*north/.test(f)) return ['6','7','8'];
+  if (/fieldhouse.*half\s*turf\s*south/.test(f)) return ['3','4','5'];
+  if (/fieldhouse.*quarter\s*turf\s*n[ab]/i.test(f)) return ['7','8'];
+  if (/fieldhouse.*quarter\s*turf\s*s[ab]/i.test(f)) return ['3','4'];
+
+  return [];
+}
 
 function cleanPurpose(purpose) {
-  let s = clean(purpose);
+  let s = cleanWhitespace(purpose);
   if (!s) return '';
   s = s.replace(/^\(+/, '').replace(/\)+$/, '');
   s = s.replace(/internal hold per nm/i, '').replace(/\s{2,}/g, ' ').trim();
   return s;
 }
 
-function normalizeReservee(raw) {
-  const s = clean(raw);
-
-  if (/^catch\s*corner/i.test(s)) {
-    return { type: 'catch', org: 'Catch Corner', contact: '' };
-  }
-  if (/raec\s*front\s*desk/i.test(s)) {
-    return { type: 'system', org: 'RAEC Front Desk', contact: '' };
-  }
-
-  const parts = s.split(',').map(x => x.trim());
-  if (parts.length >= 2) {
-    const left = parts[0];
-    const right = parts.slice(1).join(', ');
-    if (/\b(Club|Elite|Training|Athletics|Sport|Sports|Basketball|Volleyball|Flight|Academy|United|Pink)\b/i.test(left)) {
-      return { type: 'org+contact', org: left, contact: right };
-    }
-    if (/^[A-Za-z'.-]+\s+[A-Za-z'.-]+/.test(right) && /^[A-Za-z'.-]+$/.test(left)) {
-      const person = `${right} ${left}`.replace(/\s+/g, ' ').trim();
-      return { type: 'person', person, org: '', contact: '' };
-    }
-    return { type: 'org+contact', org: left, contact: right };
-  }
-
-  return { type: 'org', org: s, contact: '' };
-}
-
-function isPickleball(purpose, reservee) {
-  return /pickleball/i.test(purpose) || /pickleball/i.test(reservee || '');
-}
-
-function mapFacilityToRooms(facility) {
-  const f = clean(facility);
-
-  // South gym 1/2
-  if (/^ac gym - half court 1a$/i.test(f)) return ['1A'];
-  if (/^ac gym - half court 1b$/i.test(f)) return ['1B'];
-  if (/^ac gym - court 1-ab$/i.test(f))    return ['1A','1B'];
-
-  if (/^ac gym - half court 2a$/i.test(f)) return ['2A'];
-  if (/^ac gym - half court 2b$/i.test(f)) return ['2B'];
-  if (/^ac gym - court 2-ab$/i.test(f))    return ['2A','2B'];
-
-  if (/full gym 1ab & 2ab/i.test(f))       return ['1A','1B','2A','2B'];
-  if (/championship court/i.test(f))       return ['1A','1B','2A','2B'];
-
-  // North gym 9/10
-  if (/^ac gym - half court 9a$/i.test(f)) return ['9A'];
-  if (/^ac gym - half court 9b$/i.test(f)) return ['9B'];
-  if (/^ac gym - court 9-ab$/i.test(f))    return ['9A','9B'];
-
-  if (/^ac gym - half court 10a$/i.test(f)) return ['10A'];
-  if (/^ac gym - half court 10b$/i.test(f)) return ['10B'];
-  if (/^ac gym - court 10-ab$/i.test(f))    return ['10A','10B'];
-
-  if (/full court 9 & 10/i.test(f))         return ['9A','9B','10A','10B'];
-
-  // Fieldhouse courts (court season)
-  if (/^ac fieldhouse - court\s*([3-8])$/i.test(f)) {
-    const n = parseInt(RegExp.$1, 10);
-    return [String(n)];
-  }
-  if (/^ac fieldhouse - court 3-8$/i.test(f)) return ['3','4','5','6','7','8'];
-
-  // Fieldhouse turf
-  if (/^ac fieldhouse - full turf$/i.test(f)) return ['3','4','5','6','7','8'];
-  if (/^ac fieldhouse - half turf north$/i.test(f)) return ['6','7','8'];
-  if (/^ac fieldhouse - half turf south$/i.test(f)) return ['3','4','5'];
-  if (/^ac fieldhouse - quarter turf n[ab]$/i.test(f)) return ['7','8'];
-  if (/^ac fieldhouse - quarter turf s[ab]$/i.test(f)) return ['3','4'];
-
-  return [];
-}
-
 function makeSlot(roomId, startMin, endMin, title, subtitle, org = '', contact = '') {
   return { roomId, startMin, endMin, title, subtitle, org, contact };
 }
 
-// Resolve a column by trying multiple header variants
-function pickCol(headerRow, candidates) {
-  const norm = headerRow.map(h => clean(h).toLowerCase());
-  for (const cand of candidates) {
-    const idx = norm.indexOf(cand.toLowerCase());
-    if (idx !== -1) return idx;
-  }
-  return -1;
-}
+function overlaps(a, b) { return a.startMin < b.endMin && b.startMin < a.endMin; }
 
-// ---------- Main ----------
+// ---------- MAIN ----------
 async function main() {
+  // If no CSV, scaffold an empty display
   if (!fs.existsSync(INPUT_CSV) || fs.statSync(INPUT_CSV).size === 0) {
-    // Empty scaffold
     const scaffold = {
-      dayStartMin: 360, dayEndMin: 1380,
+      dayStartMin: 360,
+      dayEndMin: 1380,
       rooms: [
         { id: '1A', label: '1A', group: 'south' },
         { id: '1B', label: '1B', group: 'south' },
@@ -180,90 +219,80 @@ async function main() {
       slots: []
     };
     fs.writeFileSync(OUTPUT_JSON, JSON.stringify(scaffold, null, 2));
-    console.log('CSV missing/empty → wrote empty scaffold.');
     return;
   }
 
-  const raw = fs.readFileSync(INPUT_CSV);
-  const records = parse(raw, {
-    bom: true,
-    columns: true,
-    skip_empty_lines: true,
-    relax_quotes: true,
-    relax_column_count: true,
-    trim: true
-  });
-
-  if (!records.length) {
-    console.log('CSV had headers but no rows → writing scaffold.');
-    return await main(); // will take empty path again
+  const rawCsv = fs.readFileSync(INPUT_CSV, 'utf8');
+  const rows = parseCsvLoose(rawCsv);
+  if (!rows || rows.length < 2) {
+    // write scaffold if header only
+    return mainEmpty();
   }
 
-  // Capture ordered header names for diagnostics
-  const headerRow = Object.keys(records[0]);
+  const header = rows[0].map(h => String(h || '').trim());
+  const idx = (name) => header.findIndex(h => h.toLowerCase() === name.toLowerCase());
 
-  // Map likely columns (accept multiple label variants)
-  const iLocationName = pickCol(headerRow, ['Location', 'Location:', 'Facility Location']);
-  const iFacilityName = pickCol(headerRow, ['Facility', 'Facility Name']);
-  const iTimeName     = pickCol(headerRow, ['Reserved Time', 'Time', 'Reservation Time', 'Reserved Time:', 'Time Range']);
-  const iReserveeName = pickCol(headerRow, ['Reservee', 'Reserved By', 'Requester', 'Contact']);
-  const iPurposeName  = pickCol(headerRow, ['Reservation Purpose', 'Purpose', 'Event Purpose']);
-
-  // Quick debug print to CI logs (helps when format changes)
-  console.log('Columns seen:', headerRow);
-  console.log('Using columns:', {
-    location: headerRow[iLocationName] ?? '(not found)',
-    facility: headerRow[iFacilityName] ?? '(not found)',
-    time:     headerRow[iTimeName]     ?? '(not found)',
-    reservee: headerRow[iReserveeName] ?? '(not found)',
-    purpose:  headerRow[iPurposeName]  ?? '(not found)'
-  });
-
-  const courtMode = isCourtSeason(new Date());
-
-  let total = 0, kept = 0, droppedLoc = 0, droppedTime = 0, droppedFac = 0, droppedSeason = 0, droppedRooms = 0;
+  // Adjust these headers if the CSV changes naming
+  const iLocation  = idx('Location:');
+  const iFacility  = idx('Facility');
+  const iTime      = idx('Reserved Time');
+  const iReservee  = idx('Reservee');
+  const iPurpose   = idx('Reservation Purpose');
 
   const items = [];
+  for (let r = 1; r < rows.length; r++) {
+    const row = rows[r];
 
-  for (const row of records) {
-    total++;
-    const location  = iLocationName !== -1 ? clean(row[headerRow[iLocationName]]) : '';
-    const facility  = iFacilityName !== -1 ? clean(row[headerRow[iFacilityName]]) : '';
-    const timeText  = iTimeName     !== -1 ? clean(row[headerRow[iTimeName]])     : '';
-    const reservee  = iReserveeName !== -1 ? clean(row[headerRow[iReserveeName]]) : '';
-    const purpose   = iPurposeName  !== -1 ? clean(row[headerRow[iPurposeName]])  : '';
+    const location = cleanWhitespace(row[iLocation]  || '');
+    const facility = cleanWhitespace(row[iFacility]  || '');
+    const timeText = cleanWhitespace(row[iTime]      || '');
+    const reservee = cleanWhitespace(row[iReservee]  || '');
+    const purpose  = cleanWhitespace(row[iPurpose]   || '');
 
-    // RAEC-only
-    if (location && !/athletic\s*&\s*event\s*center/i.test(location)) {
-      droppedLoc++; continue;
-    }
-    if (!timeText) { droppedTime++; continue; }
-    if (!facility) { droppedFac++;  continue; }
+    if (!facility || !timeText) continue;
 
-    if (courtMode && /fieldhouse.*turf/i.test(facility)) {
-      droppedSeason++; continue;
-    }
+    // Only RAEC
+    if (location && !/athletic\s*&\s*event\s*center/i.test(location)) continue;
+
+    // Court season: hide turf for fieldhouse 3..8
+    if (courtMode && /fieldhouse.*turf/i.test(facility)) continue;
+
+    // Hide RAEC front desk “internal hold”, “turf install per NM”, etc.
+    if (/raec\s*front\s*desk/i.test(reservee) && /(hold|turf.*install|per\s*nm)/i.test(purpose)) continue;
 
     const range = parseRangeToMinutes(timeText);
-    if (!range) { droppedTime++; continue; }
+    if (!range) continue;
 
     const rooms = mapFacilityToRooms(facility);
-    if (!rooms.length) { droppedRooms++; continue; }
+    if (!rooms.length) continue;
 
     const who = normalizeReservee(reservee);
     const pur = cleanPurpose(purpose);
 
     let title = '', subtitle = '', org = '', contact = '';
     if (isPickleball(purpose, reservee)) {
-      title = 'Open Pickleball'; subtitle = ''; org = 'Open Pickleball'; contact = '';
+      title = 'Open Pickleball';
+      subtitle = '';
+      org = 'Open Pickleball';
+      contact = '';
     } else if (who.type === 'catch') {
-      title = 'Catch Corner'; subtitle = pur; org = 'Catch Corner'; contact = '';
+      title = 'Catch Corner';
+      subtitle = pur;
+      org = 'Catch Corner';
+      contact = '';
     } else if (who.type === 'person') {
-      title = who.person; subtitle = pur; org = who.person; contact = '';
+      title = who.person;            // full First Last
+      subtitle = pur;
+      org = who.person;
+      contact = '';
     } else if (who.type === 'org+contact') {
-      title = who.org; subtitle = pur || who.contact; org = who.org; contact = who.contact;
+      title = who.org;
+      subtitle = pur || who.contact;
+      org = who.org; contact = who.contact;
     } else {
-      title = who.org || 'Reservation'; subtitle = pur; org = who.org || ''; contact = who.contact || '';
+      title = who.org || 'Reservation';
+      subtitle = pur;
+      org = who.org || ''; contact = who.contact || '';
     }
 
     items.push({
@@ -274,21 +303,17 @@ async function main() {
       rawFacility: facility,
       rawReservee: reservee
     });
-    kept++;
   }
 
-  // Blanket vs specifics dedupe for Fieldhouse
+  // Deduplicate Fieldhouse “Court 3-8” blankets vs specifics (same org/time overlap)
+  const specifics = items.filter(it => it.rooms.length <= 2 || it.rooms.some(r => /^[3-8]$/.test(r)));
   const resultSlots = [];
 
-  function overlaps(a, b) { return a.startMin < b.endMin && b.startMin < a.endMin; }
-
-  const specifics = items.filter(it => it.rooms.length <= 2 || it.rooms.some(r => /^[3-8]$/.test(r)));
-
   for (const it of items) {
-    const isFieldhouseSet = it.rooms.every(r => /^[3-8]$/.test(r));
-    const isBlanket = isFieldhouseSet && it.rooms.length >= 4;
+    const isFieldhouseBlanket =
+      it.rooms.every(r => /^[3-8]$/.test(r)) && it.rooms.length >= 4;
 
-    if (isBlanket) {
+    if (isFieldhouseBlanket) {
       const keepRooms = it.rooms.filter(r => {
         const conflict = specifics.some(sp =>
           sp !== it &&
@@ -301,13 +326,23 @@ async function main() {
       for (const r of keepRooms) {
         resultSlots.push(makeSlot(r, it.startMin, it.endMin, it.title, it.subtitle, it.org, it.contact));
       }
-    } else {
-      for (const r of it.rooms) {
-        resultSlots.push(makeSlot(r, it.startMin, it.endMin, it.title, it.subtitle, it.org, it.contact));
-      }
+      continue;
+    }
+
+    for (const r of it.rooms) {
+      resultSlots.push(makeSlot(r, it.startMin, it.endMin, it.title, it.subtitle, it.org, it.contact));
     }
   }
 
+  // De-dup exact duplicates (room+start+end+title)
+  const dedup = [];
+  const seen = new Set();
+  for (const s of resultSlots) {
+    const key = `${s.roomId}|${s.startMin}|${s.endMin}|${s.title}|${s.subtitle}`;
+    if (!seen.has(key)) { seen.add(key); dedup.push(s); }
+  }
+
+  // Final JSON (UI filters out past events by endMin)
   const json = {
     dayStartMin: 360,
     dayEndMin: 1380,
@@ -327,13 +362,52 @@ async function main() {
       { id: '10A',label: '10A',group: 'north' },
       { id: '10B',label: '10B',group: 'north' }
     ],
-    slots: resultSlots
+    slots: dedup
   };
 
   fs.writeFileSync(OUTPUT_JSON, JSON.stringify(json, null, 2));
 
-  console.log(`Rows total=${total} kept=${kept}; dropped: loc=${droppedLoc} time=${droppedTime} fac=${droppedFac} season=${droppedSeason} rooms=${droppedRooms}`);
+  // Debug: report unmapped facilities
+  const unmapped = new Map();
+  for (const it of items) {
+    if (!it.rooms || it.rooms.length === 0) {
+      const key = (it.rawFacility || '').trim();
+      unmapped.set(key, (unmapped.get(key) || 0) + 1);
+    }
+  }
+  if (unmapped.size) {
+    console.warn('Unmapped facilities (check mapping):');
+    for (const [fac, cnt] of unmapped.entries()) {
+      console.warn(`  ${fac}  × ${cnt}`);
+    }
+  }
+
   console.log(`Wrote events.json • rooms=${json.rooms.length} • slots=${json.slots.length}`);
+}
+
+async function mainEmpty() {
+  const scaffold = {
+    dayStartMin: 360,
+    dayEndMin: 1380,
+    rooms: [
+      { id: '1A', label: '1A', group: 'south' },
+      { id: '1B', label: '1B', group: 'south' },
+      { id: '2A', label: '2A', group: 'south' },
+      { id: '2B', label: '2B', group: 'south' },
+      { id: '3',  label: '3',  group: 'fieldhouse' },
+      { id: '4',  label: '4',  group: 'fieldhouse' },
+      { id: '5',  label: '5',  group: 'fieldhouse' },
+      { id: '6',  label: '6',  group: 'fieldhouse' },
+      { id: '7',  label: '7',  group: 'fieldhouse' },
+      { id: '8',  label: '8',  group: 'fieldhouse' },
+      { id: '9A', label: '9A', group: 'north' },
+      { id: '9B', label: '9B', group: 'north' },
+      { id: '10A',label: '10A',group: 'north' },
+      { id: '10B',label: '10B',group: 'north' }
+    ],
+    slots: []
+  };
+  fs.writeFileSync(OUTPUT_JSON, JSON.stringify(scaffold, null, 2));
 }
 
 main().catch(err => {
