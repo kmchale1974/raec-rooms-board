@@ -3,8 +3,11 @@ name: Build RAEC events json
 on:
   workflow_dispatch:
   schedule:
-    # Every day at 08:03 AM America/Chicago
-    - cron: "3 13 * * *"
+    # NOTE: GitHub cron is UTC. Pick one:
+    # - For 08:03 AM America/Chicago during CST (UTC-6): 14:03 UTC
+    # - For 08:03 AM America/Chicago during CDT (UTC-5): 13:03 UTC
+    # If you want "08:03 local Chicago" year-round without DST math, see the comment below.
+    - cron: "3 14 * * *"  # 08:03 CST (will be 09:03 during CDT)
 
 permissions:
   contents: write
@@ -17,19 +20,11 @@ jobs:
   build:
     runs-on: ubuntu-latest
 
-    # ---- JOB-LEVEL ENV (applies to all steps) ----
     env:
-      # OPTION A: Use a repo Variable (Settings → Variables → Actions)
-      #           Set "IMAP_USER" there to your Gmail address.
-      IMAP_USER: ${{ vars.IMAP_USER }}
-      # OPTION B: If you don't want to use a repo Variable, uncomment this line:
-      # IMAP_USER: raecroominfo.board@gmail.com
-
-      # Where the CSV will be downloaded by fetch_email.js
+      IMAP_USER: ${{ vars.IMAP_USER }}     # or hardcode: raecroominfo.board@gmail.com
       OUT_CSV: data/inbox/latest.csv
-      # Where the final JSON must live for the web app
       OUT_JSON: events.json
-      TZ: America/Chicago
+      TZ: America/Chicago                  # affects node/process, not the scheduler
 
     steps:
       - name: Checkout
@@ -37,30 +32,51 @@ jobs:
         with:
           fetch-depth: 0
 
-      - name: Use Node.js 20
+      - name: Use Node.js 20 (with npm cache)
         uses: actions/setup-node@v4
         with:
           node-version: "20"
+          cache: "npm"
 
-      - name: Install deps
-        run: npm install --no-audit --no-fund
+      - name: Show working dir and files
+        run: |
+          echo "PWD=$(pwd)"
+          ls -la
+
+      # Install deps (prefer ci if a lockfile is present, fall back to install)
+      - name: Install dependencies
+        id: install
+        run: |
+          if [ -f package-lock.json ]; then
+            echo "Lockfile present -> npm ci"
+            npm ci --no-audit --no-fund
+          else
+            echo "No lockfile -> npm install"
+            npm install --no-audit --no-fund
+          fi
 
       - name: Ensure data folders exist
         run: |
           mkdir -p data/inbox
           mkdir -p data/tmp
 
-      - name: Debug env (sanity check)
+      - name: Check required env/secret
         run: |
-          echo "IMAP_USER='$IMAP_USER'"
-          if [ -z "$IMAP_USER" ]; then
-            echo "IMAP_USER is EMPTY. Set it in Settings → Variables → Actions (name: IMAP_USER) or hardcode it in the workflow env."
+          set -e
+          echo "IMAP_USER='${IMAP_USER}'"
+          if [ -z "${IMAP_USER}" ]; then
+            echo "ERROR: IMAP_USER is empty. Set repo Variable 'IMAP_USER' or hardcode it in env." >&2
             exit 1
           fi
+          if [ -z "${IMAP_PASS}" ]; then
+            echo "ERROR: IMAP_PASS is empty. Add a repo Secret named IMAP_PASS." >&2
+            exit 1
+          fi
+        env:
+          IMAP_PASS: ${{ secrets.IMAP_PASS }}
 
       - name: Fetch latest CSV from Gmail
         env:
-          # Pull the Gmail App Password from repo Secrets (Settings → Secrets and variables → Actions → New repository secret)
           IMAP_PASS: ${{ secrets.IMAP_PASS }}
           IMAP_USER: ${{ env.IMAP_USER }}
           OUT_CSV:  ${{ env.OUT_CSV }}
@@ -79,23 +95,18 @@ jobs:
           test -s "$OUT_JSON" || (echo "events.json was not written" && exit 1)
           echo "Wrote $(wc -c < $OUT_JSON) bytes to $OUT_JSON"
 
-      - name: Commit events.json (rebase-safe)
+      - name: Commit events.json (rebase-safe, no destructive reset)
         run: |
           set -e
           git config user.name  "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
 
-          # Keep the workspace clean to avoid "cannot pull with rebase" errors
-          git reset --hard
-          git clean -fdx
-
           git fetch origin main
           git checkout main
           git pull --rebase origin main
 
-          # Bring in the newly generated events.json from the current workspace
-          # (it already exists in the working tree)
-          git add events.json
+          # Now add the newly generated file(s)
+          git add "${OUT_JSON}"
 
           if git diff --cached --quiet; then
             echo "No changes to commit."
