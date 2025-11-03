@@ -3,14 +3,13 @@ name: Fetch Email (IMAP)
 on:
   workflow_dispatch:
   schedule:
-    - cron: "0 * * * *"  # hourly
+    - cron: "0 * * * *"
 
 jobs:
   fetch:
     runs-on: ubuntu-latest
     permissions:
       contents: read
-
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -28,13 +27,11 @@ jobs:
 
       - name: Run fetch script
         env:
-          # Optional: your script defaults to raecroominfo.board@gmail.com if not set
-          IMAP_USER: ${{ vars.IMAP_USER }}
-          # REQUIRED: Gmail app password secret
+          IMAP_USER: ${{ secrets.IMAP_USER }}
           IMAP_PASS: ${{ secrets.IMAP_PASS }}
           LOG_LEVEL: info
           PRETTY_LOGS: "true"
-          SEARCH_SUBJECT: AC Daily Facility
+          SEARCH_SUBJECT: "AC Daily Facility"
           SEARCH_DAYS: "30"
           SEARCH_IN_ALLMAIL: "true"
         run: npm run fetch
