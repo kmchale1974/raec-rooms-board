@@ -3,13 +3,14 @@ name: Fetch Email (IMAP)
 on:
   workflow_dispatch:
   schedule:
-    - cron: "0 * * * *"  # hourly, adjust as needed
+    - cron: "0 * * * *"  # hourly
 
 jobs:
   fetch:
     runs-on: ubuntu-latest
     permissions:
       contents: read
+
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -22,17 +23,18 @@ jobs:
       - name: Install deps
         run: npm ci
         env:
-          # Ensure private registries or proxies don’t interfere
           NPM_CONFIG_FUND: "false"
           NPM_CONFIG_AUDIT: "false"
 
       - name: Run fetch script
         env:
-          IMAP_USER: ${{ secrets.IMAP_USER }} # optional; default is raecroominfo.board@gmail.com if not set
-          IMAP_PASS: ${{ secrets.IMAP_PASS }} # REQUIRED
+          # Optional: your script defaults to raecroominfo.board@gmail.com if not set
+          IMAP_USER: ${{ vars.IMAP_USER }}
+          # REQUIRED: Gmail app password secret
+          IMAP_PASS: ${{ secrets.IMAP_PASS }}
           LOG_LEVEL: info
           PRETTY_LOGS: "true"
-          SEARCH_SUBJECT: "AC Daily Facility"
+          SEARCH_SUBJECT: AC Daily Facility
           SEARCH_DAYS: "30"
           SEARCH_IN_ALLMAIL: "true"
-        - run: npm run fetch
+        run: npm run fetch
