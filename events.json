@@ -112,10 +112,28 @@
     },
     {
       "roomId": "2A",
+      "startMin": 1110,
+      "endMin": 1170,
+      "title": "Catch Corner (Internal Holds",
+      "subtitle": "CatchCorner (Prolific Basketball Booking #438629",
+      "org": "Catch Corner (Internal Holds",
+      "contact": "Catch Corner (Internal Holds)"
+    },
+    {
+      "roomId": "2A",
       "startMin": 1170,
       "endMin": 1260,
       "title": "Catch Corner (Internal Holds",
       "subtitle": "CatchCorner (Prolific Basketball Booking #438631",
+      "org": "Catch Corner (Internal Holds",
+      "contact": "Catch Corner (Internal Holds)"
+    },
+    {
+      "roomId": "2B",
+      "startMin": 1110,
+      "endMin": 1170,
+      "title": "Catch Corner (Internal Holds",
+      "subtitle": "CatchCorner (Prolific Basketball Booking #438629",
       "org": "Catch Corner (Internal Holds",
       "contact": "Catch Corner (Internal Holds)"
     },
