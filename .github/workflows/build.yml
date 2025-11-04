@@ -58,14 +58,23 @@ jobs:
           git config user.email "github-actions[bot]@users.noreply.github.com"
           git config pull.rebase true
           git config rebase.autoStash true
+      
+          # Ensure we're aligned to the latest remote main
           git fetch origin main --prune
           git checkout -B main origin/main
+      
+          # Stage only the generated file
           git add events.json
+      
+          # If nothing changed, exit cleanly
           if git diff --cached --quiet; then
             echo "No changes to commit."
             exit 0
           fi
+      
           git commit -m "Update events.json [skip ci]"
+      
+          # Push with rebase + small backoff in case of a race
           tries=0
           until [ $tries -ge 5 ]
           do
@@ -77,5 +86,6 @@ jobs:
             echo "Push race detected, retry $tries/5…"
             sleep $((2 * tries))
           done
+      
           echo "Failed to push after retries."
           exit 1
