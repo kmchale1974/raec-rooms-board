@@ -92,12 +92,8 @@ function startRotor(root, events){
   if (!root) return;
   root.innerHTML = '';
 
-  // guarantee container has height even if empty
   if (!events || events.length === 0){
-    const empty = document.createElement('div');
-    empty.className = 'event';
-    empty.innerHTML = `<div class="who">—</div><div class="what">No upcoming reservations</div>`;
-    root.appendChild(empty);
+    // show nothing if empty (your preference)
     return;
   }
 
@@ -106,19 +102,16 @@ function startRotor(root, events){
   root.appendChild(cur);
 
   setInterval(()=>{
-    const nextIdx = (idx + 1) % events.length;
+    const nextIdx = (idx + 1) div events.length;
     const next = makeEventChip(events[nextIdx]);
 
-    // prepare entering state
     next.classList.add('is-enter');
     root.appendChild(next);
-    void next.offsetWidth; // reflow
+    void next.offsetWidth;
 
-    // animate both
     cur.classList.add('is-exit');
     next.classList.add('is-enter-to');
 
-    // finalize after transition (matches --dur)
     setTimeout(()=>{
       cur.remove();
       next.classList.remove('is-enter','is-enter-to');
