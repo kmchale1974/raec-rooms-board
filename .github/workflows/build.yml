@@ -55,47 +55,39 @@ jobs:
 
       # <<< ADD THIS FINAL STEP >>>
       - name: Commit events.json (rebase-safe, auto-retry)
-        shell: bash
-        env:
-          GIT_AUTHOR_NAME: github-actions[bot]
-          GIT_AUTHOR_EMAIL: github-actions[bot]@users.noreply.github.com
-          GIT_COMMITTER_NAME: github-actions[bot]
-          GIT_COMMITTER_EMAIL: github-actions[bot]@users.noreply.github.com
-        run: |
-          set -euo pipefail
+  shell: bash
+  run: |
+    set -euo pipefail
 
-          git config user.name  "$GIT_AUTHOR_NAME"
-          git config user.email "$GIT_AUTHOR_EMAIL"
-          git config pull.rebase true
-          git config rebase.autoStash true
+    git config user.name  "github-actions[bot]"
+    git config user.email "github-actions[bot]@users.noreply.github.com"
+    git config pull.rebase true
+    git config rebase.autoStash true
 
-          # Make sure we're on up-to-date main
-          git fetch origin main --prune
-          git checkout -B main origin/main
+    # Make sure we're on main and up to date
+    git fetch origin main --prune
+    git checkout -B main origin/main
 
-          # Stage only the generated file
-          git add events.json
+    git add events.json
 
-          # Nothing to commit? exit cleanly
-          if git diff --cached --quiet; then
-            echo "No changes to commit."
-            exit 0
-          fi
+    if git diff --cached --quiet; then
+      echo "No changes to commit."
+      exit 0
+    fi
 
-          git commit -m "Update events.json [skip ci]"
+    git commit -m "Update events.json [skip ci]"
 
-          # Rebase & push with retries (handles races with other jobs)
-          tries=0
-          until [ $tries -ge 5 ]
-          do
-            if git pull --rebase origin main && git push origin HEAD:main; then
-              echo "Pushed successfully."
-              exit 0
-            fi
-            tries=$((tries+1))
-            echo "Push race detected, retry $tries/5 after backoff…"
-            sleep $((2 * tries))
-          done
+    tries=0
+    until [ $tries -ge 5 ]
+    do
+      if git pull --rebase origin main && git push origin HEAD:main; then
+        echo "Pushed successfully."
+        exit 0
+      fi
+      tries=$((tries+1))
+      echo "Push race detected, retry $tries/5 after backoff…"
+      sleep $((2 * tries))
+    done
 
-          echo "Failed to push after retries."
-          exit 1
+    echo "Failed to push after retries."
+    exit 1
