@@ -117,38 +117,43 @@ function isPickleball(purpose, reservee) {
 function mapFacilityToRooms(fac) {
   const f = clean(fac).toLowerCase();
 
-  // South 1/2
-  if (f === 'ac gym - half court 1a') return ['1A'];
-  if (f === 'ac gym - half court 1b') return ['1B'];
-  if (f === 'ac gym - court 1-ab')    return ['1A','1B'];
+  // helpful helpers for dash/space variants: "court 10-ab" vs "court 10 ab"
+  const re = (s) => new RegExp(s, 'i');
 
-  if (f === 'ac gym - half court 2a') return ['2A'];
-  if (f === 'ac gym - half court 2b') return ['2B'];
-  if (f === 'ac gym - court 2-ab')    return ['2A','2B'];
+  // South 1/2 halves
+  if (re('^ac gym - half court\\s*1a$').test(f)) return ['1A'];
+  if (re('^ac gym - half court\\s*1b$').test(f)) return ['1B'];
+  if (re('^ac gym - court\\s*1[-\\s]?ab$').test(f)) return ['1A','1B'];
 
-  if (f.includes('full gym 1ab & 2ab')) return ['1A','1B','2A','2B'];
-  if (f.includes('championship court'))  return ['1A','1B','2A','2B'];
+  if (re('^ac gym - half court\\s*2a$').test(f)) return ['2A'];
+  if (re('^ac gym - half court\\s*2b$').test(f)) return ['2B'];
+  if (re('^ac gym - court\\s*2[-\\s]?ab$').test(f)) return ['2A','2B'];
 
-  // North 9/10
-  if (f === 'ac gym - half court 9a') return ['9A'];
-  if (f === 'ac gym - half court 9b') return ['9B'];
-  if (f === 'ac gym - court 9-ab')    return ['9A','9B'];
+  // “Full Gym/Court 1AB & 2AB” & “Championship Court”
+  if (re('full\\s*(?:gym|court)\\s*1ab\\s*&\\s*2ab').test(f)) return ['1A','1B','2A','2B'];
+  if (re('championship\\s*court').test(f)) return ['1A','1B','2A','2B'];
 
-  if (f === 'ac gym - half court 10a') return ['10A'];
-  if (f === 'ac gym - half court 10b') return ['10B'];
-  if (f === 'ac gym - court 10-ab')    return ['10A','10B'];
+  // North 9/10 halves
+  if (re('^ac gym - half court\\s*9a$').test(f)) return ['9A'];
+  if (re('^ac gym - half court\\s*9b$').test(f)) return ['9B'];
+  if (re('^ac gym - court\\s*9[-\\s]?ab$').test(f)) return ['9A','9B'];
 
-  if (f.includes('full gym 9 & 10')) return ['9A','9B','10A','10B'];
+  if (re('^ac gym - half court\\s*10a$').test(f)) return ['10A'];
+  if (re('^ac gym - half court\\s*10b$').test(f)) return ['10B'];
+  if (re('^ac gym - court\\s*10[-\\s]?ab$').test(f)) return ['10A','10B'];
+
+  // “Full Gym/Court 9 & 10” (handle “Full Court” variant)
+  if (re('full\\s*(?:gym|court)\\s*9\\s*&\\s*10').test(f)) return ['9A','9B','10A','10B'];
 
   // Fieldhouse courts
   let m = f.match(/^ac fieldhouse - court\s*([3-8])$/i);
   if (m) return [m[1]];
-  if (f === 'ac fieldhouse - court 3-8') return ['3','4','5','6','7','8'];
+  if (re('^ac fieldhouse - court\\s*3-8$').test(f)) return ['3','4','5','6','7','8'];
 
-  // Turf variants (we’ll filter by season)
-  if (f === 'ac fieldhouse - full turf') return ['3','4','5','6','7','8'];
-  if (f === 'ac fieldhouse - half turf north') return ['6','7','8'];
-  if (f === 'ac fieldhouse - half turf south') return ['3','4','5'];
+  // Turf variants (filtered out during court season elsewhere, but mapped here)
+  if (re('^ac fieldhouse - full turf$').test(f)) return ['3','4','5','6','7','8'];
+  if (re('^ac fieldhouse - half turf north$').test(f)) return ['6','7','8'];
+  if (re('^ac fieldhouse - half turf south$').test(f)) return ['3','4','5'];
 
   return [];
 }
