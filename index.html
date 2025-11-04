@@ -5,121 +5,14 @@
   <title>RAEC Rooms Board</title>
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <link rel="icon" href="data:,">
-
-  <style>
-    :root{
-      --bg:#0f1115;
-      --panel:#12151c;
-      --ink:#e7eaf1;
-      --muted:#9aa3b2;
-      --accent:#2b87ff;
-      --grid:#1b202a;
-      --chip:#263043;
-      --chip-text:#e7eaf1;
-      --ease:cubic-bezier(.22,.61,.36,1);
-      --dur:520ms;
-      --shift:56px;
-    }
-
-    html,body{
-      margin:0; height:100%;
-      background:var(--bg); color:var(--ink);
-      font-family: Inter, "SF Pro Text", Segoe UI, Roboto, Arial, sans-serif;
-      -webkit-font-smoothing:antialiased; -moz-osx-font-smoothing:grayscale;
-      overflow:hidden;
-      cursor: none; /* kiosk */
-    }
-
-    /* Fit to any player window */
-    .viewport{ position:fixed; inset:0; display:flex; justify-content:center; align-items:flex-start; padding:12px; box-sizing:border-box; }
-    .stage{
-      width:1920px; height:1080px;
-      padding:32px; box-sizing:border-box;
-      display:grid; grid-template-rows: 120px 1fr; gap:24px;
-      background:var(--bg);
-    }
-
-    /* Header */
-    .header{ display:grid; grid-template-columns: 360px 1fr 360px; align-items:center; gap:16px; }
-    .brand{ display:flex; align-items:center; gap:16px; }
-    .brand img{ height:80px; width:auto; object-fit:contain; }
-    .dateclock{ justify-self:center; text-align:center; }
-    #headerDate{ font-size:44px; font-weight:800; letter-spacing:.02em; }
-    #headerClock{ font-size:28px; color:var(--muted); margin-top:6px; font-weight:600; }
-    .wifi{ justify-self:end; background:var(--panel); border:1px solid var(--grid); border-radius:14px; padding:14px 16px; min-width:320px; }
-    .wifi .title{ font-size:16px; color:var(--muted); letter-spacing:.08em; text-transform:uppercase; }
-    .wifi .row{ display:flex; justify-content:space-between; gap:12px; margin-top:6px; }
-    .wifi .row span:first-child{ color:var(--muted); }
-    .wifi .row span:last-child{ font-weight:700; }
-
-    /* Three column layout */
-    .grid{ height:100%; min-height:0; display:grid; grid-template-columns: 1fr 1.5fr 1fr; gap:24px; }
-    .group{
-      background:var(--panel); border:1px solid var(--grid); border-radius:18px;
-      padding:16px; display:grid; grid-template-rows: 44px 1fr; gap:12px; overflow:hidden;
-    }
-    .group .title{
-      font-size:18px; color:var(--muted); letter-spacing:.1em; text-transform:uppercase;
-      border-bottom:1px solid var(--grid); display:flex; align-items:center; padding-bottom:6px;
-    }
-    .group .body{ min-height:0; }
-
-    .rooms-stack{ display:grid; grid-template-rows: 1fr 1fr; gap:12px; min-height:0; }
-    .row-2cols{ display:grid; grid-template-columns: 1fr 1fr; gap:12px; min-height:0; }
-
-    /* Fieldhouse is a fixed 2x3 grid of rooms 3..8 */
-    .rooms-fieldhouse{
-      display:grid; grid-template-columns: repeat(3, 1fr); grid-template-rows: 1fr 1fr; gap:12px;
-      height:100%; min-height:0;
-    }
-
-    /* Room card */
-    .room{
-      border:1px solid var(--grid); border-radius:14px; padding:14px;
-      display:flex; flex-direction:column; gap:10px;
-      min-height:0; overflow:hidden;
-      background:linear-gradient(180deg, rgba(255,255,255,0.02), rgba(0,0,0,0));
-    }
-    .roomHeader{
-      display:flex; align-items:center; justify-content:space-between; gap:12px;
-      border-bottom:1px dashed var(--grid); padding-bottom:8px; flex:0 0 auto;
-    }
-    .roomHeader .id{ font-size:28px; font-weight:800; letter-spacing:.04em; }
-    .roomHeader .count{ font-size:13px; color:var(--muted); }
-    .roomHeader .count em{ font-style:normal; color:var(--ink); font-weight:700; }
-
-    .events{ position:relative; flex:1 1 auto; min-height:0; height:100%; overflow:hidden; }
-    .single-rotor{ position:relative; height:100%; width:100%; }
-
-    .single-rotor .event{
-      position:absolute; inset:0;
-      display:flex; flex-direction:column; gap:6px;
-      background:var(--chip); border:1px solid var(--grid); border-radius:12px;
-      padding:10px 12px; box-sizing:border-box;
-      will-change:transform,opacity; backface-visibility:hidden; transform:translateZ(0);
-      opacity:0; transform:translateX(var(--shift));
-    }
-    .event .who{ font-size:20px; font-weight:800; line-height:1.15; }
-    .event .what{ font-size:16px; color:var(--muted); line-height:1.2; }
-    .event .when{ font-size:15px; color:#b7c0cf; font-weight:600; }
-    .who,.what{ word-wrap:break-word; overflow-wrap:anywhere; }
-
-    /* Enter/exit (always-left) */
-    .single-rotor .event.is-enter   { opacity:0; transform:translateX(var(--shift)); }
-    .single-rotor .event.is-enter.is-active { transition: transform var(--dur) var(--ease), opacity var(--dur) var(--ease); opacity:1; transform:translateX(0); }
-    .single-rotor .event.is-exit    { opacity:1; transform:translateX(0); }
-    .single-rotor .event.is-exit.is-active  { transition: transform var(--dur) var(--ease), opacity var(--dur) var(--ease); opacity:0; transform:translateX(calc(-1 * var(--shift))); }
-
-    *::-webkit-scrollbar{ display:none; }
-    *{ scrollbar-width:none; }
-  </style>
+  <link rel="stylesheet" href="./style.css">
 </head>
 <body>
   <div class="viewport">
     <div class="stage">
       <div class="header">
         <div class="brand">
-          <img src="./logo.png" alt="Romeoville Athletic & Event Center">
+          <img src="./logo.png" alt="Romeoville Athletic & Event Center" />
         </div>
         <div class="dateclock">
           <div id="headerDate">—</div>
@@ -136,76 +29,67 @@
         <!-- South -->
         <section class="group">
           <div class="title">South Gym</div>
-          <div class="body">
-            <div class="rooms-stack">
-              <div class="row-2cols">
-                <div class="room" id="room-1A"><div class="roomHeader"><div class="id">1A</div><div class="count">reservations: <em>—</em></div></div><div class="events"><div class="single-rotor"></div></div></div>
-                <div class="room" id="room-1B"><div class="roomHeader"><div class="id">1B</div><div class="count">reservations: <em>—</em></div></div><div class="events"><div class="single-rotor"></div></div></div>
+          <div class="rooms-stack">
+            <div class="row-2cols">
+              <div class="room" id="room-1A">
+                <div class="roomHeader"><div class="id">1A</div><div class="count">reservations: <em>—</em></div></div>
+                <div class="events"></div>
               </div>
-              <div class="row-2cols">
-                <div class="room" id="room-2A"><div class="roomHeader"><div class="id">2A</div><div class="count">reservations: <em>—</em></div></div><div class="events"><div class="single-rotor"></div></div></div>
-                <div class="room" id="room-2B"><div class="roomHeader"><div class="id">2B</div><div class="count">reservations: <em>—</em></div></div><div class="events"><div class="single-rotor"></div></div></div>
+              <div class="room" id="room-1B">
+                <div class="roomHeader"><div class="id">1B</div><div class="count">reservations: <em>—</em></div></div>
+                <div class="events"></div>
+              </div>
+            </div>
+            <div class="row-2cols">
+              <div class="room" id="room-2A">
+                <div class="roomHeader"><div class="id">2A</div><div class="count">reservations: <em>—</em></div></div>
+                <div class="events"></div>
+              </div>
+              <div class="room" id="room-2B">
+                <div class="roomHeader"><div class="id">2B</div><div class="count">reservations: <em>—</em></div></div>
+                <div class="events"></div>
               </div>
             </div>
           </div>
         </section>
 
-        <!-- Fieldhouse 3..8 -->
+        <!-- Fieldhouse -->
         <section class="group">
           <div class="title">Fieldhouse</div>
-          <div class="body">
-            <div class="rooms-fieldhouse">
-              <div class="room" id="room-3"><div class="roomHeader"><div class="id">3</div><div class="count">reservations: <em>—</em></div></div><div class="events"><div class="single-rotor"></div></div></div>
-              <div class="room" id="room-4"><div class="roomHeader"><div class="id">4</div><div class="count">reservations: <em>—</em></div></div><div class="events"><div class="single-rotor"></div></div></div>
-              <div class="room" id="room-5"><div class="roomHeader"><div class="id">5</div><div class="count">reservations: <em>—</em></div></div><div class="events"><div class="single-rotor"></div></div></div>
-              <div class="room" id="room-6"><div class="roomHeader"><div class="id">6</div><div class="count">reservations: <em>—</em></div></div><div class="events"><div class="single-rotor"></div></div></div>
-              <div class="room" id="room-7"><div class="roomHeader"><div class="id">7</div><div class="count">reservations: <em>—</em></div></div><div class="events"><div class="single-rotor"></div></div></div>
-              <div class="room" id="room-8"><div class="roomHeader"><div class="id">8</div><div class="count">reservations: <em>—</em></div></div><div class="events"><div class="single-rotor"></div></div></div>
-            </div>
-          </div>
+          <div class="rooms-fieldhouse" id="fieldhousePager"></div>
         </section>
 
         <!-- North -->
         <section class="group">
           <div class="title">North Gym</div>
-          <div class="body">
-            <div class="rooms-stack">
-              <div class="row-2cols">
-                <div class="room" id="room-9A"><div class="roomHeader"><div class="id">9A</div><div class="count">reservations: <em>—</em></div></div><div class="events"><div class="single-rotor"></div></div></div>
-                <div class="room" id="room-9B"><div class="roomHeader"><div class="id">9B</div><div class="count">reservations: <em>—</em></div></div><div class="events"><div class="single-rotor"></div></div></div>
+          <div class="rooms-stack">
+            <div class="row-2cols">
+              <div class="room" id="room-9A">
+                <div class="roomHeader"><div class="id">9A</div><div class="count">reservations: <em>—</em></div></div>
+                <div class="events"></div>
               </div>
-              <div class="row-2cols">
-                <div class="room" id="room-10A"><div class="roomHeader"><div class="id">10A</div><div class="count">reservations: <em>—</em></div></div><div class="events"><div class="single-rotor"></div></div></div>
-                <div class="room" id="room-10B"><div class="roomHeader"><div class="id">10B</div><div class="count">reservations: <em>—</em></div></div><div class="events"><div class="single-rotor"></div></div></div>
+              <div class="room" id="room-9B">
+                <div class="roomHeader"><div class="id">9B</div><div class="count">reservations: <em>—</em></div></div>
+                <div class="events"></div>
+              </div>
+            </div>
+            <div class="row-2cols">
+              <div class="room" id="room-10A">
+                <div class="roomHeader"><div class="id">10A</div><div class="count">reservations: <em>—</em></div></div>
+                <div class="events"></div>
+              </div>
+              <div class="room" id="room-10B">
+                <div class="roomHeader"><div class="id">10B</div><div class="count">reservations: <em>—</em></div></div>
+                <div class="events"></div>
               </div>
             </div>
           </div>
         </section>
       </div>
+
     </div>
   </div>
 
   <script type="module" src="./app.js"></script>
-
-  <script>
-    // scale 1920x1080 canvas to fit
-    (function fitStageSetup(){
-      const W = 1920, H = 1080;
-      function fit() {
-        const vp = document.querySelector('.viewport');
-        const stage = document.querySelector('.stage');
-        if (!vp || !stage) return;
-        const sx = vp.clientWidth / W;
-        const sy = vp.clientHeight / H;
-        const s  = Math.min(sx, sy);
-        stage.style.transform = `scale(${s})`;
-        stage.style.transformOrigin = 'top left';
-        vp.style.minHeight = (H * s) + 'px';
-      }
-      window.addEventListener('resize', fit);
-      window.addEventListener('orientationchange', fit);
-      document.addEventListener('DOMContentLoaded', fit);
-    })();
-  </script>
 </body>
 </html>
