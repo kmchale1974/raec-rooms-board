@@ -1,0 +1,126 @@
+name: Build RAEC events json
+
+on:
+  workflow_dispatch:
+  schedule:
+    # GitHub cron is UTC. 14:03 UTC = 08:03 America/Chicago during CST, 09:03 during CDT.
+    - cron: "3 14 * * *"
+
+permissions:
+  contents: write
+
+concurrency:
+  group: raec-events-build
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    env:
+      # Prefer a repo Variable for the username (Settings → Variables → Actions)
+      # or hardcode the email here if you want:
+      IMAP_USER: ${{ vars.IMAP_USER }}
+      OUT_CSV: data/inbox/latest.csv
+      OUT_JSON: events.json
+      TZ: America/Chicago
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Use Node.js 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - name: Install deps
+        run: npm ci
+        env:
+          NPM_CONFIG_FUND: "false"
+          NPM_CONFIG_AUDIT: "false"
+
+      - name: Ensure data folders exist
+        run: |
+          mkdir -p data/inbox
+          mkdir -p data/tmp
+
+      - name: Debug env
+        run: |
+          echo "IMAP_USER='${IMAP_USER}'"
+          if [ -z "$IMAP_USER" ]; then
+            echo "IMAP_USER is empty. Set repo variable IMAP_USER or hardcode it in env."
+            exit 1
+          fi
+
+      - name: Fetch latest CSV from Gmail
+        env:
+          IMAP_USER: ${{ env.IMAP_USER }}
+          IMAP_PASS: ${{ secrets.IMAP_PASS }}   # REQUIRED: repo secret
+          OUT_CSV:   ${{ env.OUT_CSV }}
+          LOG_LEVEL: info
+          PRETTY_LOGS: "true"
+        run: node scripts/fetch_email.js
+
+      - name: Verify CSV downloaded
+        run: |
+          ls -l "$OUT_CSV" || (echo "No CSV downloaded" && exit 1)
+          test -s "$OUT_CSV" || (echo "CSV is empty" && exit 1)
+
+      - name: Transform CSV → events.json
+        env:
+          IN_CSV:   ${{ env.OUT_CSV }}
+          OUT_JSON: ${{ env.OUT_JSON }}
+        run: |
+          node scripts/transform.mjs
+          test -s "$OUT_JSON" || (echo "events.json was not written" && exit 1)
+          echo "Wrote $(wc -c < $OUT_JSON) bytes to $OUT_JSON"
+
+      - name: Commit events.json (rebase-safe, auto-retry)
+        shell: bash
+        env:
+          GIT_AUTHOR_NAME:  github-actions[bot]
+          GIT_AUTHOR_EMAIL: github-actions[bot]@users.noreply.github.com
+          GIT_COMMITTER_NAME:  github-actions[bot]
+          GIT_COMMITTER_EMAIL: github-actions[bot]@users.noreply.github.com
+        run: |
+          set -euo pipefail
+
+          # Configure git on runner
+          git config --global user.name  "$GIT_AUTHOR_NAME"
+          git config --global user.email "$GIT_AUTHOR_EMAIL"
+          git config --global pull.rebase true
+          git config --global rebase.autoStash true
+          git config --global --add safe.directory "$GITHUB_WORKSPACE"
+
+          # Ensure we're up-to-date on main
+          git fetch origin main --prune
+          git checkout -B main origin/main
+
+          # Stage ONLY the generated file
+          git add -- events.json
+
+          # If nothing changed, exit cleanly
+          if git diff --cached --quiet; then
+            echo "No changes to commit."
+            exit 0
+          fi
+
+          git commit -m "Update events.json [skip ci]"
+
+          # Rebase & push with retries (handles concurrent pushes)
+          tries=0
+          until [ $tries -ge 5 ]; do
+            if git pull --rebase origin main && git push origin HEAD:main; then
+              echo "Pushed successfully."
+              exit 0
+            fi
+            tries=$((tries+1))
+            echo "Push race detected, retry $tries/5…"
+            sleep $((2 * tries))
+          done
+
+          echo "Failed to push after retries."
+          exit 1
