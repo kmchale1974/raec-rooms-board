@@ -1,8 +1,4 @@
-/* =========================
-   RAEC Rooms Board – Full CSS
-   ========================= */
-
-/* ---- Theme tokens ---- */
+/* Theme */
 :root{
   --bg:#0f1115;
   --panel:#12151c;
@@ -11,97 +7,80 @@
   --accent:#2b87ff;
   --grid:#1b202a;
   --chip:#263043;
-  --chip-text:#e7eaf1;
-  --ok:#1f9d6a;
-
-  /* animation/timing vars used by JS hooks */
-  --ease: cubic-bezier(.22,.61,.36,1);
-  --dur: 740ms;
-  --shift: 60px;
+  --ease:cubic-bezier(.22,.61,.36,1);
+  --dur:740ms;
+  --shift:60px;
 }
 
-/* ---- Base ---- */
+/* Base */
 html,body{
   margin:0; height:100%;
   background:var(--bg); color:var(--ink);
   font-family: Inter, "SF Pro Text", Segoe UI, Roboto, Arial, sans-serif;
   -webkit-font-smoothing:antialiased; -moz-osx-font-smoothing:grayscale;
-  cursor: none; /* kiosk */
+  cursor:none;
 }
-
-/* ---- Fixed canvas (scaled by JS) ---- */
-.viewport{ position:fixed; inset:0; display:flex; justify-content:center; align-items:flex-start; padding:16px; box-sizing:border-box; }
+.viewport{ position:fixed; inset:0; display:flex; align-items:flex-start; justify-content:center; padding:16px; box-sizing:border-box; }
 .stage{
   width:1920px; height:1080px;
-  padding:36px; box-sizing:border-box;
+  padding:32px; box-sizing:border-box;
   display:grid; grid-template-rows: 120px 1fr; gap:24px;
-  background:var(--bg);
 }
 
-/* ---- Header ---- */
+/* Header */
 .header{
-  display:grid;
-  grid-template-columns: 360px 1fr 360px;
-  align-items:center;
-  gap:24px;
+  display:grid; grid-template-columns: 360px 1fr 360px; align-items:center; gap:16px;
 }
 .brand{ display:flex; align-items:center; gap:16px; }
 .brand img{ height:80px; width:auto; object-fit:contain; }
-
 .dateclock{ justify-self:center; text-align:center; }
 #headerDate{ font-size:44px; font-weight:800; letter-spacing:.02em; }
 #headerClock{ font-size:28px; color:var(--muted); margin-top:6px; font-weight:600; }
-
 .wifi{
   justify-self:end; background:var(--panel); border:1px solid var(--grid);
-  border-radius:14px; padding:14px 16px; min-width:340px;
+  border-radius:14px; padding:14px 16px; min-width:320px;
 }
 .wifi .title{ font-size:16px; color:var(--muted); letter-spacing:.08em; text-transform:uppercase; }
 .wifi .row{ display:flex; justify-content:space-between; gap:12px; margin-top:6px; }
 .wifi .row span:first-child{ color:var(--muted); }
 .wifi .row span:last-child{ font-weight:700; }
 
-/* ---- Three-column board ---- */
-.grid{ display:grid; grid-template-columns: 1fr 1.5fr 1fr; gap:24px; height:100%; }
+/* 3-column board */
+.grid{
+  height:100%; min-height:0;
+  display:grid; grid-template-columns: 1fr 1.5fr 1fr; gap:24px;
+}
 
 /* Group panels */
 .group{
   background:var(--panel); border:1px solid var(--grid); border-radius:18px;
-  padding:16px; display:grid; grid-template-rows: 44px 1fr; gap:12px; overflow:hidden;
+  padding:16px; display:flex; flex-direction:column; gap:12px;
+  overflow:hidden; min-height:0;
 }
 .group .title{
   font-size:18px; color:var(--muted); letter-spacing:.1em; text-transform:uppercase;
-  border-bottom:1px solid var(--grid); display:flex; align-items:center; padding-bottom:6px;
+  border-bottom:1px solid var(--grid); padding-bottom:6px; flex:0 0 auto;
 }
+.group .body{ flex:1 1 auto; min-height:0; }
 
-/* South/North stacks (1..2) and (9..10) */
-.rooms-stack{ display:grid; grid-template-rows: 1fr 1fr; gap:12px; min-height:0; }
-.row-2cols{ display:grid; grid-template-columns: 1fr 1fr; gap:12px; }
+/* South/North stacks */
+.rooms-stack{ height:100%; min-height:0; display:grid; grid-template-rows: 1fr 1fr; gap:12px; }
+.row-2cols{ height:100%; min-height:0; display:grid; grid-template-columns: 1fr 1fr; gap:12px; }
 
-/* Fieldhouse grid (3..8) */
-.rooms-fieldhouse{ position:relative; min-height:0; }
+/* Fieldhouse (paged) */
+.rooms-fieldhouse{ position:relative; height:100%; min-height:0; }
 .rooms-fieldhouse .page{
   position:absolute; inset:0;
   display:grid; grid-template-columns: repeat(3, 1fr); grid-template-rows: 1fr 1fr;
   gap:12px; padding:0; box-sizing:border-box;
-
-  transform: translateX(100%);
-  opacity: 0;
+  transform:translateX(100%); opacity:0;
   transition: transform var(--dur) var(--ease), opacity var(--dur) var(--ease);
   will-change: transform, opacity;
 }
-.rooms-fieldhouse .page.is-active{
-  transform: translateX(0);
-  opacity: 1;
-  z-index: 2;
-}
-.rooms-fieldhouse .page.is-leaving{
-  transform: translateX(-100%);
-  opacity: 0;
-  z-index: 1;
-}
+.rooms-fieldhouse .page.is-active{ transform:translateX(0); opacity:1; z-index:2; }
+.rooms-fieldhouse .page.is-leaving{ transform:translateX(-100%); opacity:0; z-index:1; }
 
-/* ---- Room cards ---- */
+/* Room */
 .room{
   border:1px solid var(--grid); border-radius:14px; padding:14px;
   display:flex; flex-direction:column; gap:10px;
@@ -110,44 +89,44 @@ html,body{
 }
 .roomHeader{
   display:flex; align-items:center; justify-content:space-between; gap:12px;
-  border-bottom:1px dashed var(--grid); padding-bottom:8px;
+  border-bottom:1px dashed var(--grid); padding-bottom:8px; flex:0 0 auto;
 }
-.roomHeader .id{ font-size:30px; font-weight:800; letter-spacing:.04em; }
+.roomHeader .id{ font-size:28px; font-weight:800; letter-spacing:.04em; }
 .roomHeader .count{ font-size:13px; color:var(--muted); }
 .roomHeader .count em{ font-style:normal; color:var(--ink); font-weight:700; }
 
-/* ---- Event areas ---- */
-.events{ position:relative; flex:1 1 auto; min-height:0; overflow:hidden; }
-.events-list{ display:flex; flex-direction:column; gap:10px; height:100%; }
-.single-rotor{ position:relative; height:100%; width:100%; }
+/* Events area — ***hard min-height so it never collapses*** */
+.events{
+  position:relative; flex:1 1 auto; min-height:160px; /* <— important */
+  overflow:hidden;
+}
+.single-rotor{
+  position:relative; height:100%; width:100%;
+  min-height:160px; /* <— important */
+}
 
-/* Event chip */
+/* Event card */
 .event{
-  background:var(--chip);
-  border:1px solid var(--grid);
-  border-radius:12px;
-  padding:12px 14px;
-  display:flex; flex-direction:column; gap:6px;
+  background:var(--chip); border:1px solid var(--grid); border-radius:12px;
+  padding:12px 14px; display:flex; flex-direction:column; gap:6px;
+  color:var(--ink);
 }
 .event .who{ font-size:20px; font-weight:800; line-height:1.15; }
 .event .what{ font-size:16px; color:var(--muted); line-height:1.2; }
 .event .when{ font-size:15px; color:#b7c0cf; font-weight:600; }
 .who,.what{ word-wrap:break-word; overflow-wrap:anywhere; }
 
-/* ------ single-card smooth slide/fade hooks ------ */
+/* Smooth slide/fade for single card */
 .single-rotor .event{
   position:absolute; inset:0;
-  display:flex; flex-direction:column; gap:6px;
   transition: transform var(--dur) var(--ease), opacity var(--dur) var(--ease);
-  transform: translateX(0);
-  opacity: 1;
-  will-change: transform, opacity;
+  transform: translateX(0); opacity:1; will-change: transform, opacity;
 }
 .single-rotor .event.is-enter{ transform: translateX(var(--shift)); opacity: 0; }
 .single-rotor .event.is-enter-to{ transform: translateX(0); opacity: 1; }
 .single-rotor .event.is-exit{ transform: translateX(0); opacity: 1; }
 .single-rotor .event.is-exit-to{ transform: translateX(calc(-1 * var(--shift))); opacity: 0; }
 
-/* ---- No scrollbars ---- */
+/* Hide scrollbars */
 *::-webkit-scrollbar{ display:none; }
 *{ scrollbar-width:none; }
