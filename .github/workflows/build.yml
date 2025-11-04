@@ -7,6 +7,9 @@ on:
 
 permissions:
   contents: write
+concurrency:
+  group: raec-events-build
+  cancel-in-progress: false
 
 jobs:
   build:
