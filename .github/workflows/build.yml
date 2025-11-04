@@ -3,8 +3,7 @@ name: Build RAEC events json
 on:
   workflow_dispatch:
   schedule:
-    # 08:03 America/Chicago (13:03 UTC)
-    - cron: "3 13 * * *"
+    - cron: "3 13 * * *"  # 08:03 America/Chicago
 
 permissions:
   contents: write
@@ -13,7 +12,7 @@ jobs:
   build:
     runs-on: ubuntu-latest
     env:
-      IMAP_USER: ${{ vars.IMAP_USER }}   # or hardcode the email here
+      IMAP_USER: ${{ vars.IMAP_USER }}
       OUT_CSV: data/inbox/latest.csv
       OUT_JSON: events.json
       TZ: America/Chicago
@@ -30,53 +29,43 @@ jobs:
           node-version: "20"
 
       - name: Install deps
-        run: npm ci
+        run: npm i
         env:
           NPM_CONFIG_FUND: "false"
           NPM_CONFIG_AUDIT: "false"
 
       - name: Ensure data folders exist
-        run: |
-          mkdir -p data/inbox
-          mkdir -p data/tmp
+        run: mkdir -p data/inbox
 
       - name: Fetch latest CSV from Gmail
         env:
           IMAP_USER: ${{ env.IMAP_USER }}
-          IMAP_PASS: ${{ secrets.IMAP_PASS }}  # REQUIRED
+          IMAP_PASS: ${{ secrets.IMAP_PASS }}
           OUT_CSV:   ${{ env.OUT_CSV }}
-        run: npm run fetch
+        run: node scripts/fetch_email.js
 
       - name: Transform CSV → events.json
         env:
           IN_CSV:   ${{ env.OUT_CSV }}
           OUT_JSON: ${{ env.OUT_JSON }}
-        run: npm run transform
+        run: node scripts/transform.mjs
 
-      # <<< ADD THIS FINAL STEP >>>
       - name: Commit events.json (rebase-safe, auto-retry)
         shell: bash
         run: |
           set -euo pipefail
-      
           git config user.name  "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
           git config pull.rebase true
           git config rebase.autoStash true
-      
-          # Make sure we're on main and up to date
           git fetch origin main --prune
           git checkout -B main origin/main
-      
           git add events.json
-      
           if git diff --cached --quiet; then
             echo "No changes to commit."
             exit 0
           fi
-      
           git commit -m "Update events.json [skip ci]"
-      
           tries=0
           until [ $tries -ge 5 ]
           do
@@ -85,9 +74,8 @@ jobs:
               exit 0
             fi
             tries=$((tries+1))
-            echo "Push race detected, retry $tries/5 after backoff…"
+            echo "Push race detected, retry $tries/5…"
             sleep $((2 * tries))
           done
-      
           echo "Failed to push after retries."
           exit 1
