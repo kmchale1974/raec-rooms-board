@@ -102,7 +102,7 @@ function startRotor(root, events){
   root.appendChild(cur);
 
   setInterval(()=>{
-    const nextIdx = (idx + 1) div events.length;
+    const nextIdx = (idx + 1) % events.length;
     const next = makeEventChip(events[nextIdx]);
 
     next.classList.add('is-enter');
