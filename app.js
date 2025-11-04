@@ -1,159 +1,140 @@
-// Timing
-const NOW_TICK_MS = 1000;
-const ROTATE_MS   = 6000;
-const REFRESH_MS  = 60 * 1000;
+// app.js
+const JSON_URL = './events.json?v=' + Date.now(); // bust cache
 
-const roomsSouth = ['1A','1B','2A','2B'];
-const roomsField = ['3','4','5','6','7','8'];
-const roomsNorth = ['9A','9B','10A','10B'];
-const roomAll = [...roomsSouth, ...roomsField, ...roomsNorth];
-
-// Clock
-function pad2(n){ return String(n).padStart(2,'0'); }
-function setHeaderClock(){
-  const d = new Date();
-  const dow = d.toLocaleDateString(undefined, { weekday: 'long' });
-  const mon = d.toLocaleDateString(undefined, { month: 'long' });
-  document.getElementById('headerDate').textContent = `${dow}, ${mon} ${d.getDate()}, ${d.getFullYear()}`;
-  const h = d.getHours(), hh = ((h + 11) % 12) + 1;
-  document.getElementById('headerClock').textContent = `${hh}:${pad2(d.getMinutes())}:${pad2(d.getSeconds())} ${h>=12?'PM':'AM'}`;
+// America/Chicago clock
+function getNowChicago() {
+  const fmt = new Intl.DateTimeFormat('en-US', { timeZone: 'America/Chicago', hour12: false,
+    year:'numeric', month:'2-digit', day:'2-digit', hour:'2-digit', minute:'2-digit' });
+  // parse back out
+  const parts = Object.fromEntries(fmt.formatToParts(new Date()).map(p => [p.type, p.value]));
+  const iso = `${parts.year}-${parts.month}-${parts.day}T${parts.hour}:${parts.minute}:00`;
+  return new Date(iso);
 }
-function minutesNowLocal(){ const d = new Date(); return d.getHours()*60 + d.getMinutes(); }
+function minOfDay(d) { return d.getHours()*60 + d.getMinutes(); }
 
-// UI helpers
-function makeEventChip(slot){
-  const el = document.createElement('div');
-  el.className = 'event';
-  const who = document.createElement('div');
-  who.className = 'who';
-  who.textContent = slot.title || 'Reservation';
-  const what = document.createElement('div');
-  what.className = 'what';
-  what.textContent = slot.subtitle || '';
-  const when = document.createElement('div');
-  when.className = 'when';
-  const fmt = (min)=>{ let h=Math.floor(min/60), m=min%60, ap=h>=12?'PM':'AM'; h=((h+11)%12)+1; return `${h}:${pad2(m)} ${ap}`; };
-  when.textContent = `${fmt(slot.startMin)} – ${fmt(slot.endMin)}`;
-  el.append(who);
-  if (what.textContent.trim()) el.append(what);
-  el.append(when);
-  return el;
+function setHeaderClock() {
+  const now = getNowChicago();
+  const dateFmt = new Intl.DateTimeFormat('en-US', { timeZone:'America/Chicago', weekday:'long', month:'long', day:'numeric' });
+  const timeFmt = new Intl.DateTimeFormat('en-US', { timeZone:'America/Chicago', hour:'numeric', minute:'2-digit' });
+  document.getElementById('headerDate').textContent = dateFmt.format(now);
+  document.getElementById('headerClock').textContent = timeFmt.format(now);
 }
+setHeaderClock();
+setInterval(setHeaderClock, 10_000);
 
-function updateCounts(roomId, count){
-  const el = document.querySelector(`#room-${CSS.escape(roomId)} .roomHeader .count em`);
-  if (el) el.textContent = String(count);
-}
-
-// Filters
-function systemFilter(s){
-  const t = (s.title||'').toLowerCase();
-  const u = (s.subtitle||'').toLowerCase();
-  if (t.includes('raec front desk')) return false;
-  if (u.includes('turf install per nm')) return false;
-  if (u.includes('internal hold per nm')) return false;
-  return true;
-}
-function timeFilter(s, nowMin){ return s.endMin > nowMin; }
-
-// Data
-async function loadData(){
-  const bust = `?v=${Date.now()}`;
-  const res = await fetch(`./events.json${bust}`, { cache:'no-store' });
-  if (!res.ok) throw new Error('failed to fetch events.json');
-  return res.json();
-}
-function byStartThenTitle(a,b){ if (a.startMin!==b.startMin) return a.startMin-b.startMin; return (a.title||'').localeCompare(b.title||''); }
-
-// Fieldhouse grid builder (one page, but extensible)
-function buildFieldhousePage(){
-  const pager = document.getElementById('fieldhousePager');
-  pager.innerHTML = '';
-  const page = document.createElement('div');
-  page.className = 'page is-active';
-  for (const id of roomsField){
-    const card = document.createElement('div');
-    card.className = 'room';
-    card.id = `room-${id}`;
-    card.innerHTML = `
-      <div class="roomHeader">
-        <div class="id">${id}</div>
-        <div class="count">reservations: <em>—</em></div>
-      </div>
-      <div class="events"><div class="single-rotor"></div></div>
-    `;
-    page.appendChild(card);
+// Smooth single-card rotor per room
+function startRotor(container, items, rotateMs=7000) {
+  if (!items || !items.length) {
+    container.innerHTML = ''; // no “no upcoming” filler per your request
+    return;
   }
-  pager.appendChild(page);
+  let idx = 0;
+  // create first card
+  const mk = (i) => {
+    const it = items[i];
+    const el = document.createElement('div');
+    el.className = 'event';
+    const title = it.title || '';
+    const sub   = it.subtitle || '';
+    const when  = `${toClock(it.startMin)} – ${toClock(it.endMin)}`;
+    el.innerHTML = `
+      <div class="who">${escapeHtml(title)}</div>
+      ${sub ? `<div class="what">${escapeHtml(sub)}</div>` : ''}
+      <div class="when">${when}</div>
+    `;
+    return el;
+  };
+  const first = mk(0);
+  first.classList.add('is-enter'); // start as entering, then activate
+  container.innerHTML = '';
+  container.appendChild(first);
+  // activate entrance
+  requestAnimationFrame(() => first.classList.add('is-active'));
+
+  idx = 1 % items.length;
+
+  setInterval(() => {
+    const current = container.querySelector('.event');
+    const next = mk(idx);
+    idx = (idx + 1) % items.length;
+
+    // prepare next (enter)
+    next.classList.add('is-enter');
+    container.appendChild(next);
+
+    // trigger transitions
+    requestAnimationFrame(() => {
+      // exit current
+      if (current) {
+        current.classList.remove('is-enter');
+        current.classList.add('is-exit','is-active');
+      }
+      // enter next
+      next.classList.add('is-active');
+    });
+
+    // cleanup after animation completes
+    setTimeout(() => {
+      if (current && current.parentNode) current.parentNode.removeChild(current);
+      next.classList.remove('is-enter','is-active'); // keep it as the steady card
+    }, 600); // matches CSS --dur (520ms) with a little cushion
+  }, rotateMs);
 }
 
-// Single-card rotor with smooth slide/fade
-function startRotor(root, events){
-  if (!root) return;
-  root.innerHTML = '';
+function toClock(min) {
+  let h = Math.floor(min/60), m = min%60;
+  const mer = h >= 12 ? 'PM' : 'AM';
+  if (h === 0) h = 12; else if (h > 12) h -= 12;
+  return `${h}:${String(m).padStart(2,'0')} ${mer}`;
+}
+function escapeHtml(s){ return String(s||'').replace(/[&<>"']/g,c=>({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;' }[c])); }
 
-  if (!events || events.length === 0){
-    // show nothing if empty (your preference)
+// Load and render
+(async function init(){
+  let data;
+  try {
+    const res = await fetch(JSON_URL, { cache:'no-store' });
+    if (!res.ok) throw new Error(`fetch ${res.status}`);
+    data = await res.json();
+  } catch (e) {
+    console.error('Failed to load events.json', e);
     return;
   }
 
-  let idx = 0;
-  let cur = makeEventChip(events[idx]);
-  root.appendChild(cur);
+  const now = getNowChicago();
+  const nowMin = minOfDay(now);
 
-  setInterval(()=>{
-    const nextIdx = (idx + 1) % events.length;
-    const next = makeEventChip(events[nextIdx]);
+  const dayStart = Number(data.dayStartMin ?? 360);
+  const dayEnd   = Number(data.dayEndMin   ?? 1380);
 
-    next.classList.add('is-enter');
-    root.appendChild(next);
-    void next.offsetWidth;
+  // Filter: only show items that end AFTER "now"
+  const future = (data.slots || []).filter(s => Number(s.endMin) > nowMin);
 
-    cur.classList.add('is-exit');
-    next.classList.add('is-enter-to');
-
-    setTimeout(()=>{
-      cur.remove();
-      next.classList.remove('is-enter','is-enter-to');
-      idx = nextIdx;
-      cur = next;
-    }, 740);
-  }, ROTATE_MS);
-}
-
-async function render(){
-  setHeaderClock();
-  buildFieldhousePage();
-
-  const data = await loadData();
-  const nowMin = minutesNowLocal();
-
-  // bucket by room
-  const byRoom = {};
-  for (const r of roomAll) byRoom[r] = [];
-
-  for (const s of (data.slots||[])){
-    if (!s || !s.roomId) continue;
-    if (!roomAll.includes(s.roomId)) continue;
-    if (!systemFilter(s)) continue;
-    if (!timeFilter(s, nowMin)) continue;
-    byRoom[s.roomId].push(s);
+  // Group by roomId
+  const byRoom = new Map();
+  for (const s of future) {
+    if (!byRoom.has(s.roomId)) byRoom.set(s.roomId, []);
+    byRoom.get(s.roomId).push(s);
   }
 
-  // Sort + mount
-  for (const r of roomAll){
-    const arr = byRoom[r].sort(byStartThenTitle);
-    updateCounts(r, arr.length);
-    const root = document.querySelector(`#room-${CSS.escape(r)} .single-rotor`);
-    startRotor(root, arr);
+  // Sort each room by start time, then stable
+  for (const arr of byRoom.values()) {
+    arr.sort((a,b) => a.startMin - b.startMin || a.endMin - b.endMin || (a.title||'').localeCompare(b.title||''));
   }
-}
 
-function start(){
-  setHeaderClock();
-  setInterval(setHeaderClock, NOW_TICK_MS);
-  render().catch(console.error);
-  setInterval(()=>render().catch(console.error), REFRESH_MS);
-}
+  // Rooms to place (must match the DOM ids we created in index.html)
+  const roomIds = ['1A','1B','2A','2B','3','4','5','6','7','8','9A','9B','10A','10B'];
+  for (const rid of roomIds) {
+    const card = document.getElementById(`room-${rid}`);
+    if (!card) continue;
+    const lst = byRoom.get(rid) || [];
+    // update count
+    const countEl = card.querySelector('.roomHeader .count em');
+    if (countEl) countEl.textContent = String(lst.length);
 
-document.addEventListener('DOMContentLoaded', start);
+    const rotor = card.querySelector('.single-rotor');
+    if (!rotor) continue;
+
+    startRotor(rotor, lst, 7000);
+  }
+})();
