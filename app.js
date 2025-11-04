@@ -1,10 +1,9 @@
 // app.js
-const PAGE_SIZE = 3;
-const PAGE_MS   = 7000;
+const PAGE_SIZE = 1;       // <<< single card per page
+const PAGE_MS   = 7000;    // rotation period
 const TZ        = 'America/Chicago';
 
-const el = sel => document.querySelector(sel);
-const els = sel => Array.from(document.querySelectorAll(sel));
+const el  = sel => document.querySelector(sel);
 
 function fmtTime(min) {
   const h = Math.floor(min / 60);
@@ -18,9 +17,7 @@ function setHeaderClock() {
   function tick() {
     const now = new Date();
     el('#headerClock').textContent = now.toLocaleTimeString([], { hour:'numeric', minute:'2-digit', second:'2-digit' });
-    const dateStr = now.toLocaleDateString([], { weekday:'long', month:'long', day:'numeric' });
-    el('#headerDate').textContent = dateStr;
-    requestAnimationFrame(() => {}); // tiny yield
+    el('#headerDate').textContent  = now.toLocaleDateString([], { weekday:'long', month:'long', day:'numeric' });
   }
   tick();
   setInterval(tick, 1000);
@@ -32,9 +29,9 @@ function mountRoomPager(container, events) {
   container.innerHTML = '';
   container.appendChild(pager);
 
-  if (!events.length) return; // nothing to render
+  if (!events.length) return;
 
-  // split pages
+  // split into pages of 1 card
   const pages = [];
   for (let i=0; i<events.length; i+=PAGE_SIZE) pages.push(events.slice(i, i+PAGE_SIZE));
 
@@ -55,13 +52,12 @@ function mountRoomPager(container, events) {
   });
 
   if (pages.length === 1) {
-    // single page: no rotation, but still visible
     pageEls[0].style.position = 'absolute';
     pageEls[0].style.inset = '0';
+    pageEls[0].classList.add('slide-in');
     return;
   }
 
-  // position all absolute
   pageEls.forEach(pe => { pe.style.position = 'absolute'; pe.style.inset = '0'; });
 
   let idx = 0;
@@ -75,12 +71,11 @@ function mountRoomPager(container, events) {
     cur.classList.remove('slide-in');
     cur.classList.add('slide-out');
 
-    next.classList.remove('slide-out');
-    // force reflow so CSS animation restarts
+    // force reflow so animation restarts for next
     void next.offsetWidth;
+    next.classList.remove('slide-out');
     next.classList.add('slide-in');
 
-    // clean up old slide-out after animation finishes
     setTimeout(() => cur.classList.remove('slide-out'), 450);
   }, PAGE_MS);
 }
@@ -97,7 +92,7 @@ async function loadAndRender() {
     return;
   }
 
-  // group slots by roomId
+  // group slots by room
   const byRoom = new Map();
   for (const r of data.rooms) byRoom.set(r.id, []);
   for (const s of data.slots) {
@@ -108,7 +103,7 @@ async function loadAndRender() {
     arr.sort((a,b) => a.startMin - b.startMin || a.endMin - b.endMin);
   }
 
-  // mount South
+  // South
   ['1A','1B','2A','2B'].forEach(id => {
     const roomEl = document.querySelector(`#room-${id} .events`);
     const list = byRoom.get(id) || [];
@@ -116,7 +111,7 @@ async function loadAndRender() {
     mountRoomPager(roomEl, list);
   });
 
-  // Fieldhouse (3..8) in a 3×2 grid
+  // Fieldhouse 3..8
   const fhHost = document.getElementById('fieldhousePager');
   fhHost.innerHTML = '';
   ['3','4','5','6','7','8'].forEach(id => {
@@ -146,7 +141,7 @@ async function loadAndRender() {
 
 window.addEventListener('DOMContentLoaded', loadAndRender);
 
-// scale the fixed 1920×1080 canvas to fit window
+// scale canvas
 (function fitStageSetup(){
   const W = 1920, H = 1080;
   function fit() {
