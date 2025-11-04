@@ -1,184 +1,166 @@
-// app.js (debug-capable version)
-const debug =
-  /[?#]debug(=1)?/i.test(location.search) ||
-  /[?#]debug(=1)?/i.test(location.hash);
+// app.js
+const PAGE_SIZE = 3;
+const PAGE_MS   = 7000;
+const TZ        = 'America/Chicago';
 
-// Option: add &relax=1 (in debug mode) to relax the time filter (helpful if everything looks “past”)
-const relax = debug && (/[?#]relax(=1)?/i.test(location.search) || /[?#]relax(=1)?/i.test(location.hash));
+const el = sel => document.querySelector(sel);
+const els = sel => Array.from(document.querySelectorAll(sel));
 
-const JSON_URL = new URL('./events.json', location.href).toString() + '?v=' + Date.now();
-
-// ---------- Time helpers ----------
-function getNowChicago() {
-  const fmt = new Intl.DateTimeFormat('en-US', {
-    timeZone: 'America/Chicago', hour12: false,
-    year:'numeric', month:'2-digit', day:'2-digit', hour:'2-digit', minute:'2-digit'
-  });
-  const parts = Object.fromEntries(fmt.formatToParts(new Date()).map(p => [p.type, p.value]));
-  const iso = `${parts.year}-${parts.month}-${parts.day}T${parts.hour}:${parts.minute}:00`;
-  return new Date(iso);
+function fmtTime(min) {
+  const h = Math.floor(min / 60);
+  const m = min % 60;
+  const date = new Date();
+  date.setHours(h, m, 0, 0);
+  return date.toLocaleTimeString([], { hour:'numeric', minute:'2-digit', hour12:true });
 }
-function minOfDay(d) { return d.getHours()*60 + d.getMinutes(); }
 
 function setHeaderClock() {
-  const now = getNowChicago();
-  const dateFmt = new Intl.DateTimeFormat('en-US', { timeZone:'America/Chicago', weekday:'long', month:'long', day:'numeric' });
-  const timeFmt = new Intl.DateTimeFormat('en-US', { timeZone:'America/Chicago', hour:'numeric', minute:'2-digit' });
-  const dEl = document.getElementById('headerDate');
-  const tEl = document.getElementById('headerClock');
-  if (dEl) dEl.textContent = dateFmt.format(now);
-  if (tEl) tEl.textContent = timeFmt.format(now);
-}
-setHeaderClock();
-setInterval(setHeaderClock, 10_000);
-
-// ---------- Tiny debug overlay ----------
-function ensureDebugOverlay() {
-  if (!debug) return null;
-  let el = document.getElementById('dbg');
-  if (!el) {
-    el = document.createElement('div');
-    el.id = 'dbg';
-    Object.assign(el.style, {
-      position: 'fixed', left: '12px', bottom: '12px', zIndex: 9999,
-      background: 'rgba(0,0,0,.7)', color: '#fff', padding: '10px 12px',
-      font: '12px/1.4 Monospace', borderRadius: '8px', border: '1px solid #333',
-      maxWidth: '540px', whiteSpace: 'pre-wrap'
-    });
-    document.body.appendChild(el);
+  function tick() {
+    const now = new Date();
+    el('#headerClock').textContent = now.toLocaleTimeString([], { hour:'numeric', minute:'2-digit', second:'2-digit' });
+    const dateStr = now.toLocaleDateString([], { weekday:'long', month:'long', day:'numeric' });
+    el('#headerDate').textContent = dateStr;
+    requestAnimationFrame(() => {}); // tiny yield
   }
-  return el;
-}
-function dbg(msg) {
-  if (!debug) return;
-  const el = ensureDebugOverlay();
-  el.textContent += (el.textContent ? '\n' : '') + msg;
+  tick();
+  setInterval(tick, 1000);
 }
 
-// ---------- UI helpers ----------
-function toClock(min) {
-  let h = Math.floor(min/60), m = min%60;
-  const mer = h >= 12 ? 'PM' : 'AM';
-  if (h === 0) h = 12; else if (h > 12) h -= 12;
-  return `${h}:${String(m).padStart(2,'0')} ${mer}`;
-}
-function escapeHtml(s){ return String(s||'').replace(/[&<>"']/g,c=>({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;' }[c])); }
+function mountRoomPager(container, events) {
+  const pager = document.createElement('div');
+  pager.className = 'eventsPager';
+  container.innerHTML = '';
+  container.appendChild(pager);
 
-// Smooth single-card rotor per room
-function startRotor(container, items, rotateMs=7000) {
-  if (!items || !items.length) {
-    container.innerHTML = ''; // no filler card
+  if (!events.length) return; // nothing to render
+
+  // split pages
+  const pages = [];
+  for (let i=0; i<events.length; i+=PAGE_SIZE) pages.push(events.slice(i, i+PAGE_SIZE));
+
+  const pageEls = pages.map(pg => {
+    const p = document.createElement('div');
+    p.className = 'page';
+    for (const ev of pg) {
+      const card = document.createElement('div');
+      card.className = 'event';
+      const who  = document.createElement('div'); who.className = 'who';  who.textContent  = ev.title || 'Reservation';
+      const what = document.createElement('div'); what.className = 'what'; what.textContent = ev.subtitle || '';
+      const when = document.createElement('div'); when.className = 'when'; when.textContent = `${fmtTime(ev.startMin)} — ${fmtTime(ev.endMin)}`;
+      card.appendChild(who); if (what.textContent) card.appendChild(what); card.appendChild(when);
+      p.appendChild(card);
+    }
+    pager.appendChild(p);
+    return p;
+  });
+
+  if (pages.length === 1) {
+    // single page: no rotation, but still visible
+    pageEls[0].style.position = 'absolute';
+    pageEls[0].style.inset = '0';
     return;
   }
-  let idx = 0;
-  const mk = (i) => {
-    const it = items[i];
-    const el = document.createElement('div');
-    el.className = 'event';
-    const title = it.title || '';
-    const sub   = it.subtitle || '';
-    const when  = `${toClock(it.startMin)} – ${toClock(it.endMin)}`;
-    el.innerHTML = `
-      <div class="who">${escapeHtml(title)}</div>
-      ${sub ? `<div class="what">${escapeHtml(sub)}</div>` : ''}
-      <div class="when">${when}</div>
-    `;
-    return el;
-  };
 
-  // first card
-  const first = mk(0);
-  first.classList.add('is-enter');
-  container.innerHTML = '';
-  container.appendChild(first);
-  requestAnimationFrame(() => first.classList.add('is-active'));
-  idx = 1 % items.length;
+  // position all absolute
+  pageEls.forEach(pe => { pe.style.position = 'absolute'; pe.style.inset = '0'; });
+
+  let idx = 0;
+  pageEls[idx].classList.add('slide-in');
 
   setInterval(() => {
-    const current = container.querySelector('.event');
-    const next = mk(idx);
-    idx = (idx + 1) % items.length;
+    const cur = pageEls[idx];
+    idx = (idx + 1) % pageEls.length;
+    const next = pageEls[idx];
 
-    next.classList.add('is-enter');
-    container.appendChild(next);
+    cur.classList.remove('slide-in');
+    cur.classList.add('slide-out');
 
-    requestAnimationFrame(() => {
-      if (current) {
-        current.classList.remove('is-enter');
-        current.classList.add('is-exit','is-active');
-      }
-      next.classList.add('is-active');
-    });
+    next.classList.remove('slide-out');
+    // force reflow so CSS animation restarts
+    void next.offsetWidth;
+    next.classList.add('slide-in');
 
-    setTimeout(() => {
-      if (current && current.parentNode) current.parentNode.removeChild(current);
-      next.classList.remove('is-enter','is-active');
-    }, 620);
-  }, rotateMs);
+    // clean up old slide-out after animation finishes
+    setTimeout(() => cur.classList.remove('slide-out'), 450);
+  }, PAGE_MS);
 }
 
-// ---------- Render ----------
-(async function init(){
-  // 1) Fetch JSON
+async function loadAndRender() {
+  setHeaderClock();
+
   let data;
   try {
-    const res = await fetch(JSON_URL, { cache:'no-store' });
-    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    const res = await fetch('./events.json', { cache:'no-store' });
     data = await res.json();
   } catch (e) {
-    dbg(`❌ Failed to load events.json: ${e.message}`);
     console.error('Failed to load events.json', e);
     return;
   }
 
-  // 2) Basic validation / quick stats
-  const slots = Array.isArray(data.slots) ? data.slots : [];
-  dbg(`Loaded slots: ${slots.length}`);
-
-  // 3) Time filter: hide past
-  const now = getNowChicago();
-  const nowMin = minOfDay(now);
-
-  // In debug+relax mode, include items ending within the last 60 minutes
-  const grace = relax ? 60 : 0;
-  const future = slots.filter(s => Number(s.endMin) > (nowMin - grace));
-
-  dbg(`After time filter (grace ${grace}m): ${future.length}`);
-
-  // 4) Group by roomId
+  // group slots by roomId
   const byRoom = new Map();
-  const unknownRoomIds = new Set();
-  for (const s of future) {
-    const rid = String(s.roomId || '').trim();
-    if (!rid) continue;
-    if (!/^1A|1B|2A|2B|3|4|5|6|7|8|9A|9B|10A|10B$/.test(rid)) {
-      unknownRoomIds.add(rid);
-    }
-    if (!byRoom.has(rid)) byRoom.set(rid, []);
-    byRoom.get(rid).push(s);
+  for (const r of data.rooms) byRoom.set(r.id, []);
+  for (const s of data.slots) {
+    if (!byRoom.has(s.roomId)) byRoom.set(s.roomId, []);
+    byRoom.get(s.roomId).push(s);
   }
-  if (debug && unknownRoomIds.size) {
-    dbg(`⚠️ Unknown roomIds in JSON: ${[...unknownRoomIds].join(', ')}`);
+  for (const [k, arr] of byRoom.entries()) {
+    arr.sort((a,b) => a.startMin - b.startMin || a.endMin - b.endMin);
   }
 
-  // 5) Sort each room
-  for (const arr of byRoom.values()) {
-    arr.sort((a,b) => (a.startMin - b.startMin) || (a.endMin - b.endMin) || (a.title||'').localeCompare(b.title||''));
+  // mount South
+  ['1A','1B','2A','2B'].forEach(id => {
+    const roomEl = document.querySelector(`#room-${id} .events`);
+    const list = byRoom.get(id) || [];
+    document.querySelector(`#room-${id} .roomHeader .count em`).textContent = String(list.length);
+    mountRoomPager(roomEl, list);
+  });
+
+  // Fieldhouse (3..8) in a 3×2 grid
+  const fhHost = document.getElementById('fieldhousePager');
+  fhHost.innerHTML = '';
+  ['3','4','5','6','7','8'].forEach(id => {
+    const card = document.createElement('div');
+    card.className = 'room';
+    card.innerHTML = `
+      <div class="roomHeader">
+        <div class="id">${id}</div>
+        <div class="count">reservations: <em>—</em></div>
+      </div>
+      <div class="events"></div>
+    `;
+    fhHost.appendChild(card);
+    const list = byRoom.get(id) || [];
+    card.querySelector('.roomHeader .count em').textContent = String(list.length);
+    mountRoomPager(card.querySelector('.events'), list);
+  });
+
+  // North
+  ['9A','9B','10A','10B'].forEach(id => {
+    const roomEl = document.querySelector(`#room-${id} .events`);
+    const list = byRoom.get(id) || [];
+    document.querySelector(`#room-${id} .roomHeader .count em`).textContent = String(list.length);
+    mountRoomPager(roomEl, list);
+  });
+}
+
+window.addEventListener('DOMContentLoaded', loadAndRender);
+
+// scale the fixed 1920×1080 canvas to fit window
+(function fitStageSetup(){
+  const W = 1920, H = 1080;
+  function fit() {
+    const vp = document.querySelector('.viewport');
+    const stage = document.querySelector('.stage');
+    if (!vp || !stage) return;
+    const sx = vp.clientWidth / W;
+    const sy = vp.clientHeight / H;
+    const s  = Math.min(sx, sy);
+    stage.style.transform = `scale(${s})`;
+    stage.style.transformOrigin = 'top left';
+    vp.style.minHeight = (H * s) + 'px';
   }
-
-  // 6) Wire rooms -> DOM
-  const roomIds = ['1A','1B','2A','2B','3','4','5','6','7','8','9A','9B','10A','10B'];
-  for (const rid of roomIds) {
-    const card = document.getElementById(`room-${rid}`);
-    if (!card) { dbg(`Missing DOM for room ${rid}`); continue; }
-
-    const lst = byRoom.get(rid) || [];
-    const countEl = card.querySelector('.roomHeader .count em');
-    if (countEl) countEl.textContent = String(lst.length);
-
-    const rotor = card.querySelector('.single-rotor');
-    if (!rotor) { dbg(`Missing rotor for room ${rid}`); continue; }
-
-    startRotor(rotor, lst, 7000);
-  }
+  window.addEventListener('resize', fit);
+  window.addEventListener('orientationchange', fit);
+  document.addEventListener('DOMContentLoaded', fit);
 })();
