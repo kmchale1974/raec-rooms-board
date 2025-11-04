@@ -1,11 +1,19 @@
-// app.js
-const JSON_URL = './events.json?v=' + Date.now(); // bust cache
+// app.js (debug-capable version)
+const debug =
+  /[?#]debug(=1)?/i.test(location.search) ||
+  /[?#]debug(=1)?/i.test(location.hash);
 
-// America/Chicago clock
+// Option: add &relax=1 (in debug mode) to relax the time filter (helpful if everything looks “past”)
+const relax = debug && (/[?#]relax(=1)?/i.test(location.search) || /[?#]relax(=1)?/i.test(location.hash));
+
+const JSON_URL = new URL('./events.json', location.href).toString() + '?v=' + Date.now();
+
+// ---------- Time helpers ----------
 function getNowChicago() {
-  const fmt = new Intl.DateTimeFormat('en-US', { timeZone: 'America/Chicago', hour12: false,
-    year:'numeric', month:'2-digit', day:'2-digit', hour:'2-digit', minute:'2-digit' });
-  // parse back out
+  const fmt = new Intl.DateTimeFormat('en-US', {
+    timeZone: 'America/Chicago', hour12: false,
+    year:'numeric', month:'2-digit', day:'2-digit', hour:'2-digit', minute:'2-digit'
+  });
   const parts = Object.fromEntries(fmt.formatToParts(new Date()).map(p => [p.type, p.value]));
   const iso = `${parts.year}-${parts.month}-${parts.day}T${parts.hour}:${parts.minute}:00`;
   return new Date(iso);
@@ -16,20 +24,53 @@ function setHeaderClock() {
   const now = getNowChicago();
   const dateFmt = new Intl.DateTimeFormat('en-US', { timeZone:'America/Chicago', weekday:'long', month:'long', day:'numeric' });
   const timeFmt = new Intl.DateTimeFormat('en-US', { timeZone:'America/Chicago', hour:'numeric', minute:'2-digit' });
-  document.getElementById('headerDate').textContent = dateFmt.format(now);
-  document.getElementById('headerClock').textContent = timeFmt.format(now);
+  const dEl = document.getElementById('headerDate');
+  const tEl = document.getElementById('headerClock');
+  if (dEl) dEl.textContent = dateFmt.format(now);
+  if (tEl) tEl.textContent = timeFmt.format(now);
 }
 setHeaderClock();
 setInterval(setHeaderClock, 10_000);
 
+// ---------- Tiny debug overlay ----------
+function ensureDebugOverlay() {
+  if (!debug) return null;
+  let el = document.getElementById('dbg');
+  if (!el) {
+    el = document.createElement('div');
+    el.id = 'dbg';
+    Object.assign(el.style, {
+      position: 'fixed', left: '12px', bottom: '12px', zIndex: 9999,
+      background: 'rgba(0,0,0,.7)', color: '#fff', padding: '10px 12px',
+      font: '12px/1.4 Monospace', borderRadius: '8px', border: '1px solid #333',
+      maxWidth: '540px', whiteSpace: 'pre-wrap'
+    });
+    document.body.appendChild(el);
+  }
+  return el;
+}
+function dbg(msg) {
+  if (!debug) return;
+  const el = ensureDebugOverlay();
+  el.textContent += (el.textContent ? '\n' : '') + msg;
+}
+
+// ---------- UI helpers ----------
+function toClock(min) {
+  let h = Math.floor(min/60), m = min%60;
+  const mer = h >= 12 ? 'PM' : 'AM';
+  if (h === 0) h = 12; else if (h > 12) h -= 12;
+  return `${h}:${String(m).padStart(2,'0')} ${mer}`;
+}
+function escapeHtml(s){ return String(s||'').replace(/[&<>"']/g,c=>({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;' }[c])); }
+
 // Smooth single-card rotor per room
 function startRotor(container, items, rotateMs=7000) {
   if (!items || !items.length) {
-    container.innerHTML = ''; // no “no upcoming” filler per your request
+    container.innerHTML = ''; // no filler card
     return;
   }
   let idx = 0;
-  // create first card
   const mk = (i) => {
     const it = items[i];
     const el = document.createElement('div');
@@ -44,13 +85,13 @@ function startRotor(container, items, rotateMs=7000) {
     `;
     return el;
   };
+
+  // first card
   const first = mk(0);
-  first.classList.add('is-enter'); // start as entering, then activate
+  first.classList.add('is-enter');
   container.innerHTML = '';
   container.appendChild(first);
-  // activate entrance
   requestAnimationFrame(() => first.classList.add('is-active'));
-
   idx = 1 % items.length;
 
   setInterval(() => {
@@ -58,82 +99,85 @@ function startRotor(container, items, rotateMs=7000) {
     const next = mk(idx);
     idx = (idx + 1) % items.length;
 
-    // prepare next (enter)
     next.classList.add('is-enter');
     container.appendChild(next);
 
-    // trigger transitions
     requestAnimationFrame(() => {
-      // exit current
       if (current) {
         current.classList.remove('is-enter');
         current.classList.add('is-exit','is-active');
       }
-      // enter next
       next.classList.add('is-active');
     });
 
-    // cleanup after animation completes
     setTimeout(() => {
       if (current && current.parentNode) current.parentNode.removeChild(current);
-      next.classList.remove('is-enter','is-active'); // keep it as the steady card
-    }, 600); // matches CSS --dur (520ms) with a little cushion
+      next.classList.remove('is-enter','is-active');
+    }, 620);
   }, rotateMs);
 }
 
-function toClock(min) {
-  let h = Math.floor(min/60), m = min%60;
-  const mer = h >= 12 ? 'PM' : 'AM';
-  if (h === 0) h = 12; else if (h > 12) h -= 12;
-  return `${h}:${String(m).padStart(2,'0')} ${mer}`;
-}
-function escapeHtml(s){ return String(s||'').replace(/[&<>"']/g,c=>({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;' }[c])); }
-
-// Load and render
+// ---------- Render ----------
 (async function init(){
+  // 1) Fetch JSON
   let data;
   try {
     const res = await fetch(JSON_URL, { cache:'no-store' });
-    if (!res.ok) throw new Error(`fetch ${res.status}`);
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
     data = await res.json();
   } catch (e) {
+    dbg(`❌ Failed to load events.json: ${e.message}`);
     console.error('Failed to load events.json', e);
     return;
   }
 
+  // 2) Basic validation / quick stats
+  const slots = Array.isArray(data.slots) ? data.slots : [];
+  dbg(`Loaded slots: ${slots.length}`);
+
+  // 3) Time filter: hide past
   const now = getNowChicago();
   const nowMin = minOfDay(now);
 
-  const dayStart = Number(data.dayStartMin ?? 360);
-  const dayEnd   = Number(data.dayEndMin   ?? 1380);
+  // In debug+relax mode, include items ending within the last 60 minutes
+  const grace = relax ? 60 : 0;
+  const future = slots.filter(s => Number(s.endMin) > (nowMin - grace));
 
-  // Filter: only show items that end AFTER "now"
-  const future = (data.slots || []).filter(s => Number(s.endMin) > nowMin);
+  dbg(`After time filter (grace ${grace}m): ${future.length}`);
 
-  // Group by roomId
+  // 4) Group by roomId
   const byRoom = new Map();
+  const unknownRoomIds = new Set();
   for (const s of future) {
-    if (!byRoom.has(s.roomId)) byRoom.set(s.roomId, []);
-    byRoom.get(s.roomId).push(s);
+    const rid = String(s.roomId || '').trim();
+    if (!rid) continue;
+    if (!/^1A|1B|2A|2B|3|4|5|6|7|8|9A|9B|10A|10B$/.test(rid)) {
+      unknownRoomIds.add(rid);
+    }
+    if (!byRoom.has(rid)) byRoom.set(rid, []);
+    byRoom.get(rid).push(s);
+  }
+  if (debug && unknownRoomIds.size) {
+    dbg(`⚠️ Unknown roomIds in JSON: ${[...unknownRoomIds].join(', ')}`);
   }
 
-  // Sort each room by start time, then stable
+  // 5) Sort each room
   for (const arr of byRoom.values()) {
-    arr.sort((a,b) => a.startMin - b.startMin || a.endMin - b.endMin || (a.title||'').localeCompare(b.title||''));
+    arr.sort((a,b) => (a.startMin - b.startMin) || (a.endMin - b.endMin) || (a.title||'').localeCompare(b.title||''));
   }
 
-  // Rooms to place (must match the DOM ids we created in index.html)
+  // 6) Wire rooms -> DOM
   const roomIds = ['1A','1B','2A','2B','3','4','5','6','7','8','9A','9B','10A','10B'];
   for (const rid of roomIds) {
     const card = document.getElementById(`room-${rid}`);
-    if (!card) continue;
+    if (!card) { dbg(`Missing DOM for room ${rid}`); continue; }
+
     const lst = byRoom.get(rid) || [];
-    // update count
     const countEl = card.querySelector('.roomHeader .count em');
     if (countEl) countEl.textContent = String(lst.length);
 
     const rotor = card.querySelector('.single-rotor');
-    if (!rotor) continue;
+    if (!rotor) { dbg(`Missing rotor for room ${rid}`); continue; }
 
     startRotor(rotor, lst, 7000);
   }
