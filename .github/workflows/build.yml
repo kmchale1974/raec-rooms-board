@@ -55,39 +55,39 @@ jobs:
 
       # <<< ADD THIS FINAL STEP >>>
       - name: Commit events.json (rebase-safe, auto-retry)
-  shell: bash
-  run: |
-    set -euo pipefail
-
-    git config user.name  "github-actions[bot]"
-    git config user.email "github-actions[bot]@users.noreply.github.com"
-    git config pull.rebase true
-    git config rebase.autoStash true
-
-    # Make sure we're on main and up to date
-    git fetch origin main --prune
-    git checkout -B main origin/main
-
-    git add events.json
-
-    if git diff --cached --quiet; then
-      echo "No changes to commit."
-      exit 0
-    fi
-
-    git commit -m "Update events.json [skip ci]"
-
-    tries=0
-    until [ $tries -ge 5 ]
-    do
-      if git pull --rebase origin main && git push origin HEAD:main; then
-        echo "Pushed successfully."
-        exit 0
-      fi
-      tries=$((tries+1))
-      echo "Push race detected, retry $tries/5 after backoff…"
-      sleep $((2 * tries))
-    done
-
-    echo "Failed to push after retries."
-    exit 1
+        shell: bash
+        run: |
+          set -euo pipefail
+      
+          git config user.name  "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git config pull.rebase true
+          git config rebase.autoStash true
+      
+          # Make sure we're on main and up to date
+          git fetch origin main --prune
+          git checkout -B main origin/main
+      
+          git add events.json
+      
+          if git diff --cached --quiet; then
+            echo "No changes to commit."
+            exit 0
+          fi
+      
+          git commit -m "Update events.json [skip ci]"
+      
+          tries=0
+          until [ $tries -ge 5 ]
+          do
+            if git pull --rebase origin main && git push origin HEAD:main; then
+              echo "Pushed successfully."
+              exit 0
+            fi
+            tries=$((tries+1))
+            echo "Push race detected, retry $tries/5 after backoff…"
+            sleep $((2 * tries))
+          done
+      
+          echo "Failed to push after retries."
+          exit 1
