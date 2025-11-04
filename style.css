@@ -1,4 +1,7 @@
-/* Theme */
+/* =========================
+   RAEC Rooms Board – Full CSS
+   ========================= */
+
 :root{
   --bg:#0f1115;
   --panel:#12151c;
@@ -7,9 +10,7 @@
   --accent:#2b87ff;
   --grid:#1b202a;
   --chip:#263043;
-  --ease:cubic-bezier(.22,.61,.36,1);
-  --dur:740ms;
-  --shift:60px;
+  --chip-text:#e7eaf1;
 }
 
 /* Base */
@@ -18,115 +19,86 @@ html,body{
   background:var(--bg); color:var(--ink);
   font-family: Inter, "SF Pro Text", Segoe UI, Roboto, Arial, sans-serif;
   -webkit-font-smoothing:antialiased; -moz-osx-font-smoothing:grayscale;
-  cursor:none;
+  cursor: none; /* kiosk */
 }
 .viewport{ position:fixed; inset:0; display:flex; align-items:flex-start; justify-content:center; padding:16px; box-sizing:border-box; }
 .stage{
   width:1920px; height:1080px;
-  padding:32px; box-sizing:border-box;
+  padding:36px; box-sizing:border-box;
   display:grid; grid-template-rows: 120px 1fr; gap:24px;
 }
 
 /* Header */
-.header{
-  display:grid; grid-template-columns: 360px 1fr 360px; align-items:center; gap:16px;
-}
+.header{ display:grid; grid-template-columns: 360px 1fr 360px; align-items:center; gap:24px; }
 .brand{ display:flex; align-items:center; gap:16px; }
 .brand img{ height:80px; width:auto; object-fit:contain; }
 .dateclock{ justify-self:center; text-align:center; }
 #headerDate{ font-size:44px; font-weight:800; letter-spacing:.02em; }
 #headerClock{ font-size:28px; color:var(--muted); margin-top:6px; font-weight:600; }
-.wifi{
-  justify-self:end; background:var(--panel); border:1px solid var(--grid);
-  border-radius:14px; padding:14px 16px; min-width:320px;
-}
+.wifi{ justify-self:end; background:var(--panel); border:1px solid var(--grid); border-radius:14px; padding:14px 16px; min-width:340px; }
 .wifi .title{ font-size:16px; color:var(--muted); letter-spacing:.08em; text-transform:uppercase; }
 .wifi .row{ display:flex; justify-content:space-between; gap:12px; margin-top:6px; }
 .wifi .row span:first-child{ color:var(--muted); }
 .wifi .row span:last-child{ font-weight:700; }
 
-/* 3-column board */
-.grid{
-  height:100%; min-height:0;
-  display:grid; grid-template-columns: 1fr 1.5fr 1fr; gap:24px;
-}
+/* Three-column layout */
+.grid{ display:grid; grid-template-columns: 1fr 1.5fr 1fr; gap:24px; height:100%; }
 
-/* Group panels */
+/* Panels */
 .group{
   background:var(--panel); border:1px solid var(--grid); border-radius:18px;
-  padding:16px; display:flex; flex-direction:column; gap:12px;
-  overflow:hidden; min-height:0;
+  padding:16px; display:grid; grid-template-rows: 44px 1fr; gap:12px; overflow:hidden;
 }
 .group .title{
   font-size:18px; color:var(--muted); letter-spacing:.1em; text-transform:uppercase;
-  border-bottom:1px solid var(--grid); padding-bottom:6px; flex:0 0 auto;
+  border-bottom:1px solid var(--grid); display:flex; align-items:center; padding-bottom:6px;
 }
-.group .body{ flex:1 1 auto; min-height:0; }
 
-/* South/North stacks */
-.rooms-stack{ height:100%; min-height:0; display:grid; grid-template-rows: 1fr 1fr; gap:12px; }
-.row-2cols{ height:100%; min-height:0; display:grid; grid-template-columns: 1fr 1fr; gap:12px; }
+/* South/North stacks & row */
+.rooms-stack{ display:grid; grid-template-rows: 1fr 1fr; gap:12px; min-height:0; }
+.row-2cols{ display:grid; grid-template-columns: 1fr 1fr; gap:12px; min-height:0; }
 
-/* Fieldhouse (paged) */
-.rooms-fieldhouse{ position:relative; height:100%; min-height:0; }
-.rooms-fieldhouse .page{
-  position:absolute; inset:0;
+/* Fieldhouse grid */
+.rooms-fieldhouse{
   display:grid; grid-template-columns: repeat(3, 1fr); grid-template-rows: 1fr 1fr;
-  gap:12px; padding:0; box-sizing:border-box;
-  transform:translateX(100%); opacity:0;
-  transition: transform var(--dur) var(--ease), opacity var(--dur) var(--ease);
-  will-change: transform, opacity;
+  gap:12px; min-height:0;
 }
-.rooms-fieldhouse .page.is-active{ transform:translateX(0); opacity:1; z-index:2; }
-.rooms-fieldhouse .page.is-leaving{ transform:translateX(-100%); opacity:0; z-index:1; }
 
 /* Room */
 .room{
   border:1px solid var(--grid); border-radius:14px; padding:14px;
-  display:flex; flex-direction:column; gap:10px;
-  min-height:0; overflow:hidden;
+  display:flex; flex-direction:column; gap:10px; min-height:0; overflow:hidden;
   background:linear-gradient(180deg, rgba(255,255,255,0.02), rgba(0,0,0,0));
 }
-.roomHeader{
-  display:flex; align-items:center; justify-content:space-between; gap:12px;
-  border-bottom:1px dashed var(--grid); padding-bottom:8px; flex:0 0 auto;
-}
-.roomHeader .id{ font-size:28px; font-weight:800; letter-spacing:.04em; }
+.roomHeader{ display:flex; align-items:center; justify-content:space-between; gap:12px; border-bottom:1px dashed var(--grid); padding-bottom:8px; }
+.roomHeader .id{ font-size:30px; font-weight:800; letter-spacing:.04em; }
 .roomHeader .count{ font-size:13px; color:var(--muted); }
-.roomHeader .count em{ font-style:normal; color:var(--ink); font-weight:700; }
 
-/* Events area — ***hard min-height so it never collapses*** */
-.events{
-  position:relative; flex:1 1 auto; min-height:160px; /* <— important */
-  overflow:hidden;
-}
-.single-rotor{
-  position:relative; height:100%; width:100%;
-  min-height:160px; /* <— important */
+/* Pager */
+.events{ position:relative; flex:1 1 auto; min-height:0; overflow:hidden; }
+.eventsPager{ position:relative; height:100%; min-height:0; overflow:hidden; }
+.page{
+  position:absolute; inset:0; display:flex; flex-direction:column; gap:10px;
+  padding-bottom:10px;
 }
 
-/* Event card */
+/* Event chip */
 .event{
   background:var(--chip); border:1px solid var(--grid); border-radius:12px;
   padding:12px 14px; display:flex; flex-direction:column; gap:6px;
-  color:var(--ink);
 }
 .event .who{ font-size:20px; font-weight:800; line-height:1.15; }
 .event .what{ font-size:16px; color:var(--muted); line-height:1.2; }
 .event .when{ font-size:15px; color:#b7c0cf; font-weight:600; }
 .who,.what{ word-wrap:break-word; overflow-wrap:anywhere; }
 
-/* Smooth slide/fade for single card */
-.single-rotor .event{
-  position:absolute; inset:0;
-  transition: transform var(--dur) var(--ease), opacity var(--dur) var(--ease);
-  transform: translateX(0); opacity:1; will-change: transform, opacity;
-}
-.single-rotor .event.is-enter{ transform: translateX(var(--shift)); opacity: 0; }
-.single-rotor .event.is-enter-to{ transform: translateX(0); opacity: 1; }
-.single-rotor .event.is-exit{ transform: translateX(0); opacity: 1; }
-.single-rotor .event.is-exit-to{ transform: translateX(calc(-1 * var(--shift))); opacity: 0; }
+/* Slide-left animations */
+.page { transform:translateX(100%); opacity:0; }
+.page.slide-in   { animation: slideInLeft 420ms ease-out forwards; }
+.page.slide-out  { animation: slideOutLeft 420ms ease-in forwards; }
+@keyframes slideInLeft { from{transform:translateX(100%); opacity:.92;} to{transform:translateX(0); opacity:1;} }
+@keyframes slideOutLeft{ from{transform:translateX(0); opacity:1;}     to{transform:translateX(-100%); opacity:.92;} }
 
-/* Hide scrollbars */
+/* No scrollbars */
 *::-webkit-scrollbar{ display:none; }
 *{ scrollbar-width:none; }
