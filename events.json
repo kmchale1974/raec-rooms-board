@@ -76,42 +76,6 @@
   "slots": [
     {
       "roomId": "10A",
-      "startMin": 570,
-      "endMin": 750,
-      "title": "Open Pickleball",
-      "subtitle": "",
-      "org": "Open Pickleball",
-      "contact": ""
-    },
-    {
-      "roomId": "10B",
-      "startMin": 570,
-      "endMin": 750,
-      "title": "Open Pickleball",
-      "subtitle": "",
-      "org": "Open Pickleball",
-      "contact": ""
-    },
-    {
-      "roomId": "9A",
-      "startMin": 570,
-      "endMin": 750,
-      "title": "Open Pickleball",
-      "subtitle": "",
-      "org": "Open Pickleball",
-      "contact": ""
-    },
-    {
-      "roomId": "9B",
-      "startMin": 570,
-      "endMin": 750,
-      "title": "Open Pickleball",
-      "subtitle": "",
-      "org": "Open Pickleball",
-      "contact": ""
-    },
-    {
-      "roomId": "10A",
       "startMin": 1050,
       "endMin": 1230,
       "title": "Empower Volleyball (Rec)",
