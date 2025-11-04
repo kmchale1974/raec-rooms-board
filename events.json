@@ -73,5 +73,96 @@
       "group": "north"
     }
   ],
-  "slots": []
+  "slots": [
+    {
+      "roomId": "10A",
+      "startMin": 1050,
+      "endMin": 1230,
+      "title": "Empower Volleyball (Rec)",
+      "subtitle": "Volleyball 2025 Q4 Pattern",
+      "org": "Empower Volleyball (Rec)",
+      "contact": ""
+    },
+    {
+      "roomId": "10B",
+      "startMin": 1050,
+      "endMin": 1230,
+      "title": "Empower Volleyball (Rec)",
+      "subtitle": "Volleyball 2025 Q4 Pattern",
+      "org": "Empower Volleyball (Rec)",
+      "contact": ""
+    },
+    {
+      "roomId": "1A",
+      "startMin": 1200,
+      "endMin": 1320,
+      "title": "Mugilan Palani",
+      "subtitle": "Volleyball",
+      "org": "Mugilan Palani",
+      "contact": ""
+    },
+    {
+      "roomId": "1B",
+      "startMin": 1140,
+      "endMin": 1260,
+      "title": "David Llanos",
+      "subtitle": "Volleyball",
+      "org": "David Llanos",
+      "contact": ""
+    },
+    {
+      "roomId": "2A",
+      "startMin": 1110,
+      "endMin": 1170,
+      "title": "Catch Corner",
+      "subtitle": "CatchCorner (Prolific Basketball Booking #438629)",
+      "org": "Catch Corner",
+      "contact": ""
+    },
+    {
+      "roomId": "2A",
+      "startMin": 1170,
+      "endMin": 1260,
+      "title": "Catch Corner",
+      "subtitle": "CatchCorner (Prolific Basketball Booking #438631)",
+      "org": "Catch Corner",
+      "contact": ""
+    },
+    {
+      "roomId": "2B",
+      "startMin": 1110,
+      "endMin": 1170,
+      "title": "Catch Corner",
+      "subtitle": "CatchCorner (Prolific Basketball Booking #438629)",
+      "org": "Catch Corner",
+      "contact": ""
+    },
+    {
+      "roomId": "2B",
+      "startMin": 1170,
+      "endMin": 1260,
+      "title": "Catch Corner",
+      "subtitle": "CatchCorner (Prolific Basketball Booking #438631)",
+      "org": "Catch Corner",
+      "contact": ""
+    },
+    {
+      "roomId": "9A",
+      "startMin": 1050,
+      "endMin": 1230,
+      "title": "Empower Volleyball (Rec)",
+      "subtitle": "Volleyball 2025 Q4 Pattern",
+      "org": "Empower Volleyball (Rec)",
+      "contact": ""
+    },
+    {
+      "roomId": "9B",
+      "startMin": 1050,
+      "endMin": 1230,
+      "title": "Empower Volleyball (Rec)",
+      "subtitle": "Volleyball 2025 Q4 Pattern",
+      "org": "Empower Volleyball (Rec)",
+      "contact": ""
+    }
+  ]
 }
