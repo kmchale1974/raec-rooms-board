@@ -1,71 +1,94 @@
-name: RAEC Rooms Board
+name: Rooms board build
 
 on:
   workflow_dispatch:
   schedule:
-    # every 15 minutes
-    - cron: "*/15 * * * *"
-  push:
-    branches: [ main ]
-    # only re-run on actual code changes; events.json changes won't retrigger
-    paths:
-      - "scripts/**"
-      - "index.html"
-      - "app.js"
-      - "styles.css"
-      - ".github/workflows/rooms.yml"
+    # 08:03 America/Chicago (adjust if you like)
+    - cron: "3 13 * * *"
 
 permissions:
-  contents: write  # needed to push the updated events.json
-
-concurrency:
-  group: rooms-board
-  cancel-in-progress: false
+  contents: write
 
 jobs:
   build:
     runs-on: ubuntu-latest
+    env:
+      IMAP_USER: ${{ vars.IMAP_USER }}     # or hardcode email
+      OUT_CSV:  data/inbox/latest.csv
+      OUT_JSON: events.json
+      TZ: America/Chicago
 
     steps:
-      - name: Checkout repository
+      - name: Checkout (full history)
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
-      - name: Setup Node.js
+      - name: Use Node.js 20
         uses: actions/setup-node@v4
         with:
           node-version: "20"
 
       - name: Install deps
         run: npm i
+        env:
+          NPM_CONFIG_FUND: "false"
+          NPM_CONFIG_AUDIT: "false"
 
-      - name: Ensure inbox dir
+      - name: Ensure data folder exists
         run: mkdir -p data/inbox
 
       - name: Fetch latest CSV from Gmail
         env:
-          IMAP_PASS: ${{ secrets.IMAP_PASS }}   # <-- set this in repo Settings > Secrets
-          OUT_CSV: data/inbox/latest.csv
-          # optional overrides:
-          # IMAP_HOST: imap.gmail.com
-          # IMAP_FOLDER: INBOX
+          IMAP_USER: ${{ env.IMAP_USER }}
+          IMAP_PASS: ${{ secrets.IMAP_PASS }}   # REQUIRED
+          OUT_CSV:   ${{ env.OUT_CSV }}
         run: node scripts/fetch_email.js
 
-      - name: Transform CSV -> events.json
+      - name: Transform CSV → events.json
+        env:
+          IN_CSV:   ${{ env.OUT_CSV }}
+          OUT_JSON: ${{ env.OUT_JSON }}
         run: node scripts/transform.mjs
 
-      - name: Show summary
+      # ------- Rebase-safe commit with retries (fixes your push race) -------
+      - name: Commit events.json (rebase-safe, auto-retry)
+        shell: bash
         run: |
-          echo "Top of events.json:"
-          head -n 60 events.json || true
+          set -euo pipefail
 
-      - name: Commit events.json (if changed)
-        run: |
-          if [ -n "$(git status --porcelain events.json)" ]; then
-            git config user.name  "github-actions[bot]"
-            git config user.email "github-actions[bot]@users.noreply.github.com"
-            git add events.json
-            git commit -m "Update events.json [skip ci]"
-            git push
-          else
-            echo "No changes to events.json"
+          git config user.name  "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git config pull.rebase true
+          git config rebase.autoStash true
+
+          # Make sure we're aligned with remote main
+          git fetch origin main --prune
+          git checkout -B main origin/main
+
+          # Stage only the generated file
+          git add events.json
+
+          # If nothing changed, bail out cleanly
+          if git diff --cached --quiet; then
+            echo "No changes to commit."
+            exit 0
           fi
+
+          git commit -m "Update events.json [skip ci]"
+
+          # Push with rebase + retry (handles concurrent runs)
+          tries=0
+          until [ $tries -ge 5 ]
+          do
+            if git pull --rebase origin main && git push origin HEAD:main; then
+              echo "Pushed successfully."
+              exit 0
+            fi
+            tries=$((tries+1))
+            echo "Push race detected, retry $tries/5…"
+            sleep $((2 * tries))
+          done
+
+          echo "Failed to push after retries."
+          exit 1
