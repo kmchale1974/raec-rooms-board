@@ -3,26 +3,23 @@ name: Build RAEC events json
 on:
   workflow_dispatch:
   schedule:
-    - cron: "3 13 * * *"   # 08:03 America/Chicago
+    # 08:03 America/Chicago
+    - cron: "3 13 * * *"
 
 permissions:
   contents: write
-
-concurrency:
-  group: raec-events-build
-  cancel-in-progress: false
 
 jobs:
   build:
     runs-on: ubuntu-latest
     env:
-      IMAP_USER: ${{ vars.IMAP_USER }}   # or hardcode the email
-      OUT_CSV: data/inbox/latest.csv
+      IMAP_USER: ${{ vars.IMAP_USER }}   # or hardcode your Gmail address
+      OUT_CSV:  data/inbox/latest.csv
       OUT_JSON: events.json
       TZ: America/Chicago
 
     steps:
-      - name: Checkout
+      - name: Checkout (full history)
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
@@ -35,8 +32,8 @@ jobs:
       - name: Install deps
         run: npm i
         env:
-          NPM_CONFIG_AUDIT: "false"
           NPM_CONFIG_FUND: "false"
+          NPM_CONFIG_AUDIT: "false"
 
       - name: Ensure data folders exist
         run: mkdir -p data/inbox
@@ -44,7 +41,7 @@ jobs:
       - name: Fetch latest CSV from Gmail
         env:
           IMAP_USER: ${{ env.IMAP_USER }}
-          IMAP_PASS: ${{ secrets.IMAP_PASS }}
+          IMAP_PASS: ${{ secrets.IMAP_PASS }}   # REQUIRED
           OUT_CSV:   ${{ env.OUT_CSV }}
         run: node scripts/fetch_email.js
 
@@ -54,7 +51,7 @@ jobs:
           OUT_JSON: ${{ env.OUT_JSON }}
         run: node scripts/transform.mjs
 
-      # ---------- Rebase-safe commit with retries ----------
+      # ==== PUT THIS STEP RIGHT HERE ====
       - name: Commit events.json (rebase-safe, auto-retry)
         shell: bash
         run: |
@@ -65,14 +62,14 @@ jobs:
           git config pull.rebase true
           git config rebase.autoStash true
 
-          # Make sure we're tracking the latest remote main
+          # Make sure we're aligned with remote main
           git fetch origin main --prune
           git checkout -B main origin/main
 
-          # Stage only the generated file
+          # Bring the newly generated file from the workspace (already present)
           git add events.json
 
-          # Nothing to do?
+          # If nothing changed, bail out cleanly
           if git diff --cached --quiet; then
             echo "No changes to commit."
             exit 0
@@ -80,9 +77,10 @@ jobs:
 
           git commit -m "Update events.json [skip ci]"
 
-          # Push with rebase + small backoff retries to avoid races
+          # Push with rebase + retry (handles concurrent runs)
           tries=0
-          until [ $tries -ge 5 ]; do
+          until [ $tries -ge 5 ]
+          do
             if git pull --rebase origin main && git push origin HEAD:main; then
               echo "Pushed successfully."
               exit 0
