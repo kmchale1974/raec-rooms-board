@@ -73,15 +73,5 @@
       "group": "north"
     }
   ],
-  "slots": [
-    {
-      "roomId": "1A",
-      "startMin": 1200,
-      "endMin": 1320,
-      "title": "Mugilan Palani",
-      "subtitle": "Volleyball",
-      "org": "Mugilan Palani",
-      "contact": ""
-    }
-  ]
+  "slots": []
 }
