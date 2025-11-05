@@ -3,10 +3,11 @@ name: Build RAEC events json
 on:
   workflow_dispatch:
   schedule:
-    - cron: "3 13 * * *"  # 08:03 America/Chicago
+    - cron: "3 13 * * *"   # 08:03 America/Chicago
 
 permissions:
   contents: write
+
 concurrency:
   group: raec-events-build
   cancel-in-progress: false
@@ -15,7 +16,7 @@ jobs:
   build:
     runs-on: ubuntu-latest
     env:
-      IMAP_USER: ${{ vars.IMAP_USER }}
+      IMAP_USER: ${{ vars.IMAP_USER }}   # or hardcode the email
       OUT_CSV: data/inbox/latest.csv
       OUT_JSON: events.json
       TZ: America/Chicago
@@ -34,8 +35,8 @@ jobs:
       - name: Install deps
         run: npm i
         env:
-          NPM_CONFIG_FUND: "false"
           NPM_CONFIG_AUDIT: "false"
+          NPM_CONFIG_FUND: "false"
 
       - name: Ensure data folders exist
         run: mkdir -p data/inbox
@@ -53,34 +54,35 @@ jobs:
           OUT_JSON: ${{ env.OUT_JSON }}
         run: node scripts/transform.mjs
 
+      # ---------- Rebase-safe commit with retries ----------
       - name: Commit events.json (rebase-safe, auto-retry)
         shell: bash
         run: |
           set -euo pipefail
+
           git config user.name  "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
           git config pull.rebase true
           git config rebase.autoStash true
-      
-          # Ensure we're aligned to the latest remote main
+
+          # Make sure we're tracking the latest remote main
           git fetch origin main --prune
           git checkout -B main origin/main
-      
+
           # Stage only the generated file
           git add events.json
-      
-          # If nothing changed, exit cleanly
+
+          # Nothing to do?
           if git diff --cached --quiet; then
             echo "No changes to commit."
             exit 0
           fi
-      
+
           git commit -m "Update events.json [skip ci]"
-      
-          # Push with rebase + small backoff in case of a race
+
+          # Push with rebase + small backoff retries to avoid races
           tries=0
-          until [ $tries -ge 5 ]
-          do
+          until [ $tries -ge 5 ]; do
             if git pull --rebase origin main && git push origin HEAD:main; then
               echo "Pushed successfully."
               exit 0
@@ -89,6 +91,6 @@ jobs:
             echo "Push race detected, retry $tries/5…"
             sleep $((2 * tries))
           done
-      
+
           echo "Failed to push after retries."
           exit 1
