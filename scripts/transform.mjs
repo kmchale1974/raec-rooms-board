@@ -1,267 +1,349 @@
 #!/usr/bin/env node
-// Transform latest CSV → events.json with RAEC logic (v2025-11-05)
+// Robust CSV -> events.json for RAEC Rooms Board
 
-import fs from "fs";
-import path from "path";
-import { fileURLToPath } from "url";
+import fs from 'fs';
+import path from 'path';
+import { fileURLToPath } from 'url';
+import { parse } from 'csv-parse/sync';
 
+// ---------- Paths ----------
 const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
-
-const INPUT_CSV = process.env.IN_CSV || path.join(__dirname, "..", "data", "inbox", "latest.csv");
-const OUTPUT_JSON = path.join(__dirname, "..", "events.json");
+const __dirname  = path.dirname(__filename);
+const INPUT_CSV   = process.env.IN_CSV   || path.join(__dirname, '..', 'data', 'inbox', 'latest.csv');
+const OUTPUT_JSON = process.env.OUT_JSON || path.join(__dirname, '..', 'events.json');
 
 // ---------- Helpers ----------
-function clean(s) {
-  return String(s || "").replace(/\s+/g, " ").trim();
+const TZ = 'America/Chicago';
+function todayChicagoDate() {
+  // normalize to “today” in America/Chicago (clock only matters for end-time cutoff)
+  const now = new Date();
+  return now; // We’ll treat “past” by minutes since midnight local time.
 }
 
-function parseRangeToMinutes(text) {
+function toMinFromRange(text) {
   if (!text) return null;
-  const m = String(text)
-    .trim()
-    .match(/(\d{1,2}:\d{2})\s*(am|pm)\s*-\s*(\d{1,2}:\d{2})\s*(am|pm)/i);
+  const m = String(text).trim().match(/(\d{1,2}:\d{2})\s*([AP]M)\s*-\s*(\d{1,2}:\d{2})\s*([AP]M)/i);
   if (!m) return null;
-  const toMin = (h, m, ap) => {
-    let hh = parseInt(h, 10),
-      mm = parseInt(m, 10);
-    if (ap.toLowerCase() === "pm" && hh !== 12) hh += 12;
-    if (ap.toLowerCase() === "am" && hh === 12) hh = 0;
-    return hh * 60 + mm;
-  };
-  return { startMin: toMin(m[1].split(":")[0], m[1].split(":")[1], m[2]), endMin: toMin(m[3].split(":")[0], m[3].split(":")[1], m[4]) };
+  const start = toMin(`${m[1]} ${m[2]}`);
+  const end   = toMin(`${m[3]} ${m[4]}`);
+  if (start == null || end == null) return null;
+  return { startMin: start, endMin: end };
 }
 
-function nthWeekdayOfMonth(year, monthIdx, weekday, n) {
-  const d = new Date(year, monthIdx, 1);
-  let count = 0;
-  while (d.getMonth() === monthIdx) {
-    if (d.getDay() === weekday) {
-      count++;
-      if (count === n) return new Date(d);
-    }
-    d.setDate(d.getDate() + 1);
+function toMin(hhmmMer) {
+  const m = String(hhmmMer).trim().match(/^(\d{1,2}):(\d{2})\s*([AP]M)$/i);
+  if (!m) return null;
+  let h = parseInt(m[1], 10);
+  const min = parseInt(m[2], 10);
+  const mer = m[3].toLowerCase();
+  if (h === 12) h = 0;
+  if (mer === 'pm') h += 12;
+  return h * 60 + min;
+}
+
+function clean(s) {
+  return String(s ?? '').replace(/\uFEFF/g, '').replace(/\s+/g, ' ').trim();
+}
+
+function headerIndex(header, names) {
+  // find first match ignoring case, optional colon
+  const H = header.map(h => clean(h).replace(/:$/, '').toLowerCase());
+  for (const name of names) {
+    const want = name.toLowerCase().replace(/:$/, '');
+    const i = H.indexOf(want);
+    if (i !== -1) return i;
   }
-  return null;
+  return -1;
 }
 
-function isCourtSeason(d = new Date()) {
-  const y = d.getFullYear();
-  const thirdMonMar = nthWeekdayOfMonth(y, 2, 1, 3);
-  const secondMonNov = nthWeekdayOfMonth(y, 10, 1, 2);
-  return d >= thirdMonMar && d < secondMonNov;
+function isInternalHold(s) {
+  const x = clean(s).toLowerCase();
+  if (!x) return false;
+  return /internal hold/i.test(x) || /raec front desk/i.test(x) || /turf install/i.test(x);
 }
 
-function isPickleballText(s) {
-  if (!s) return false;
-  return /\bpickle\s*ball\b|\bpickleball\b|\bopen\s*pb\b|\bopen\s*pickleball\b/i.test(String(s));
+function normalizeReservee(s) {
+  const t = clean(s);
+  // “Last, First” -> “First Last”
+  const m = t.match(/^([A-Za-z'.-]+),\s*([A-Za-z'.-]+)(.*)$/);
+  if (m) {
+    const firstLast = `${m[2]} ${m[1]}`.replace(/\s+/g, ' ').trim();
+    return firstLast;
+  }
+  // “Org, Contact” -> keep as-is (we show org in title, not contact)
+  return t;
 }
 
-// ----------- Mapping ----------
-function mapFacilityToRooms(f) {
-  const facility = clean(f).toLowerCase();
+function isPickleball(purpose, reservee) {
+  const a = clean(purpose).toLowerCase();
+  const b = clean(reservee).toLowerCase();
+  return /pickleball/.test(a) || /pickleball/.test(b);
+}
 
-  // South Gym
-  if (/championship court/i.test(f)) return ["1A", "1B", "2A", "2B"];
-  if (/full gym 1ab & 2ab/i.test(f)) return ["1A", "1B", "2A", "2B"];
-  if (/half court 1a/i.test(f)) return ["1A"];
-  if (/half court 1b/i.test(f)) return ["1B"];
-  if (/court 1-ab/i.test(f)) return ["1A", "1B"];
-  if (/half court 2a/i.test(f)) return ["2A"];
-  if (/half court 2b/i.test(f)) return ["2B"];
-  if (/court 2-ab/i.test(f)) return ["2A", "2B"];
+// -------- Facility → room mapping (returns array of room ids) --------
+function roomsForFacility(fac) {
+  const f = clean(fac).toLowerCase();
 
-  // Fieldhouse
-  if (/fieldhouse - court 3-8/i.test(f)) return ["3", "4", "5", "6", "7", "8"];
-  if (/fieldhouse - court (\d)/i.test(f)) return [RegExp.$1];
-  if (/half turf north/i.test(f)) return ["6", "7", "8"];
-  if (/half turf south/i.test(f)) return ["3", "4", "5"];
-  if (/quarter turf n/i.test(f)) return ["7", "8"];
-  if (/quarter turf s/i.test(f)) return ["3", "4"];
-  if (/full turf/i.test(f)) return ["3", "4", "5", "6", "7", "8"];
+  // South (1/2)
+  if (/ac gym - half court 1a/i.test(f)) return ['1A'];
+  if (/ac gym - half court 1b/i.test(f)) return ['1B'];
+  if (/ac gym - court 1-?ab/i.test(f))  return ['1A', '1B'];
 
-  // North Gym
-  if (/full gym 9 & 10/i.test(f)) return ["9A", "9B", "10A", "10B"];
-  if (/half court 9a/i.test(f)) return ["9A"];
-  if (/half court 9b/i.test(f)) return ["9B"];
-  if (/court 9-ab/i.test(f)) return ["9A", "9B"];
-  if (/half court 10a/i.test(f)) return ["10A"];
-  if (/half court 10b/i.test(f)) return ["10B"];
-  if (/court 10-ab/i.test(f)) return ["10A", "10B"];
+  if (/ac gym - half court 2a/i.test(f)) return ['2A'];
+  if (/ac gym - half court 2b/i.test(f)) return ['2B'];
+  if (/ac gym - court 2-?ab/i.test(f))  return ['2A', '2B'];
 
+  if (/full gym 1ab\s*&\s*2ab/i.test(f)) return ['1A','1B','2A','2B'];
+  if (/championship court/i.test(f))     return ['1A','1B','2A','2B'];
+
+  // North (9/10)
+  if (/ac gym - half court 9a/i.test(f)) return ['9A'];
+  if (/ac gym - half court 9b/i.test(f)) return ['9B'];
+  if (/ac gym - court 9-?ab/i.test(f))  return ['9A','9B'];
+
+  if (/ac gym - half court 10a/i.test(f)) return ['10A'];
+  if (/ac gym - half court 10b/i.test(f)) return ['10B'];
+  if (/ac gym - court 10-?ab/i.test(f))  return ['10A','10B'];
+
+  if (/full gym 9\s*&\s*10/i.test(f))    return ['9A','9B','10A','10B'];
+
+  // Fieldhouse (court season)
+  if (/ac fieldhouse - court\s*([3-8])/i.test(f)) {
+    return [f.match(/([3-8])/)[1]];
+  }
+  if (/ac fieldhouse - court 3-8/i.test(f)) return ['3','4','5','6','7','8'];
+
+  // Turf variants are ignored for court season (we do not map them)
   return [];
 }
 
-function normalizeReservee(raw) {
-  const s = clean(raw);
-  if (/raec front desk/i.test(s)) return { type: "system", org: "RAEC Front Desk", contact: "" };
-  if (/catch/i.test(s)) return { type: "catch", org: "Catch Corner", contact: "" };
-  const parts = s.split(",").map((x) => x.trim());
-  if (parts.length >= 2) {
-    const left = parts[0];
-    const right = parts.slice(1).join(", ");
-    if (/club|elite|training|athletics|sport|volleyball|basketball|academy|united/i.test(left))
-      return { type: "org+contact", org: left, contact: right };
-    if (/^[A-Za-z'.-]+\s+[A-Za-z'.-]+/.test(right))
-      return { type: "person", person: `${right} ${left}`.trim(), org: "", contact: "" };
-    return { type: "org+contact", org: left, contact: right };
-  }
-  return { type: "org", org: s, contact: "" };
+// more-specific score (higher = more specific)
+function specificityScore(rooms) {
+  // 1 room  -> 100
+  // 2 rooms -> 80
+  // 4 rooms -> 60 (AB+AB / Championship / Full Gym 1&2)
+  // 6+ rooms (3-8 blanket) -> 40
+  const n = rooms.length;
+  if (n <= 1) return 100;
+  if (n === 2) return 80;
+  if (n <= 4) return 60;
+  return 40;
 }
 
-function cleanPurpose(s) {
-  return String(s || "")
-    .replace(/\(.*?\)/g, "")
-    .replace(/internal hold per nm/i, "")
-    .trim();
-}
+// keep “most specific” per org/time/room
+function collapseToSpecific(items) {
+  // For each org+time window, keep the most specific room occupancy
+  // Algorithm:
+  // 1) explode to (room, startMin, endMin, org, what/title, purpose)
+  // 2) group by room + [start,end] + org string
+  // 3) within group, keep event with highest specificity score (from its parent’s rooms list)
 
-function overlaps(a, b) {
-  return a.startMin < b.endMin && b.startMin < a.endMin;
-}
-
-// ---------- Main ----------
-async function main() {
-  if (!fs.existsSync(INPUT_CSV)) {
-    console.error("No CSV found");
-    return;
-  }
-  const raw = fs.readFileSync(INPUT_CSV, "utf8");
-  const lines = raw.split(/\r?\n/).filter((l) => l.trim().length > 0);
-  if (lines.length < 2) {
-    console.error("CSV empty");
-    return;
-  }
-
-  const header = lines[0].split(",");
-  const idx = (name) => header.findIndex((h) => h.trim().toLowerCase() === name.toLowerCase());
-  const iLoc = idx("Location:");
-  const iFac = idx("Facility");
-  const iTime = idx("Reserved Time");
-  const iRes = idx("Reservee");
-  const iPur = idx("Reservation Purpose");
-
-  const courtMode = isCourtSeason(new Date());
-
-  const items = [];
-  const dropped = { internal: 0, past: 0 };
-
-  for (let i = 1; i < lines.length; i++) {
-    const row = lines[i].split(",");
-    const loc = clean(row[iLoc]);
-    const fac = clean(row[iFac]);
-    const tim = clean(row[iTime]);
-    const res = clean(row[iRes]);
-    const pur = clean(row[iPur]);
-    if (!fac || !tim) continue;
-    if (loc && !/athletic/i.test(loc)) continue;
-
-    // ignore turf during court season
-    if (courtMode && /turf/i.test(fac)) continue;
-
-    const range = parseRangeToMinutes(tim);
-    if (!range) continue;
-    const rooms = mapFacilityToRooms(fac);
-    if (!rooms.length) continue;
-
-    const who = normalizeReservee(res);
-    const purpose = cleanPurpose(pur);
-    const isPB = isPickleballText(purpose) || isPickleballText(res);
-
-    const looksInternal =
-      /front\s*desk|internal\s*hold|hold\s*per\s*nm|per\s*nm/i.test(res) ||
-      /front\s*desk|internal\s*hold|hold\s*per\s*nm|per\s*nm/i.test(purpose) ||
-      who.type === "system";
-
-    if (looksInternal && !isPB) {
-      dropped.internal++;
-      continue;
-    }
-
-    let title = "",
-      subtitle = "",
-      org = "",
-      contact = "";
-
-    if (isPB) {
-      title = "Open Pickleball";
-      subtitle = "";
-      org = "Open Pickleball";
-      contact = "";
-    } else if (who.type === "catch") {
-      title = "Catch Corner";
-      subtitle = purpose;
-      org = "Catch Corner";
-      contact = "";
-    } else if (who.type === "person") {
-      title = who.person;
-      subtitle = purpose;
-      org = who.person;
-      contact = "";
-    } else if (who.type === "org+contact") {
-      title = who.org;
-      subtitle = purpose || who.contact;
-      org = who.org;
-      contact = who.contact;
-    } else {
-      title = who.org || "Reservation";
-      subtitle = purpose;
-      org = who.org || "";
-      contact = who.contact || "";
-    }
-
-    items.push({ rooms, startMin: range.startMin, endMin: range.endMin, title, subtitle, org, contact });
-  }
-
-  // De-duplicate overlapping blanket vs specific
-  const results = [];
-  const specifics = items.filter((it) => it.rooms.length <= 2);
+  const exploded = [];
   for (const it of items) {
-    if (it.rooms.length >= 4 && it.rooms.every((r) => /^[3-8]$/.test(r))) {
-      const keepRooms = it.rooms.filter((r) => {
-        const conflict = specifics.some(
-          (sp) => sp.org === it.org && overlaps(sp, it) && sp.rooms.includes(r)
-        );
-        return !conflict;
+    for (const r of it.rooms) {
+      exploded.push({
+        roomId: r,
+        startMin: it.startMin,
+        endMin: it.endMin,
+        org: it.org,
+        who: it.who,
+        title: it.title,
+        subtitle: it.subtitle,
+        spec: specificityScore(it.rooms),
       });
-      keepRooms.forEach((r) =>
-        results.push({ roomId: r, startMin: it.startMin, endMin: it.endMin, title: it.title, subtitle: it.subtitle, org: it.org, contact: it.contact })
-      );
-    } else {
-      it.rooms.forEach((r) =>
-        results.push({ roomId: r, startMin: it.startMin, endMin: it.endMin, title: it.title, subtitle: it.subtitle, org: it.org, contact: it.contact })
-      );
     }
   }
 
+  const key = (e) => `${e.roomId}__${e.startMin}-${e.endMin}__${e.org.toLowerCase()}`;
+  const best = new Map();
+  for (const e of exploded) {
+    const k = key(e);
+    const prev = best.get(k);
+    if (!prev || e.spec > prev.spec) best.set(k, e);
+  }
+  return Array.from(best.values());
+}
+
+// ---------- MAIN ----------
+function writeScaffold() {
   const json = {
     dayStartMin: 360,
     dayEndMin: 1380,
     rooms: [
-      { id: "1A", label: "1A", group: "south" },
-      { id: "1B", label: "1B", group: "south" },
-      { id: "2A", label: "2A", group: "south" },
-      { id: "2B", label: "2B", group: "south" },
-      { id: "3", label: "3", group: "fieldhouse" },
-      { id: "4", label: "4", group: "fieldhouse" },
-      { id: "5", label: "5", group: "fieldhouse" },
-      { id: "6", label: "6", group: "fieldhouse" },
-      { id: "7", label: "7", group: "fieldhouse" },
-      { id: "8", label: "8", group: "fieldhouse" },
-      { id: "9A", label: "9A", group: "north" },
-      { id: "9B", label: "9B", group: "north" },
-      { id: "10A", label: "10A", group: "north" },
-      { id: "10B", label: "10B", group: "north" },
+      { id: '1A', label: '1A', group: 'south' },
+      { id: '1B', label: '1B', group: 'south' },
+      { id: '2A', label: '2A', group: 'south' },
+      { id: '2B', label: '2B', group: 'south' },
+      { id: '3',  label: '3',  group: 'fieldhouse' },
+      { id: '4',  label: '4',  group: 'fieldhouse' },
+      { id: '5',  label: '5',  group: 'fieldhouse' },
+      { id: '6',  label: '6',  group: 'fieldhouse' },
+      { id: '7',  label: '7',  group: 'fieldhouse' },
+      { id: '8',  label: '8',  group: 'fieldhouse' },
+      { id: '9A', label: '9A', group: 'north' },
+      { id: '9B', label: '9B', group: 'north' },
+      { id: '10A',label: '10A',group: 'north' },
+      { id: '10B',label: '10B',group: 'north' }
     ],
-    slots: results,
+    slots: []
   };
-
-  console.log(`transform: rows=${lines.length - 1} kept=${items.length} slots=${results.length} drop=${JSON.stringify(dropped)}`);
   fs.writeFileSync(OUTPUT_JSON, JSON.stringify(json, null, 2));
-  console.log(`Wrote ${OUTPUT_JSON} • slots=${results.length}`);
 }
 
-main().catch((err) => {
-  console.error("transform.mjs failed:", err);
+async function main() {
+  if (!fs.existsSync(INPUT_CSV) || fs.statSync(INPUT_CSV).size === 0) {
+    writeScaffold();
+    console.log('transform: no CSV — wrote scaffold');
+    return;
+  }
+
+  const raw = fs.readFileSync(INPUT_CSV);
+  const records = parse(raw, {
+    bom: true,
+    relax_column_count: true,
+    skip_empty_lines: true
+  });
+
+  if (!records.length) {
+    writeScaffold();
+    console.log('transform: empty CSV — wrote scaffold');
+    return;
+  }
+
+  const header = records[0].map(h => clean(h));
+  const iLocation = headerIndex(header, ['Location:', 'Location']);
+  const iFacility = headerIndex(header, ['Facility']);
+  const iTime     = headerIndex(header, ['Reserved Time', 'Time', 'Reservation Time']);
+  const iReservee = headerIndex(header, ['Reservee', 'Reserved By', 'Contact']);
+  const iPurpose  = headerIndex(header, ['Reservation Purpose', 'Purpose', 'Event']);
+
+  if ([iFacility, iTime, iReservee].some(i => i < 0)) {
+    writeScaffold();
+    console.log('transform: required headers not found — wrote scaffold');
+    return;
+  }
+
+  const today = todayChicagoDate();
+  const nowMin = (today.getHours() * 60) + today.getMinutes();
+
+  let kept = 0;
+  const drops = { internal: 0, past: 0, nonRAEC: 0, noMap: 0, badTime: 0 };
+
+  // First pass: parse → raw items
+  const rawItems = [];
+  for (let r = 1; r < records.length; r++) {
+    const row = records[r];
+
+    const location = iLocation >= 0 ? clean(row[iLocation]) : '';
+    const facility = clean(row[iFacility]);
+    const timeText = clean(row[iTime]);
+    const reservee = clean(row[iReservee]);
+    const purpose  = iPurpose >= 0 ? clean(row[iPurpose]) : '';
+
+    // Limit to RAEC (be very flexible)
+    if (location && !/athletic\s*&\s*event\s*center/i.test(location)) {
+      drops.nonRAEC++;
+      continue;
+    }
+
+    // Time range
+    const range = toMinFromRange(timeText);
+    if (!range) { drops.badTime++; continue; }
+
+    // Drop events that have already ended today
+    if (range.endMin <= nowMin) { drops.past++; continue; }
+
+    // Skip internal holds/front desk/turf install
+    if (isInternalHold(purpose) || isInternalHold(reservee)) { drops.internal++; continue; }
+
+    const rooms = roomsForFacility(facility);
+    if (rooms.length === 0) { drops.noMap++; continue; }
+
+    // Display fields
+    let title = '';
+    let subtitle = '';
+    let who = '';
+    let org = '';
+
+    if (isPickleball(purpose, reservee)) {
+      title = 'Open Pickleball';
+      subtitle = '';
+      who = 'Open Pickleball';
+      org = 'Open Pickleball';
+    } else {
+      // If it's clearly “Org, Contact” we treat left as org
+      if (reservee.includes(',')) {
+        const [left, right] = reservee.split(',').map(s => clean(s));
+        // Heuristic: if left looks like a person (First Last), use that as who
+        if (/^[A-Za-z'.-]+\s+[A-Za-z'.-]+$/.test(left)) {
+          who = left;
+          org = left;
+          subtitle = purpose;
+        } else {
+          who = normalizeReservee(reservee); // will flip Last, First → First Last
+          org = left;
+          subtitle = purpose || right || '';
+        }
+      } else {
+        who = normalizeReservee(reservee);
+        org = who;
+        subtitle = purpose;
+      }
+      title = who;
+    }
+
+    rawItems.push({
+      rooms,
+      startMin: range.startMin,
+      endMin: range.endMin,
+      who, title, subtitle, org
+    });
+    kept++;
+  }
+
+  // Collapse blanket/full to specific
+  const finalPerRoom = collapseToSpecific(rawItems);
+
+  // Build final JSON
+  const json = {
+    dayStartMin: 360,
+    dayEndMin: 1380,
+    rooms: [
+      { id: '1A', label: '1A', group: 'south' },
+      { id: '1B', label: '1B', group: 'south' },
+      { id: '2A', label: '2A', group: 'south' },
+      { id: '2B', label: '2B', group: 'south' },
+      { id: '3',  label: '3',  group: 'fieldhouse' },
+      { id: '4',  label: '4',  group: 'fieldhouse' },
+      { id: '5',  label: '5',  group: 'fieldhouse' },
+      { id: '6',  label: '6',  group: 'fieldhouse' },
+      { id: '7',  label: '7',  group: 'fieldhouse' },
+      { id: '8',  label: '8',  group: 'fieldhouse' },
+      { id: '9A', label: '9A', group: 'north' },
+      { id: '9B', label: '9B', group: 'north' },
+      { id: '10A',label: '10A',group: 'north' },
+      { id: '10B',label: '10B',group: 'north' }
+    ],
+    slots: finalPerRoom.map(e => ({
+      roomId: e.roomId,
+      startMin: e.startMin,
+      endMin: e.endMin,
+      title: e.title,
+      subtitle: e.subtitle
+    }))
+  };
+
+  fs.writeFileSync(OUTPUT_JSON, JSON.stringify(json, null, 2));
+
+  console.log(
+    `transform: rows=${records.length - 1} kept=${kept} slots=${json.slots.length} ` +
+    `drop=${JSON.stringify(drops)}`
+  );
+  console.log(`Wrote ${OUTPUT_JSON} • slots=${json.slots.length}`);
+}
+
+main().catch(err => {
+  console.error('transform failed:', err);
+  writeScaffold();
   process.exit(1);
 });
