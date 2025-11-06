@@ -3,23 +3,29 @@ name: Build RAEC events json
 on:
   workflow_dispatch:
   schedule:
-    # 08:03 America/Chicago
+    # 08:03 AM America/Chicago (13:03 UTC standard time)
     - cron: "3 13 * * *"
 
 permissions:
   contents: write
 
+concurrency:
+  group: raec-events-build
+  cancel-in-progress: false
+
 jobs:
   build:
     runs-on: ubuntu-latest
+
     env:
-      IMAP_USER: ${{ vars.IMAP_USER }}   # or hardcode your Gmail address
-      OUT_CSV:  data/inbox/latest.csv
+      # Optional: set a repo "Variable" named IMAP_USER; otherwise we default here.
+      IMAP_USER: ${{ vars.IMAP_USER || 'raecroominfo.board@gmail.com' }}
+      OUT_CSV: data/inbox/latest.csv
       OUT_JSON: events.json
       TZ: America/Chicago
 
     steps:
-      - name: Checkout (full history)
+      - name: Checkout
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
@@ -29,30 +35,44 @@ jobs:
         with:
           node-version: "20"
 
-      - name: Install deps
-        run: npm i
-        env:
-          NPM_CONFIG_FUND: "false"
-          NPM_CONFIG_AUDIT: "false"
+      # Use npm install (not ci) to avoid lock/package drift issues
+      - name: Install dependencies
+        run: npm install --no-audit --no-fund
 
       - name: Ensure data folders exist
-        run: mkdir -p data/inbox
+        run: |
+          mkdir -p data/inbox
+          mkdir -p data/tmp
+
+      - name: Sanity check IMAP_USER
+        run: |
+          echo "IMAP_USER='${IMAP_USER}'"
+          if [ -z "${IMAP_USER}" ]; then
+            echo "IMAP_USER is EMPTY. Set it in Settings → Variables → Actions (name: IMAP_USER) or hardcode it in the workflow env."
+            exit 1
+          fi
 
       - name: Fetch latest CSV from Gmail
         env:
           IMAP_USER: ${{ env.IMAP_USER }}
-          IMAP_PASS: ${{ secrets.IMAP_PASS }}   # REQUIRED
+          IMAP_PASS: ${{ secrets.IMAP_PASS }}  # REQUIRED: Gmail App Password
           OUT_CSV:   ${{ env.OUT_CSV }}
-        run: node scripts/fetch_email.js
+        run: |
+          set -e
+          node scripts/fetch_email.js
+          ls -l "$OUT_CSV" || (echo "No CSV downloaded" && exit 1)
 
       - name: Transform CSV → events.json
         env:
           IN_CSV:   ${{ env.OUT_CSV }}
           OUT_JSON: ${{ env.OUT_JSON }}
-        run: node scripts/transform.mjs
+        run: |
+          set -e
+          node scripts/transform.mjs
+          test -s "$OUT_JSON" || (echo "events.json was not written" && exit 1)
+          echo "Wrote $(wc -c < $OUT_JSON) bytes to $OUT_JSON"
 
-      # ==== PUT THIS STEP RIGHT HERE ====
-      - name: Commit events.json (rebase-safe, auto-retry)
+      - name: Commit events.json (rebase-safe, no checkout)
         shell: bash
         run: |
           set -euo pipefail
@@ -62,11 +82,11 @@ jobs:
           git config pull.rebase true
           git config rebase.autoStash true
 
-          # Make sure we're aligned with remote main
+          # Stay on current branch; just rebase on the latest main
           git fetch origin main --prune
-          git checkout -B main origin/main
+          git pull --rebase origin main
 
-          # Bring the newly generated file from the workspace (already present)
+          # Stage only the generated file
           git add events.json
 
           # If nothing changed, bail out cleanly
@@ -77,16 +97,17 @@ jobs:
 
           git commit -m "Update events.json [skip ci]"
 
-          # Push with rebase + retry (handles concurrent runs)
+          # Push with retries to avoid race failures if multiple runs overlap
           tries=0
           until [ $tries -ge 5 ]
           do
-            if git pull --rebase origin main && git push origin HEAD:main; then
+            if git push origin HEAD:main; then
               echo "Pushed successfully."
               exit 0
             fi
             tries=$((tries+1))
-            echo "Push race detected, retry $tries/5…"
+            echo "Push race detected, retry $tries/5 after backoff…"
+            git pull --rebase origin main || true
             sleep $((2 * tries))
           done
 
