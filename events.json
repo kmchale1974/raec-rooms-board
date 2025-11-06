@@ -76,30 +76,12 @@
   "slots": [
     {
       "roomId": "10A",
-      "startMin": 1050,
-      "endMin": 1230,
-      "title": "Empower Volleyball (Rec)",
-      "subtitle": "Volleyball 2025 Q4 Pattern",
-      "org": "Empower Volleyball (Rec)",
-      "contact": "Dean Baxendale"
-    },
-    {
-      "roomId": "10A",
       "startMin": 1260,
       "endMin": 1350,
       "title": "Catch Corner (Internal Holds",
       "subtitle": "CatchCorner (Andrew Touch Booking # 452420 Basketball)",
       "org": "Catch Corner (Internal Holds",
       "contact": "Catch Corner (Internal Holds)"
-    },
-    {
-      "roomId": "10B",
-      "startMin": 1050,
-      "endMin": 1230,
-      "title": "Empower Volleyball (Rec)",
-      "subtitle": "Volleyball 2025 Q4 Pattern",
-      "org": "Empower Volleyball (Rec)",
-      "contact": "Dean Baxendale"
     },
     {
       "roomId": "10B",
@@ -113,15 +95,6 @@
     {
       "roomId": "1A",
       "startMin": 1170,
-      "endMin": 1230,
-      "title": "John Jones",
-      "subtitle": "Basketball",
-      "org": "John Jones",
-      "contact": ""
-    },
-    {
-      "roomId": "1A",
-      "startMin": 1170,
       "endMin": 1260,
       "title": "Catch Corner (Internal Holds",
       "subtitle": "CatchCorner (Prolific Basketball Booking #438634)",
@@ -163,15 +136,6 @@
       "subtitle": "CatchCorner (Jeremy Gerena Volleyball Booking # 452510)",
       "org": "Catch Corner (Internal Holds",
       "contact": "Catch Corner (Internal Holds)"
-    },
-    {
-      "roomId": "1B",
-      "startMin": 1170,
-      "endMin": 1230,
-      "title": "John Jones",
-      "subtitle": "Basketball",
-      "org": "John Jones",
-      "contact": ""
     },
     {
       "roomId": "1B",
@@ -221,15 +185,6 @@
     {
       "roomId": "2A",
       "startMin": 1170,
-      "endMin": 1230,
-      "title": "John Jones",
-      "subtitle": "Basketball",
-      "org": "John Jones",
-      "contact": ""
-    },
-    {
-      "roomId": "2A",
-      "startMin": 1170,
       "endMin": 1260,
       "title": "Catch Corner (Internal Holds",
       "subtitle": "CatchCorner (Prolific Basketball Booking #438634)",
@@ -271,15 +226,6 @@
       "subtitle": "CatchCorner (Jeremy Gerena Volleyball Booking # 452510)",
       "org": "Catch Corner (Internal Holds",
       "contact": "Catch Corner (Internal Holds)"
-    },
-    {
-      "roomId": "2B",
-      "startMin": 1170,
-      "endMin": 1230,
-      "title": "John Jones",
-      "subtitle": "Basketball",
-      "org": "John Jones",
-      "contact": ""
     },
     {
       "roomId": "2B",
@@ -328,30 +274,12 @@
     },
     {
       "roomId": "9A",
-      "startMin": 1050,
-      "endMin": 1230,
-      "title": "Empower Volleyball (Rec)",
-      "subtitle": "Volleyball 2025 Q4 Pattern",
-      "org": "Empower Volleyball (Rec)",
-      "contact": "Dean Baxendale"
-    },
-    {
-      "roomId": "9A",
       "startMin": 1260,
       "endMin": 1350,
       "title": "Catch Corner (Internal Holds",
       "subtitle": "CatchCorner (Andrew Touch Booking # 452420 Basketball)",
       "org": "Catch Corner (Internal Holds",
       "contact": "Catch Corner (Internal Holds)"
-    },
-    {
-      "roomId": "9B",
-      "startMin": 1050,
-      "endMin": 1230,
-      "title": "Empower Volleyball (Rec)",
-      "subtitle": "Volleyball 2025 Q4 Pattern",
-      "org": "Empower Volleyball (Rec)",
-      "contact": "Dean Baxendale"
     },
     {
       "roomId": "9B",
