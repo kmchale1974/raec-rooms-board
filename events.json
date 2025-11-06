@@ -75,47 +75,11 @@
   ],
   "slots": [
     {
-      "roomId": "1B",
-      "startMin": 1230,
-      "endMin": 1350,
-      "title": "Favio Nunez",
-      "subtitle": "Basketball",
-      "org": "Favio Nunez",
-      "contact": ""
-    },
-    {
       "roomId": "2A",
       "startMin": 1320,
       "endMin": 1380,
       "title": "Catch Corner (Internal Holds",
       "subtitle": "CatchCorner (Jeremy Gerena Volleyball Booking # 452510)",
-      "org": "Catch Corner (Internal Holds",
-      "contact": "Catch Corner (Internal Holds)"
-    },
-    {
-      "roomId": "2B",
-      "startMin": 1260,
-      "endMin": 1350,
-      "title": "Sebastian Arias",
-      "subtitle": "Basketball",
-      "org": "Sebastian Arias",
-      "contact": ""
-    },
-    {
-      "roomId": "10A",
-      "startMin": 1260,
-      "endMin": 1350,
-      "title": "Catch Corner (Internal Holds",
-      "subtitle": "CatchCorner (Andrew Touch Booking # 452420 Basketball)",
-      "org": "Catch Corner (Internal Holds",
-      "contact": "Catch Corner (Internal Holds)"
-    },
-    {
-      "roomId": "10B",
-      "startMin": 1260,
-      "endMin": 1350,
-      "title": "Catch Corner (Internal Holds",
-      "subtitle": "CatchCorner (Andrew Touch Booking # 452420 Basketball)",
       "org": "Catch Corner (Internal Holds",
       "contact": "Catch Corner (Internal Holds)"
     }
