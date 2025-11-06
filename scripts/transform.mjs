@@ -1,29 +1,54 @@
 #!/usr/bin/env node
 // scripts/transform.mjs
-// Transform latest CSV -> events.json with RAEC rules (South 1/2, Fieldhouse 3..8, North 9/10)
-// - Drops "internal hold"/front desk turf install rows
-// - Hides past events (by local time; relies on TZ=America/Chicago in workflow)
-// - De-duplicates blanket vs specific (Full/Championship/Court AB vs Half)
-// - Pickleball override => title "Open Pickleball", no subtitle
-// - Normalizes "Last, First" -> "First Last"
+// Robust CSV -> events.json for RAEC board (no external CSV lib)
 
 import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
 
-// ---------- Paths ----------
+// ---------------- paths/env ----------------
 const __filename = fileURLToPath(import.meta.url);
 const __dirname  = path.dirname(__filename);
 
-const INPUT_CSV   = process.env.IN_CSV   || path.join(__dirname, '..', 'data', 'inbox', 'latest.csv');
+const INPUT_CSV   = process.env.IN_CSV  || path.join(__dirname, '..', 'data', 'inbox', 'latest.csv');
 const OUTPUT_JSON = process.env.OUT_JSON || path.join(__dirname, '..', 'events.json');
 
-// ---------- Small utils ----------
-function clean(s) { return String(s || '').replace(/\s+/g, ' ').trim(); }
+const NOW = new Date(); // board runs “today-forward”
+const DAY_START_MIN = 360;  // 6:00
+const DAY_END_MIN   = 1380; // 23:00
 
-function toMin(hhmmampm) {
-  const s = String(hhmmampm || '').trim().toLowerCase();
-  const m = s.match(/^(\d{1,2}):(\d{2})\s*([ap])m$/);
+// ---------------- tiny csv parser ----------------
+// Handles quotes + commas inside quotes.
+function splitCSVLine(line) {
+  const out = [];
+  let cur = '';
+  let inQuotes = false;
+  for (let i = 0; i < line.length; i++) {
+    const ch = line[i];
+    if (ch === '"') {
+      if (inQuotes && line[i + 1] === '"') { // escaped quote
+        cur += '"';
+        i++;
+      } else {
+        inQuotes = !inQuotes;
+      }
+    } else if (ch === ',' && !inQuotes) {
+      out.push(cur);
+      cur = '';
+    } else {
+      cur += ch;
+    }
+  }
+  out.push(cur);
+  return out;
+}
+
+// ---------------- helpers ----------------
+function clean(s) { return String(s || '').replace(/\s+/g, ' ').trim(); }
+function lcstripcolon(s){ return clean(s).replace(/:+$/, '').toLowerCase(); }
+
+function hhmmToMin(hhmm) {
+  const m = String(hhmm).trim().toLowerCase().match(/^(\d{1,2}):(\d{2})\s*([ap])m$/);
   if (!m) return null;
   let h = parseInt(m[1], 10);
   const min = parseInt(m[2], 10);
@@ -32,297 +57,321 @@ function toMin(hhmmampm) {
   if (mer === 'p') h += 12;
   return h * 60 + min;
 }
+
 function parseRangeToMinutes(text) {
   if (!text) return null;
   const m = String(text).trim().match(/(\d{1,2}:\d{2}\s*[ap]m)\s*-\s*(\d{1,2}:\d{2}\s*[ap]m)/i);
   if (!m) return null;
-  return { startMin: toMin(m[1]), endMin: toMin(m[2]) };
+  const startMin = hhmmToMin(m[1]);
+  const endMin   = hhmmToMin(m[2]);
+  if (startMin == null || endMin == null) return null;
+  return { startMin, endMin };
 }
 
-// Today’s minutes (local; set TZ in workflow)
-function nowMinutes() {
-  const d = new Date();
-  return d.getHours() * 60 + d.getMinutes();
+function nameLastFirstToFirstLast(s) {
+  // "Llanos, David" -> "David Llanos"
+  const m = String(s).match(/^\s*([^,]+)\s*,\s*(.+)\s*$/);
+  if (!m) return clean(s);
+  return clean(`${m[2]} ${m[1]}`);
 }
 
-// ---------- Normalizers ----------
-function normalizeReservee(raw) {
-  const s = clean(raw);
-
-  // Flip "Last, First"
-  const m = s.match(/^([A-Za-z'.-]+),\s*([A-Za-z'.-]+)(.*)$/);
-  if (m) return `${m[2]} ${m[1]}`.replace(/\s+/g, ' ').trim();
-
-  return s;
+function isInternalHold(text) {
+  const s = clean(text).toLowerCase();
+  return (
+    s.includes('front desk') ||
+    s.includes('internal hold') ||
+    s.includes('install per nm') ||
+    s.includes('per nm')
+  );
 }
 
-function cleanPurpose(purpose) {
-  let s = clean(purpose);
-  if (!s) return '';
-  s = s.replace(/^\(+/, '').replace(/\)+$/, '');
-  s = s.replace(/internal hold per nm/i, '').trim();
-  return s;
+function isPickleball(str1, str2='') {
+  const s1 = String(str1 || '').toLowerCase();
+  const s2 = String(str2 || '').toLowerCase();
+  return s1.includes('pickleball') || s2.includes('pickleball');
 }
 
-// ---------- Filters ----------
-function isInternalHold(purpose, reservee) {
-  const p = String(purpose || '').toLowerCase();
-  const r = String(reservee || '').toLowerCase();
-  if (p.includes('internal hold')) return true;
-  // “front desk turf install per nm”, or anything “per nm” + turf/install
-  if (r.includes('front desk')) return true;
-  if (p.includes('per nm') && (p.includes('turf') || p.includes('install'))) return true;
-  return false;
+// Fieldhouse court season (Mar 3rd Mon → day before 2nd Mon Nov)
+function nthWeekdayOfMonth(year, monthIdx, weekday, n) {
+  const d = new Date(year, monthIdx, 1);
+  let c = 0;
+  while (d.getMonth() === monthIdx) {
+    if (d.getDay() === weekday) {
+      c++;
+      if (c === n) return new Date(d);
+    }
+    d.setDate(d.getDate() + 1);
+  }
+  return null;
 }
-
-function isPickleball(purpose, reservee) {
-  const a = String(purpose || '').toLowerCase();
-  const b = String(reservee || '').toLowerCase();
-  return a.includes('pickleball') || b.includes('pickleball');
+function isCourtSeason(d = new Date()) {
+  const y = d.getFullYear();
+  const thirdMonMar = nthWeekdayOfMonth(y, 2, 1, 3);
+  const secondMonNov= nthWeekdayOfMonth(y,10, 1, 2);
+  if (!thirdMonMar || !secondMonNov) return true;
+  return d >= thirdMonMar && d < secondMonNov;
 }
+const COURT_SEASON = isCourtSeason(NOW);
 
-// ---------- Mapping (facilities -> room IDs we show on the board) ----------
-function mapFacilityToRooms(facility) {
-  const f = clean(facility).toLowerCase();
+// Facility → rooms mapping
+function mapFacilityToRooms(fac) {
+  const f = clean(fac).toLowerCase();
 
-  // South courts 1/2
+  // South: 1/2
   if (f === 'ac gym - half court 1a') return ['1A'];
   if (f === 'ac gym - half court 1b') return ['1B'];
   if (f === 'ac gym - court 1-ab')    return ['1A','1B'];
+
   if (f === 'ac gym - half court 2a') return ['2A'];
   if (f === 'ac gym - half court 2b') return ['2B'];
   if (f === 'ac gym - court 2-ab')    return ['2A','2B'];
-  if (f.includes('full gym 1ab & 2ab')) return ['1A','1B','2A','2B'];
-  if (f.includes('championship court'))  return ['1A','1B','2A','2B'];
 
-  // North courts 9/10
-  if (f === 'ac gym - half court 9a')  return ['9A'];
-  if (f === 'ac gym - half court 9b')  return ['9B'];
-  if (f === 'ac gym - court 9-ab')     return ['9A','9B'];
+  if (f.includes('full gym 1ab & 2ab') || f.includes('championship court')) return ['1A','1B','2A','2B'];
+
+  // North: 9/10
+  if (f === 'ac gym - half court 9a') return ['9A'];
+  if (f === 'ac gym - half court 9b') return ['9B'];
+  if (f === 'ac gym - court 9-ab')    return ['9A','9B'];
+
   if (f === 'ac gym - half court 10a') return ['10A'];
   if (f === 'ac gym - half court 10b') return ['10B'];
   if (f === 'ac gym - court 10-ab')    return ['10A','10B'];
+
   if (f.includes('full gym 9 & 10'))   return ['9A','9B','10A','10B'];
 
-  // Fieldhouse 3..8 (during court season)
-  const m = f.match(/^ac fieldhouse - court\s*([3-8])$/i);
-  if (m) return [String(m[1])];
-  if (f === 'ac fieldhouse - court 3-8') return ['3','4','5','6','7','8'];
-
-  // Turf mappings (if you want to include in non-court season)
+  // Fieldhouse: 3..8 (court season); otherwise turf (we still map for completeness)
+  if (f.startsWith('ac fieldhouse - court ')) {
+    const n = f.replace('ac fieldhouse - court ', '').trim();
+    if (/^[3-8]$/.test(n)) return [n];
+    if (n === '3-8') return ['3','4','5','6','7','8'];
+  }
   if (f === 'ac fieldhouse - full turf') return ['3','4','5','6','7','8'];
   if (f === 'ac fieldhouse - half turf north') return ['6','7','8'];
   if (f === 'ac fieldhouse - half turf south') return ['3','4','5'];
-  if (/^ac fieldhouse - quarter turf n[ab]$/.test(f)) return ['7','8'];
-  if (/^ac fieldhouse - quarter turf s[ab]$/.test(f)) return ['3','4'];
 
   return [];
 }
 
-// ---------- Blanket vs Specific de-dup ----------
-// We treat items with many rooms as "blanket" and items with fewer rooms as "specific".
-// For same org (case-insensitive) & overlapping time, remove covered rooms from blanket.
 function overlaps(a, b) {
   return a.startMin < b.endMin && b.startMin < a.endMin;
 }
-function orgKey(s) {
-  return clean(s || '').toLowerCase();
-}
 
-function carveBlankets(items) {
-  // Work on a deep copy to annotate which rooms remain
-  const clones = items.map(it => ({ ...it, rooms: [...it.rooms] }));
-
-  for (let i = 0; i < clones.length; i++) {
-    for (let j = 0; j < clones.length; j++) {
-      if (i === j) continue;
-      const A = clones[i];
-      const B = clones[j];
-      // only remove from A if A is more blanket than B (more rooms)
-      if (A.rooms.length > B.rooms.length &&
-          orgKey(A.org || A.title) === orgKey(B.org || B.title) &&
-          overlaps(A, B)) {
-        // remove in A the rooms that B explicitly targets
-        A.rooms = A.rooms.filter(r => !B.rooms.includes(r));
-      }
-    }
-  }
-
-  // Remove items that lost all rooms
-  return clones.filter(it => it.rooms.length > 0);
-}
-
-// ---------- Main ----------
+// ---------------- main ----------------
 async function main() {
-  // If no csv -> write empty scaffold
+  // scaffold if empty/missing
   if (!fs.existsSync(INPUT_CSV) || fs.statSync(INPUT_CSV).size === 0) {
-    const scaffold = {
-      dayStartMin: 360,
-      dayEndMin: 1380,
+    fs.writeFileSync(OUTPUT_JSON, JSON.stringify({
+      dayStartMin: DAY_START_MIN,
+      dayEndMin: DAY_END_MIN,
       rooms: [
-        { id: '1A', label: '1A', group: 'south' },
-        { id: '1B', label: '1B', group: 'south' },
-        { id: '2A', label: '2A', group: 'south' },
-        { id: '2B', label: '2B', group: 'south' },
-        { id: '3',  label: '3',  group: 'fieldhouse' },
-        { id: '4',  label: '4',  group: 'fieldhouse' },
-        { id: '5',  label: '5',  group: 'fieldhouse' },
-        { id: '6',  label: '6',  group: 'fieldhouse' },
-        { id: '7',  label: '7',  group: 'fieldhouse' },
-        { id: '8',  label: '8',  group: 'fieldhouse' },
-        { id: '9A', label: '9A', group: 'north' },
-        { id: '9B', label: '9B', group: 'north' },
-        { id: '10A',label: '10A',group: 'north' },
-        { id: '10B',label: '10B',group: 'north' }
+        { id:'1A',label:'1A',group:'south'},{ id:'1B',label:'1B',group:'south'},
+        { id:'2A',label:'2A',group:'south'},{ id:'2B',label:'2B',group:'south'},
+        { id:'3',label:'3',group:'fieldhouse'},{ id:'4',label:'4',group:'fieldhouse'},
+        { id:'5',label:'5',group:'fieldhouse'},{ id:'6',label:'6',group:'fieldhouse'},
+        { id:'7',label:'7',group:'fieldhouse'},{ id:'8',label:'8',group:'fieldhouse'},
+        { id:'9A',label:'9A',group:'north'},{ id:'9B',label:'9B',group:'north'},
+        { id:'10A',label:'10A',group:'north'},{ id:'10B',label:'10B',group:'north'}
       ],
-      slots: []
-    };
-    fs.writeFileSync(OUTPUT_JSON, JSON.stringify(scaffold, null, 2));
-    console.log(`Wrote ${OUTPUT_JSON} • slots=0`);
+      slots:[]
+    }, null, 2));
+    console.log('transform: no CSV; wrote scaffold.');
     return;
   }
 
   const raw = fs.readFileSync(INPUT_CSV, 'utf8');
   const lines = raw.split(/\r?\n/).filter(l => l.trim().length > 0);
-  if (!lines.length) {
-    console.log('CSV has no rows; writing empty scaffold.');
-    return main();
+  if (lines.length < 2) {
+    console.log('transform: CSV has header only; writing scaffold.');
+    return main(); // recurse to scaffold
   }
 
-  // Header
-  const header = lines[0].split(',');
-  const idx = (name) => header.findIndex(h => clean(h).toLowerCase() === name.toLowerCase());
-  const iLocation = idx('Location:');
-  const iFacility = idx('Facility');
-  const iTime     = idx('Reserved Time');
-  const iReservee = idx('Reservee');
-  const iPurpose  = idx('Reservation Purpose');
+  // Parse header with robust detection
+  const headerCells = splitCSVLine(lines[0]).map(lcstripcolon);
 
-  // Counters
-  let drop_internal = 0;
-  let drop_past = 0;
-  let kept_rows = 0;
+  // Acceptable header variants
+  const COL_LOC      = ['location', 'location '];
+  const COL_FAC      = ['facility', 'facilities'];
+  const COL_TIME     = ['reserved time','reservation time','time','event time'];
+  const COL_RESERVEE = ['reservee','reserved by','name'];
+  const COL_PURPOSE  = ['reservation purpose','purpose','description','event'];
 
-  const nowMin = nowMinutes();
+  function findIdx(names){
+    for (const n of names) {
+      const i = headerCells.findIndex(h => h === n);
+      if (i !== -1) return i;
+    }
+    // fuzzy: startsWith
+    for (const n of names) {
+      const i = headerCells.findIndex(h => h.startsWith(n));
+      if (i !== -1) return i;
+    }
+    return -1;
+  }
 
-  // Pass 1: read rows -> preliminary items
-  const pre = [];
-  for (let i = 1; i < lines.length; i++) {
-    const row = lines[i].split(',');
+  const iLocation  = findIdx(COL_LOC);
+  const iFacility  = findIdx(COL_FAC);
+  const iTime      = findIdx(COL_TIME);
+  const iReservee  = findIdx(COL_RESERVEE);
+  const iPurpose   = findIdx(COL_PURPOSE);
 
-    const location  = clean(row[iLocation]  || '');
-    const facility  = clean(row[iFacility]  || '');
-    const timeText  = clean(row[iTime]      || '');
-    const reserveeR = clean(row[iReservee]  || '');
-    const purposeR  = clean(row[iPurpose]   || '');
+  // debug some basics
+  console.log('transform: header map', { iLocation, iFacility, iTime, iReservee, iPurpose });
 
-    if (!facility || !timeText) continue;
+  let kept = 0;
+  const drop = { internal: 0, past: 0, noMap: 0, noTime: 0, nonRAEC: 0 };
+  const rowsParsedSample = [];
 
-    // RAEC only
-    if (location && !/athletic\s*&\s*event\s*center/i.test(location)) continue;
+  const prelim = [];
 
-    // Filter internal/front-desk turf install holds
-    if (isInternalHold(purposeR, reserveeR)) { drop_internal++; continue; }
+  for (let r = 1; r < lines.length; r++) {
+    const cols = splitCSVLine(lines[r]);
+    const location  = iLocation >= 0 ? clean(cols[iLocation])  : '';
+    const facility  = iFacility >= 0 ? clean(cols[iFacility])  : '';
+    const timeText  = iTime     >= 0 ? clean(cols[iTime])      : '';
+    const reservee  = iReservee >= 0 ? clean(cols[iReservee])  : '';
+    const purpose   = iPurpose  >= 0 ? clean(cols[iPurpose])   : '';
+
+    if (rowsParsedSample.length < 3) {
+      rowsParsedSample.push({ location, facility, timeText, reservee, purpose });
+    }
+
+    // Only Athletic & Event Center
+    if (location && !/athletic\s*&\s*event\s*center/i.test(location)) {
+      drop.nonRAEC++;
+      continue;
+    }
+
+    if (isInternalHold(reservee) || isInternalHold(purpose)) {
+      drop.internal++;
+      continue;
+    }
 
     const range = parseRangeToMinutes(timeText);
-    if (!range) continue;
+    if (!range) { drop.noTime++; continue; }
 
-    // Past events drop (end time)
-    if (range.endMin != null && range.endMin <= nowMin) { drop_past++; continue; }
+    // drop already-ended slots today (use a 5-minute grace)
+    const nowMin = NOW.getHours() * 60 + NOW.getMinutes();
+    if (range.endMin < nowMin - 5) { drop.past++; continue; }
 
     const rooms = mapFacilityToRooms(facility);
-    if (!rooms.length) continue;
+    if (!rooms.length) { drop.noMap++; continue; }
 
-    // Build display fields
-    let who = normalizeReservee(reserveeR);
-    let title = who || 'Reservation';
-    let subtitle = cleanPurpose(purposeR);
-    let org = title;
-    let contact = '';
+    // Fieldhouse: in court season, drop turf
+    if (COURT_SEASON && /fieldhouse.*turf/i.test(facility)) {
+      drop.noMap++; // treat as not-mapped during court season
+      continue;
+    }
 
-    // If reservee looked like "Org, Person", set org/contact
-    if (reserveeR.includes(',')) {
-      const parts = reserveeR.split(',').map(s => s.trim());
-      if (parts.length >= 2) {
-        const left = parts[0]; // org or last name
-        const right = parts.slice(1).join(', ');
-        // If right looks like "First Last", treat as contact
-        if (/^[A-Za-z'.-]+\s+[A-Za-z'.-]+/.test(right)) {
-          org = left;
-          contact = right;
-          title = org;
+    // Build normalized identity for precedence
+    let title = '';
+    let subtitle = '';
+
+    // Pickleball override
+    if (isPickleball(purpose, reservee)) {
+      title = 'Open Pickleball';
+      subtitle = '';
+    } else {
+      // Reservee normalization
+      let who = clean(reservee);
+      if (who.includes(',')) who = nameLastFirstToFirstLast(who);
+      title = who || 'Reservation';
+      subtitle = clean(purpose);
+    }
+
+    prelim.push({
+      rooms, startMin: range.startMin, endMin: range.endMin,
+      title, subtitle,
+      orgKey: title.toLowerCase()
+    });
+    kept++;
+  }
+
+  // Precedence / de-dup:
+  // If an org has Full/Championship/AB and specific halves, show ONLY the most specific (Half A/B) for overlapping times.
+  const outSlots = [];
+  const prelimByOrg = new Map();
+
+  for (const it of prelim) {
+    if (!prelimByOrg.has(it.orgKey)) prelimByOrg.set(it.orgKey, []);
+    prelimByOrg.get(it.orgKey).push(it);
+  }
+
+  // classify facility “width”
+  function widthScore(rooms) {
+    // more specific gets higher score (Half = 2, AB = 1, Full gym = 0)
+    if (rooms.length === 1) return 2;                    // 1A, 1B, etc.
+    if (rooms.length === 2) return 1;                    // 1AB, 2AB, 9AB, 10AB
+    return 0;                                            // Championship / Full Gym 1–2 / 9–10
+  }
+
+  for (const [, list] of prelimByOrg) {
+    // For each org, eliminate lower-specificity items that overlap with higher-specificity items on same room set.
+    // Strategy:
+    // 1) Sort by specificity DESC.
+    // 2) Walk, adding items; when adding a more specific item, we implicitly shadow overlapping broader items for that room.
+    list.sort((a, b) => widthScore(b.rooms) - widthScore(a.rooms));
+
+    const accepted = [];
+    for (const cand of list) {
+      // if more specific overlaps previously accepted? Accept; it will shadow broader ones later
+      accepted.push(cand);
+    }
+
+    // Now, expand to final room-level slots but shadow broader-by-room.
+    // For each broader item, skip rooms/times already covered by any more-specific accepted item for same org.
+    const specificFirst = [...accepted].sort((a, b) => widthScore(b.rooms) - widthScore(a.rooms));
+    const taken = []; // track {roomId,startMin,endMin} for this org
+
+    for (const it of specificFirst) {
+      const score = widthScore(it.rooms);
+      for (const roomId of it.rooms) {
+        const conflict = taken.some(t => t.roomId === roomId && overlaps(t, it));
+        if (score === 2) {
+          // most specific: always allowed; also mark taken
+          outSlots.push({ roomId, startMin: it.startMin, endMin: it.endMin, title: it.title, subtitle: it.subtitle });
+          taken.push({ roomId, startMin: it.startMin, endMin: it.endMin });
+        } else if (score === 1) {
+          // mid-specific (AB). Only add if not shadowed by a taken half
+          if (!conflict) {
+            outSlots.push({ roomId, startMin: it.startMin, endMin: it.endMin, title: it.title, subtitle: it.subtitle });
+            taken.push({ roomId, startMin: it.startMin, endMin: it.endMin });
+          }
+        } else {
+          // broad (Full/Championship). Only add if not shadowed by any taken
+          if (!conflict) {
+            outSlots.push({ roomId, startMin: it.startMin, endMin: it.endMin, title: it.title, subtitle: it.subtitle });
+            taken.push({ roomId, startMin: it.startMin, endMin: it.endMin });
+          }
         }
       }
     }
-
-    // ---- Pickleball override ----
-    if (isPickleball(purposeR, reserveeR)) {
-      title = 'Open Pickleball';
-      subtitle = '';
-      org = 'Open Pickleball';
-      contact = '';
-    }
-
-    pre.push({
-      rooms,
-      startMin: range.startMin,
-      endMin:   range.endMin,
-      title, subtitle, org, contact
-    });
-
-    kept_rows++;
   }
 
-  // Pass 2: carve blankets using org/time overlap logic
-  const carved = carveBlankets(pre);
-
-  // Final slots (room-per-item)
-  const slots = [];
-  for (const it of carved) {
-    for (const r of it.rooms) {
-      slots.push({
-        roomId: r,
-        startMin: it.startMin,
-        endMin: it.endMin,
-        title: it.title,
-        subtitle: it.subtitle,
-        org: it.org,
-        contact: it.contact
-      });
-    }
-  }
-
-  // Sort slots by start
-  slots.sort((a, b) => (a.startMin - b.startMin) || a.roomId.localeCompare(b.roomId));
-
-  // Final JSON structure
+  // Build JSON
   const json = {
-    dayStartMin: 360,
-    dayEndMin: 1380,
+    dayStartMin: DAY_START_MIN,
+    dayEndMin: DAY_END_MIN,
     rooms: [
-      { id: '1A', label: '1A', group: 'south' },
-      { id: '1B', label: '1B', group: 'south' },
-      { id: '2A', label: '2A', group: 'south' },
-      { id: '2B', label: '2B', group: 'south' },
-      { id: '3',  label: '3',  group: 'fieldhouse' },
-      { id: '4',  label: '4',  group: 'fieldhouse' },
-      { id: '5',  label: '5',  group: 'fieldhouse' },
-      { id: '6',  label: '6',  group: 'fieldhouse' },
-      { id: '7',  label: '7',  group: 'fieldhouse' },
-      { id: '8',  label: '8',  group: 'fieldhouse' },
-      { id: '9A', label: '9A', group: 'north' },
-      { id: '9B', label: '9B', group: 'north' },
-      { id: '10A',label: '10A',group: 'north' },
-      { id: '10B',label: '10B',group: 'north' }
+      { id:'1A',label:'1A',group:'south'},{ id:'1B',label:'1B',group:'south'},
+      { id:'2A',label:'2A',group:'south'},{ id:'2B',label:'2B',group:'south'},
+      { id:'3',label:'3',group:'fieldhouse'},{ id:'4',label:'4',group:'fieldhouse'},
+      { id:'5',label:'5',group:'fieldhouse'},{ id:'6',label:'6',group:'fieldhouse'},
+      { id:'7',label:'7',group:'fieldhouse'},{ id:'8',label:'8',group:'fieldhouse'},
+      { id:'9A',label:'9A',group:'north'},{ id:'9B',label:'9B',group:'north'},
+      { id:'10A',label:'10A',group:'north'},{ id:'10B',label:'10B',group:'north'}
     ],
-    slots
+    slots: outSlots
   };
 
-  fs.writeFileSync(OUTPUT_JSON, JSON.stringify(json, null, 2));
+  // Debug summary
   console.log(
-    `transform: rows=${lines.length - 1} kept=${kept_rows} slots=${slots.length} drop={"internal":${drop_internal},"past":${drop_past}}`
+    `transform: rows=${lines.length - 1} kept=${kept} slots=${outSlots.length} ` +
+    `drop=${JSON.stringify(drop)}`
   );
-  console.log(`Wrote ${OUTPUT_JSON} • slots=${slots.length}`);
+  console.log('transform sample rows (first 3 parsed):', rowsParsedSample);
+
+  fs.writeFileSync(OUTPUT_JSON, JSON.stringify(json, null, 2));
+  console.log(`Wrote ${OUTPUT_JSON} • slots=${outSlots.length}`);
 }
 
 main().catch(err => {
