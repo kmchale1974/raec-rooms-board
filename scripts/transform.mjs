@@ -1,123 +1,117 @@
 #!/usr/bin/env node
-// scripts/transform.mjs
-// Robust CSV -> events.json for RAEC board (no external CSV lib)
+// Transform latest CSV -> events.json with RAEC rules (Kevin's spec)
 
 import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
+import { parse } from 'csv-parse/sync';
 
-// ---------------- paths/env ----------------
 const __filename = fileURLToPath(import.meta.url);
 const __dirname  = path.dirname(__filename);
 
-const INPUT_CSV   = process.env.IN_CSV  || path.join(__dirname, '..', 'data', 'inbox', 'latest.csv');
+const INPUT_CSV   = process.env.IN_CSV   || path.join(__dirname, '..', 'data', 'inbox', 'latest.csv');
 const OUTPUT_JSON = process.env.OUT_JSON || path.join(__dirname, '..', 'events.json');
 
-const NOW = new Date(); // board runs “today-forward”
-const DAY_START_MIN = 360;  // 6:00
-const DAY_END_MIN   = 1380; // 23:00
-
-// ---------------- tiny csv parser ----------------
-// Handles quotes + commas inside quotes.
-function splitCSVLine(line) {
-  const out = [];
-  let cur = '';
-  let inQuotes = false;
-  for (let i = 0; i < line.length; i++) {
-    const ch = line[i];
-    if (ch === '"') {
-      if (inQuotes && line[i + 1] === '"') { // escaped quote
-        cur += '"';
-        i++;
-      } else {
-        inQuotes = !inQuotes;
-      }
-    } else if (ch === ',' && !inQuotes) {
-      out.push(cur);
-      cur = '';
-    } else {
-      cur += ch;
-    }
-  }
-  out.push(cur);
-  return out;
+// ---------- Helpers ----------
+function clean(s) {
+  return String(s ?? '').replace(/\s+/g, ' ').trim();
 }
-
-// ---------------- helpers ----------------
-function clean(s) { return String(s || '').replace(/\s+/g, ' ').trim(); }
-function lcstripcolon(s){ return clean(s).replace(/:+$/, '').toLowerCase(); }
-
-function hhmmToMin(hhmm) {
-  const m = String(hhmm).trim().toLowerCase().match(/^(\d{1,2}):(\d{2})\s*([ap])m$/);
+function toMin(hhmm) {
+  // " 7:00pm " or "7:00 pm" or "7:00PM"
+  const m = String(hhmm).trim().toLowerCase().match(/^(\d{1,2}):(\d{2})\s*([ap])m$/i);
   if (!m) return null;
-  let h = parseInt(m[1], 10);
-  const min = parseInt(m[2], 10);
-  const mer = m[3];
+  let h = parseInt(m[1],10);
+  const min = parseInt(m[2],10);
+  const mer = m[3].toLowerCase();
   if (h === 12) h = 0;
   if (mer === 'p') h += 12;
-  return h * 60 + min;
+  return h*60 + min;
 }
-
 function parseRangeToMinutes(text) {
-  if (!text) return null;
-  const m = String(text).trim().match(/(\d{1,2}:\d{2}\s*[ap]m)\s*-\s*(\d{1,2}:\d{2}\s*[ap]m)/i);
+  // " 7:00pm -  9:00pm " (allow extra spaces)
+  const m = String(text).toLowerCase().match(/(\d{1,2}:\d{2}\s*[ap]m)\s*-\s*(\d{1,2}:\d{2}\s*[ap]m)/i);
   if (!m) return null;
-  const startMin = hhmmToMin(m[1]);
-  const endMin   = hhmmToMin(m[2]);
-  if (startMin == null || endMin == null) return null;
-  return { startMin, endMin };
+  return { startMin: toMin(m[1]), endMin: toMin(m[2]) };
+}
+function todayMinutesNow() {
+  const now = new Date();
+  return now.getHours()*60 + now.getMinutes();
 }
 
-function nameLastFirstToFirstLast(s) {
-  // "Llanos, David" -> "David Llanos"
-  const m = String(s).match(/^\s*([^,]+)\s*,\s*(.+)\s*$/);
-  if (!m) return clean(s);
-  return clean(`${m[2]} ${m[1]}`);
+// Normalize “Last, First” → “First Last” (only when clearly that pattern)
+function normalizePersonName(reserveeRaw) {
+  const s = clean(reserveeRaw);
+  // If it contains a comma and not obviously an org
+  // e.g. "Llanos, David" → "David Llanos"
+  const m = s.match(/^\s*([A-Za-z'.-]+)\s*,\s*([A-Za-z'.-]+)\s*$/);
+  if (m) return `${m[2]} ${m[1]}`.replace(/\s+/g,' ').trim();
+  return s;
 }
 
-function isInternalHold(text) {
-  const s = clean(text).toLowerCase();
-  return (
-    s.includes('front desk') ||
-    s.includes('internal hold') ||
-    s.includes('install per nm') ||
-    s.includes('per nm')
-  );
+// Decide if this row is "internal/system" (to drop),
+// but **never drop** if it’s Pickleball (we keep Open Pickleball).
+function isInternalRow(reservee, purpose) {
+  const r = reservee.toLowerCase();
+  const p = purpose.toLowerCase();
+  const isPickle = p.includes('pickleball') || r.includes('pickleball');
+  if (isPickle) return false;
+
+  // Internal/system phrases
+  if (r.includes('raec front desk')) return true;
+  if (r.includes('internal holds')) return true;
+  if (p.includes('internal hold')) return true;
+  if (p.includes('turf install')) return true;
+  return false;
 }
 
-function isPickleball(str1, str2='') {
-  const s1 = String(str1 || '').toLowerCase();
-  const s2 = String(str2 || '').toLowerCase();
-  return s1.includes('pickleball') || s2.includes('pickleball');
-}
+// Title/subtitle mapping
+function makeDisplay(reservee, purpose) {
+  const r = clean(reservee);
+  const p = clean(purpose);
 
-// Fieldhouse court season (Mar 3rd Mon → day before 2nd Mon Nov)
-function nthWeekdayOfMonth(year, monthIdx, weekday, n) {
-  const d = new Date(year, monthIdx, 1);
-  let c = 0;
-  while (d.getMonth() === monthIdx) {
-    if (d.getDay() === weekday) {
-      c++;
-      if (c === n) return new Date(d);
-    }
-    d.setDate(d.getDate() + 1);
+  const isPickle = /pickleball/i.test(r) || /pickleball/i.test(p);
+  if (isPickle) {
+    return { title: 'Open Pickleball', subtitle: '', org: 'Open Pickleball', contact: '' };
   }
-  return null;
-}
-function isCourtSeason(d = new Date()) {
-  const y = d.getFullYear();
-  const thirdMonMar = nthWeekdayOfMonth(y, 2, 1, 3);
-  const secondMonNov= nthWeekdayOfMonth(y,10, 1, 2);
-  if (!thirdMonMar || !secondMonNov) return true;
-  return d >= thirdMonMar && d < secondMonNov;
-}
-const COURT_SEASON = isCourtSeason(NOW);
 
-// Facility → rooms mapping
+  // If looks like "Last, First" → normalize to "First Last"
+  let title = normalizePersonName(r);
+  let org = '', contact = '';
+
+  // If it's very org-y with comma (e.g., "Empower Volleyball (Rec), Dean Baxendale")
+  // Keep left as org, right as contact.
+  if (r.includes(',')) {
+    const left = r.split(',')[0].trim();
+    const right = r.split(',').slice(1).join(',').trim();
+    // Heuristic: if the left has words like Volleyball / Club / Academy / etc, use it as title(org)
+    if (/\b(Volleyball|Club|Academy|Athletics|Sports|United|Elite|Training|Catch Corner)\b/i.test(left)) {
+      title = left;
+      org = left;
+      contact = right;
+    }
+  }
+
+  // Otherwise: if we changed Last, First to First Last, that’s a person.
+  if (!org) {
+    // Person vs org: if title contains a space but not org keywords, treat as person
+    if (/\s/.test(title) && !/\b(Club|Academy|Athletics|Sports|United|Elite|Training|Volleyball|Catch Corner)\b/i.test(title)) {
+      org = title;
+    }
+  }
+
+  const subtitle = p;
+  return { title, subtitle, org, contact };
+}
+
+// ---------- Facility → rooms mapping ----------
+// Return an array of rooms (IDs): ['1A','1B','2A','2B','9A','9B','10A','10B','3'..'8']
+// IMPORTANT: We will **not** use wide-only (e.g., Full Gym) to force more rooms if
+// half-courts appear in the same (reservee+time) block — the reducer will resolve that.
+// Here we still expand logical AB → both halves.
 function mapFacilityToRooms(fac) {
   const f = clean(fac).toLowerCase();
 
-  // South: 1/2
+  // South 1/2
   if (f === 'ac gym - half court 1a') return ['1A'];
   if (f === 'ac gym - half court 1b') return ['1B'];
   if (f === 'ac gym - court 1-ab')    return ['1A','1B'];
@@ -126,9 +120,10 @@ function mapFacilityToRooms(fac) {
   if (f === 'ac gym - half court 2b') return ['2B'];
   if (f === 'ac gym - court 2-ab')    return ['2A','2B'];
 
-  if (f.includes('full gym 1ab & 2ab') || f.includes('championship court')) return ['1A','1B','2A','2B'];
+  if (f.includes('full gym 1ab & 2ab')) return ['1A','1B','2A','2B']; // wide
+  if (f.includes('championship court'))  return ['1A','1B','2A','2B']; // wide
 
-  // North: 9/10
+  // North 9/10
   if (f === 'ac gym - half court 9a') return ['9A'];
   if (f === 'ac gym - half court 9b') return ['9B'];
   if (f === 'ac gym - court 9-ab')    return ['9A','9B'];
@@ -137,14 +132,15 @@ function mapFacilityToRooms(fac) {
   if (f === 'ac gym - half court 10b') return ['10B'];
   if (f === 'ac gym - court 10-ab')    return ['10A','10B'];
 
-  if (f.includes('full gym 9 & 10'))   return ['9A','9B','10A','10B'];
+  if (f.includes('full gym 9 & 10'))   return ['9A','9B','10A','10B']; // wide
 
-  // Fieldhouse: 3..8 (court season); otherwise turf (we still map for completeness)
-  if (f.startsWith('ac fieldhouse - court ')) {
-    const n = f.replace('ac fieldhouse - court ', '').trim();
-    if (/^[3-8]$/.test(n)) return [n];
-    if (n === '3-8') return ['3','4','5','6','7','8'];
+  // Fieldhouse 3–8 courts (court-season)
+  if (/^ac fieldhouse - court\s*([3-8])$/i.test(clean(fac))) {
+    return [String(RegExp.$1)];
   }
+  if (f === 'ac fieldhouse - court 3-8') return ['3','4','5','6','7','8'];
+
+  // Turf variants (we will drop most internal turf items earlier)
   if (f === 'ac fieldhouse - full turf') return ['3','4','5','6','7','8'];
   if (f === 'ac fieldhouse - half turf north') return ['6','7','8'];
   if (f === 'ac fieldhouse - half turf south') return ['3','4','5'];
@@ -152,226 +148,197 @@ function mapFacilityToRooms(fac) {
   return [];
 }
 
-function overlaps(a, b) {
-  return a.startMin < b.endMin && b.startMin < a.endMin;
+// Narrowing preference: if any half-courts exist, keep only half-courts and
+// drop wide rooms that merely duplicate intent (Court AB / Full Gym / Championship).
+function narrowRooms(rooms) {
+  const set = new Set(rooms);
+  const hasHalfSouth = set.has('1A') || set.has('1B') || set.has('2A') || set.has('2B');
+  const hasHalfNorth = set.has('9A') || set.has('9B') || set.has('10A') || set.has('10B');
+
+  if (hasHalfSouth) {
+    // keep only 1A/1B/2A/2B if any present
+    for (const r of ['9A','9B','10A','10B','3','4','5','6','7','8']) set.delete(r);
+  }
+  if (hasHalfNorth) {
+    // keep only 9A/9B/10A/10B if any present
+    for (const r of ['1A','1B','2A','2B','3','4','5','6','7','8']) {
+      if (!hasHalfSouth) set.delete(r);
+    }
+  }
+
+  // If neither south nor north half-courts detected (e.g., fieldhouse or pure wide),
+  // leave as-is (fieldhouse courts 3–8 stand on their own).
+
+  return Array.from(set);
 }
 
-// ---------------- main ----------------
+// Grouping key: (reserveeNorm + purposeNorm + startMin + endMin).
+// This clusters all wide/half rows of the SAME actual booking.
+function groupKey(reservee, purpose, startMin, endMin) {
+  return `${clean(reservee).toLowerCase()}|${clean(purpose).toLowerCase()}|${startMin}|${endMin}`;
+}
+
+// ---------- Main ----------
+function buildEmptyJson() {
+  return {
+    dayStartMin: 360, // 6:00
+    dayEndMin: 1380,  // 23:00
+    rooms: [
+      { id: '1A',  label:'1A',  group:'south' },
+      { id: '1B',  label:'1B',  group:'south' },
+      { id: '2A',  label:'2A',  group:'south' },
+      { id: '2B',  label:'2B',  group:'south' },
+      { id: '3',   label:'3',   group:'fieldhouse' },
+      { id: '4',   label:'4',   group:'fieldhouse' },
+      { id: '5',   label:'5',   group:'fieldhouse' },
+      { id: '6',   label:'6',   group:'fieldhouse' },
+      { id: '7',   label:'7',   group:'fieldhouse' },
+      { id: '8',   label:'8',   group:'fieldhouse' },
+      { id: '9A',  label:'9A',  group:'north' },
+      { id: '9B',  label:'9B',  group:'north' },
+      { id: '10A', label:'10A', group:'north' },
+      { id: '10B', label:'10B', group:'north' },
+    ],
+    slots: []
+  };
+}
+
 async function main() {
-  // scaffold if empty/missing
   if (!fs.existsSync(INPUT_CSV) || fs.statSync(INPUT_CSV).size === 0) {
-    fs.writeFileSync(OUTPUT_JSON, JSON.stringify({
-      dayStartMin: DAY_START_MIN,
-      dayEndMin: DAY_END_MIN,
-      rooms: [
-        { id:'1A',label:'1A',group:'south'},{ id:'1B',label:'1B',group:'south'},
-        { id:'2A',label:'2A',group:'south'},{ id:'2B',label:'2B',group:'south'},
-        { id:'3',label:'3',group:'fieldhouse'},{ id:'4',label:'4',group:'fieldhouse'},
-        { id:'5',label:'5',group:'fieldhouse'},{ id:'6',label:'6',group:'fieldhouse'},
-        { id:'7',label:'7',group:'fieldhouse'},{ id:'8',label:'8',group:'fieldhouse'},
-        { id:'9A',label:'9A',group:'north'},{ id:'9B',label:'9B',group:'north'},
-        { id:'10A',label:'10A',group:'north'},{ id:'10B',label:'10B',group:'north'}
-      ],
-      slots:[]
-    }, null, 2));
-    console.log('transform: no CSV; wrote scaffold.');
+    fs.writeFileSync(OUTPUT_JSON, JSON.stringify(buildEmptyJson(), null, 2));
+    console.log(`transform: no csv -> empty scaffold`);
     return;
   }
 
   const raw = fs.readFileSync(INPUT_CSV, 'utf8');
-  const lines = raw.split(/\r?\n/).filter(l => l.trim().length > 0);
-  if (lines.length < 2) {
-    console.log('transform: CSV has header only; writing scaffold.');
-    return main(); // recurse to scaffold
+
+  // Parse with csv-parse/sync (robust for commas in names)
+  const records = parse(raw, {
+    bom: true,
+    skip_empty_lines: true
+  });
+
+  if (!records.length) {
+    fs.writeFileSync(OUTPUT_JSON, JSON.stringify(buildEmptyJson(), null, 2));
+    console.log(`transform: parsed 0 rows -> empty scaffold`);
+    return;
   }
 
-  // Parse header with robust detection
-  const headerCells = splitCSVLine(lines[0]).map(lcstripcolon);
+  // Identify headers
+  const header = records[0].map(h => clean(h).toLowerCase());
+  const idx = (name) => header.findIndex(h => h === name.toLowerCase());
 
-  // Acceptable header variants
-  const COL_LOC      = ['location', 'location '];
-  const COL_FAC      = ['facility', 'facilities'];
-  const COL_TIME     = ['reserved time','reservation time','time','event time'];
-  const COL_RESERVEE = ['reservee','reserved by','name'];
-  const COL_PURPOSE  = ['reservation purpose','purpose','description','event'];
+  const iLocation = idx('location:');         // "Athletic & Event Center"
+  const iFacility = idx('facility');          // "AC Gym - Half Court 1B", etc.
+  const iTime     = idx('reserved time');     // " 7:00pm -  9:00pm "
+  const iReservee = idx('reservee');          // "Llanos, David" or "Empower Volleyball (Rec), Dean Baxendale"
+  const iPurpose  = idx('reservation purpose');
 
-  function findIdx(names){
-    for (const n of names) {
-      const i = headerCells.findIndex(h => h === n);
-      if (i !== -1) return i;
-    }
-    // fuzzy: startsWith
-    for (const n of names) {
-      const i = headerCells.findIndex(h => h.startsWith(n));
-      if (i !== -1) return i;
-    }
-    return -1;
+  if (iFacility < 0 || iTime < 0 || iReservee < 0 || iPurpose < 0) {
+    // minimal safety
+    fs.writeFileSync(OUTPUT_JSON, JSON.stringify(buildEmptyJson(), null, 2));
+    console.log(`transform: headers missing -> empty scaffold`);
+    return;
   }
 
-  const iLocation  = findIdx(COL_LOC);
-  const iFacility  = findIdx(COL_FAC);
-  const iTime      = findIdx(COL_TIME);
-  const iReservee  = findIdx(COL_RESERVEE);
-  const iPurpose   = findIdx(COL_PURPOSE);
+  const nowMin = todayMinutesNow();
 
-  // debug some basics
-  console.log('transform: header map', { iLocation, iFacility, iTime, iReservee, iPurpose });
+  // 1) First pass: collect only today's RAEC rows, filter internal (except Pickleball),
+  //    parse minutes + facility map.
+  const kept = [];
+  let dropInternal = 0, dropPast = 0, dropNoMap = 0, dropNotRAEC = 0, dropNoTime = 0;
 
-  let kept = 0;
-  const drop = { internal: 0, past: 0, noMap: 0, noTime: 0, nonRAEC: 0 };
-  const rowsParsedSample = [];
+  for (let r = 1; r < records.length; r++) {
+    const row = records[r];
 
-  const prelim = [];
+    const location = iLocation >= 0 ? clean(row[iLocation]) : 'Athletic & Event Center';
+    const facility = clean(row[iFacility]);
+    const timeText = clean(row[iTime]);
+    const reservee = clean(row[iReservee]);
+    const purpose  = clean(row[iPurpose]);
 
-  for (let r = 1; r < lines.length; r++) {
-    const cols = splitCSVLine(lines[r]);
-    const location  = iLocation >= 0 ? clean(cols[iLocation])  : '';
-    const facility  = iFacility >= 0 ? clean(cols[iFacility])  : '';
-    const timeText  = iTime     >= 0 ? clean(cols[iTime])      : '';
-    const reservee  = iReservee >= 0 ? clean(cols[iReservee])  : '';
-    const purpose   = iPurpose  >= 0 ? clean(cols[iPurpose])   : '';
-
-    if (rowsParsedSample.length < 3) {
-      rowsParsedSample.push({ location, facility, timeText, reservee, purpose });
-    }
-
-    // Only Athletic & Event Center
-    if (location && !/athletic\s*&\s*event\s*center/i.test(location)) {
-      drop.nonRAEC++;
-      continue;
-    }
-
-    if (isInternalHold(reservee) || isInternalHold(purpose)) {
-      drop.internal++;
-      continue;
+    // Only the Athletic & Event Center
+    if (!/athletic\s*&\s*event\s*center/i.test(location)) {
+      dropNotRAEC++; continue;
     }
 
     const range = parseRangeToMinutes(timeText);
-    if (!range) { drop.noTime++; continue; }
+    if (!range) { dropNoTime++; continue; }
 
-    // drop already-ended slots today (use a 5-minute grace)
-    const nowMin = NOW.getHours() * 60 + NOW.getMinutes();
-    if (range.endMin < nowMin - 5) { drop.past++; continue; }
+    // Past filter: show current/future only (end > now)
+    if (range.endMin <= nowMin) { dropPast++; continue; }
+
+    if (isInternalRow(reservee, purpose)) {
+      dropInternal++; continue;
+    }
 
     const rooms = mapFacilityToRooms(facility);
-    if (!rooms.length) { drop.noMap++; continue; }
+    if (!rooms.length) { dropNoMap++; continue; }
 
-    // Fieldhouse: in court season, drop turf
-    if (COURT_SEASON && /fieldhouse.*turf/i.test(facility)) {
-      drop.noMap++; // treat as not-mapped during court season
-      continue;
-    }
-
-    // Build normalized identity for precedence
-    let title = '';
-    let subtitle = '';
-
-    // Pickleball override
-    if (isPickleball(purpose, reservee)) {
-      title = 'Open Pickleball';
-      subtitle = '';
-    } else {
-      // Reservee normalization
-      let who = clean(reservee);
-      if (who.includes(',')) who = nameLastFirstToFirstLast(who);
-      title = who || 'Reservation';
-      subtitle = clean(purpose);
-    }
-
-    prelim.push({
-      rooms, startMin: range.startMin, endMin: range.endMin,
-      title, subtitle,
-      orgKey: title.toLowerCase()
+    kept.push({
+      facility,
+      reservee,
+      purpose,
+      startMin: range.startMin,
+      endMin: range.endMin,
+      rooms
     });
-    kept++;
   }
 
-  // Precedence / de-dup:
-  // If an org has Full/Championship/AB and specific halves, show ONLY the most specific (Half A/B) for overlapping times.
-  const outSlots = [];
-  const prelimByOrg = new Map();
-
-  for (const it of prelim) {
-    if (!prelimByOrg.has(it.orgKey)) prelimByOrg.set(it.orgKey, []);
-    prelimByOrg.get(it.orgKey).push(it);
+  // 2) Group rows by (reservee+purpose+time) and narrow to most specific half-courts if present.
+  const groups = new Map();
+  for (const it of kept) {
+    const key = groupKey(it.reservee, it.purpose, it.startMin, it.endMin);
+    if (!groups.has(key)) groups.set(key, []);
+    groups.get(key).push(it);
   }
 
-  // classify facility “width”
-  function widthScore(rooms) {
-    // more specific gets higher score (Half = 2, AB = 1, Full gym = 0)
-    if (rooms.length === 1) return 2;                    // 1A, 1B, etc.
-    if (rooms.length === 2) return 1;                    // 1AB, 2AB, 9AB, 10AB
-    return 0;                                            // Championship / Full Gym 1–2 / 9–10
-  }
+  const slots = [];
+  for (const [key, rows] of groups.entries()) {
+    // Union all rooms in this block
+    const union = new Set();
+    for (const r of rows) for (const room of r.rooms) union.add(room);
 
-  for (const [, list] of prelimByOrg) {
-    // For each org, eliminate lower-specificity items that overlap with higher-specificity items on same room set.
-    // Strategy:
-    // 1) Sort by specificity DESC.
-    // 2) Walk, adding items; when adding a more specific item, we implicitly shadow overlapping broader items for that room.
-    list.sort((a, b) => widthScore(b.rooms) - widthScore(a.rooms));
+    // Narrow preference: if any half courts present for north/south, keep only those.
+    const narrowed = narrowRooms(Array.from(union));
 
-    const accepted = [];
-    for (const cand of list) {
-      // if more specific overlaps previously accepted? Accept; it will shadow broader ones later
-      accepted.push(cand);
-    }
+    // Prepare display text (consistent across rows in this group)
+    const any = rows[0];
+    const { title, subtitle, org, contact } = makeDisplay(any.reservee, any.purpose);
 
-    // Now, expand to final room-level slots but shadow broader-by-room.
-    // For each broader item, skip rooms/times already covered by any more-specific accepted item for same org.
-    const specificFirst = [...accepted].sort((a, b) => widthScore(b.rooms) - widthScore(a.rooms));
-    const taken = []; // track {roomId,startMin,endMin} for this org
-
-    for (const it of specificFirst) {
-      const score = widthScore(it.rooms);
-      for (const roomId of it.rooms) {
-        const conflict = taken.some(t => t.roomId === roomId && overlaps(t, it));
-        if (score === 2) {
-          // most specific: always allowed; also mark taken
-          outSlots.push({ roomId, startMin: it.startMin, endMin: it.endMin, title: it.title, subtitle: it.subtitle });
-          taken.push({ roomId, startMin: it.startMin, endMin: it.endMin });
-        } else if (score === 1) {
-          // mid-specific (AB). Only add if not shadowed by a taken half
-          if (!conflict) {
-            outSlots.push({ roomId, startMin: it.startMin, endMin: it.endMin, title: it.title, subtitle: it.subtitle });
-            taken.push({ roomId, startMin: it.startMin, endMin: it.endMin });
-          }
-        } else {
-          // broad (Full/Championship). Only add if not shadowed by any taken
-          if (!conflict) {
-            outSlots.push({ roomId, startMin: it.startMin, endMin: it.endMin, title: it.title, subtitle: it.subtitle });
-            taken.push({ roomId, startMin: it.startMin, endMin: it.endMin });
-          }
-        }
-      }
+    for (const roomId of narrowed) {
+      slots.push({
+        roomId,
+        startMin: any.startMin,
+        endMin:   any.endMin,
+        title,
+        subtitle,
+        org,
+        contact
+      });
     }
   }
 
-  // Build JSON
-  const json = {
-    dayStartMin: DAY_START_MIN,
-    dayEndMin: DAY_END_MIN,
-    rooms: [
-      { id:'1A',label:'1A',group:'south'},{ id:'1B',label:'1B',group:'south'},
-      { id:'2A',label:'2A',group:'south'},{ id:'2B',label:'2B',group:'south'},
-      { id:'3',label:'3',group:'fieldhouse'},{ id:'4',label:'4',group:'fieldhouse'},
-      { id:'5',label:'5',group:'fieldhouse'},{ id:'6',label:'6',group:'fieldhouse'},
-      { id:'7',label:'7',group:'fieldhouse'},{ id:'8',label:'8',group:'fieldhouse'},
-      { id:'9A',label:'9A',group:'north'},{ id:'9B',label:'9B',group:'north'},
-      { id:'10A',label:'10A',group:'north'},{ id:'10B',label:'10B',group:'north'}
-    ],
-    slots: outSlots
-  };
+  // 3) De-duplicate identical room/time/title combos (just in case)
+  const seen = new Set();
+  const finalSlots = [];
+  for (const s of slots) {
+    const k = `${s.roomId}|${s.startMin}|${s.endMin}|${s.title}|${s.subtitle}`;
+    if (!seen.has(k)) {
+      seen.add(k);
+      finalSlots.push(s);
+    }
+  }
 
-  // Debug summary
+  // 4) Output JSON structure (fixed rooms list + slots)
+  const out = buildEmptyJson();
+  out.slots = finalSlots.sort((a,b) => (a.roomId.localeCompare(b.roomId) || a.startMin - b.startMin));
+
+  fs.writeFileSync(OUTPUT_JSON, JSON.stringify(out, null, 2));
   console.log(
-    `transform: rows=${lines.length - 1} kept=${kept} slots=${outSlots.length} ` +
-    `drop=${JSON.stringify(drop)}`
+    `transform: kept=${kept.length} slots=${out.slots.length} ` +
+    `drop[internal=${dropInternal} past=${dropPast} notRAEC=${dropNotRAEC} noTime=${dropNoTime} noMap=${dropNoMap}]`
   );
-  console.log('transform sample rows (first 3 parsed):', rowsParsedSample);
-
-  fs.writeFileSync(OUTPUT_JSON, JSON.stringify(json, null, 2));
-  console.log(`Wrote ${OUTPUT_JSON} • slots=${outSlots.length}`);
 }
 
 main().catch(err => {
