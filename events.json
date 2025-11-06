@@ -73,15 +73,5 @@
       "group": "north"
     }
   ],
-  "slots": [
-    {
-      "roomId": "2A",
-      "startMin": 1320,
-      "endMin": 1380,
-      "title": "Catch Corner (Internal Holds",
-      "subtitle": "CatchCorner (Jeremy Gerena Volleyball Booking # 452510)",
-      "org": "Catch Corner (Internal Holds",
-      "contact": "Catch Corner (Internal Holds)"
-    }
-  ]
+  "slots": []
 }
