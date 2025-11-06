@@ -104,34 +104,6 @@
     },
     {
       "roomId": "1B",
-      "startMin": 1080,
-      "endMin": 1140,
-      "title": "Marlow Harris",
-      "subtitle": "Basketball"
-    },
-    {
-      "roomId": "1A",
-      "startMin": 1080,
-      "endMin": 1140,
-      "title": "Marlow Harris",
-      "subtitle": "Basketball"
-    },
-    {
-      "roomId": "2A",
-      "startMin": 1080,
-      "endMin": 1140,
-      "title": "Marlow Harris",
-      "subtitle": "Basketball"
-    },
-    {
-      "roomId": "2B",
-      "startMin": 1080,
-      "endMin": 1140,
-      "title": "Marlow Harris",
-      "subtitle": "Basketball"
-    },
-    {
-      "roomId": "1B",
       "startMin": 1170,
       "endMin": 1230,
       "title": "John Jones",
