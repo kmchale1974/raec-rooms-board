@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// RAEC: CSV -> events.json with court narrowing + keep Catch Corner + keep Pickleball
+// RAEC transform: prefer explicit half-court rows over AB/Full/Championship expansions.
 
 import fs from 'fs';
 import path from 'path';
@@ -12,16 +12,16 @@ const __dirname  = path.dirname(__filename);
 const INPUT_CSV   = process.env.IN_CSV   || path.join(__dirname, '..', 'data', 'inbox', 'latest.csv');
 const OUTPUT_JSON = process.env.OUT_JSON || path.join(__dirname, '..', 'events.json');
 
-function clean(s) { return String(s ?? '').replace(/\s+/g, ' ').trim(); }
+/* ----------------- utils ----------------- */
+const clean = (s) => String(s ?? '').replace(/\s+/g, ' ').trim();
+const lc = (s) => clean(s).toLowerCase();
 
 function toMin(hhmm) {
   const m = String(hhmm).trim().toLowerCase().match(/^(\d{1,2}):(\d{2})\s*([ap])m$/);
   if (!m) return null;
-  let h = parseInt(m[1],10);
-  const min = parseInt(m[2],10);
-  const mer = m[3];
+  let h = parseInt(m[1],10), min = parseInt(m[2],10);
   if (h === 12) h = 0;
-  if (mer === 'p') h += 12;
+  if (m[3] === 'p') h += 12;
   return h*60 + min;
 }
 function parseRangeToMinutes(text) {
@@ -34,17 +34,17 @@ function nowMinutesLocal() {
   return d.getHours()*60 + d.getMinutes();
 }
 
-// "Last, First" -> "First Last" for simple person cases.
+// "Last, First" -> "First Last" for simple people
 function normalizePersonName(reserveeRaw) {
   const s = clean(reserveeRaw);
   const m = s.match(/^\s*([A-Za-z'.-]+)\s*,\s*([A-Za-z'.-]+)\s*$/);
   return m ? `${m[2]} ${m[1]}` : s;
 }
 
-// Only drop obvious system holds; keep "Internal Holds" rows (Catch Corner etc.)
+// drop only real system rows; keep "Internal Holds" (Catch Corner etc.)
 function isSystemDrop(reservee, purpose) {
-  const r = reservee.toLowerCase();
-  const p = purpose.toLowerCase();
+  const r = lc(reservee);
+  const p = lc(purpose);
   if (r.includes('raec front desk')) return true;
   if (p.includes('turf install')) return true;
   return false;
@@ -54,98 +54,140 @@ function makeDisplay(reservee, purpose) {
   const rRaw = clean(reservee);
   const pRaw = clean(purpose);
 
-  // Pickleball: always show as Open Pickleball
+  // Pickleball normalizer
   if (/pickleball/i.test(rRaw) || /pickleball/i.test(pRaw)) {
     return { title: 'Open Pickleball', subtitle: '', org: 'Open Pickleball', contact: '' };
   }
 
-  // Org + contact pattern like "Empower Volleyball (Rec), Dean Baxendale"
+  // Org + contact like "Empower Volleyball (Rec), Dean Baxendale"
   if (rRaw.includes(',')) {
-    const left = rRaw.split(',')[0].trim();
+    const left  = rRaw.split(',')[0].trim();
     const right = rRaw.split(',').slice(1).join(',').trim();
     if (/\b(Volleyball|Club|Academy|Athletics|Sports|United|Elite|Training|Catch Corner|High School|HS|SPED|School)\b/i.test(left)) {
       return { title: left, subtitle: pRaw, org: left, contact: right };
     }
   }
 
-  // Otherwise, treat as person if it's "Last, First"
+  // person fallback
   const maybePerson = normalizePersonName(rRaw);
-  let org = '';
-  if (/\s/.test(maybePerson) && !/\b(Volleyball|Club|Academy|Athletics|Sports|United|Elite|Training|Catch Corner|High School|HS|SPED|School)\b/i.test(maybePerson)) {
-    org = maybePerson;
+  if (/\s/.test(maybePerson) &&
+      !/\b(Volleyball|Club|Academy|Athletics|Sports|United|Elite|Training|Catch Corner|High School|HS|SPED|School)\b/i.test(maybePerson)) {
+    return { title: maybePerson, subtitle: pRaw, org: maybePerson, contact: '' };
   }
-  return { title: maybePerson, subtitle: pRaw, org: org || maybePerson, contact: '' };
+  return { title: maybePerson, subtitle: pRaw, org: maybePerson, contact: '' };
 }
 
-// Facility -> room list
-function mapFacilityToRooms(fac) {
-  const f = clean(fac).toLowerCase();
+/* ----------------- facility classifier -----------------
+   We DO NOT expand AB/Full/Champ here. We record tokens and whether a row is an explicit half.
+   South tokens: S1A,S1B,S2A,S2B (explicit halves), S1PAIR,S2PAIR, SALL, SCHAMP
+   North tokens: N9A,N9B,N10A,N10B (explicit halves), N9PAIR,N10PAIR, NALL
+   Fieldhouse: explicit court numbers '3'..'8' (no implied).
+-------------------------------------------------------- */
+function classifyFacility(facility) {
+  const f = lc(facility);
 
-  // South 1/2
-  if (f === 'ac gym - half court 1a') return ['1A'];
-  if (f === 'ac gym - half court 1b') return ['1B'];
-  if (f === 'ac gym - court 1-ab')    return ['1A','1B'];
+  // --- South ---
+  if (f === 'ac gym - half court 1a') return { tokens: ['S1A'], explicitHalf: true };
+  if (f === 'ac gym - half court 1b') return { tokens: ['S1B'], explicitHalf: true };
+  if (f === 'ac gym - court 1-ab')    return { tokens: ['S1PAIR'], explicitHalf: false };
 
-  if (f === 'ac gym - half court 2a') return ['2A'];
-  if (f === 'ac gym - half court 2b') return ['2B'];
-  if (f === 'ac gym - court 2-ab')    return ['2A','2B'];
+  if (f === 'ac gym - half court 2a') return { tokens: ['S2A'], explicitHalf: true };
+  if (f === 'ac gym - half court 2b') return { tokens: ['S2B'], explicitHalf: true };
+  if (f === 'ac gym - court 2-ab')    return { tokens: ['S2PAIR'], explicitHalf: false };
 
-  if (f.includes('full gym 1ab & 2ab')) return ['1A','1B','2A','2B'];
-  if (f.includes('championship court'))  return ['1A','1B','2A','2B'];
+  if (f.includes('full gym 1ab & 2ab')) return { tokens: ['SALL'],   explicitHalf: false };
+  if (f.includes('championship court'))  return { tokens: ['SCHAMP'], explicitHalf: false };
 
-  // North 9/10
-  if (f === 'ac gym - half court 9a') return ['9A'];
-  if (f === 'ac gym - half court 9b') return ['9B'];
-  if (f === 'ac gym - court 9-ab')    return ['9A','9B'];
+  // --- North ---
+  if (f === 'ac gym - half court 9a')  return { tokens: ['N9A'],  explicitHalf: true };
+  if (f === 'ac gym - half court 9b')  return { tokens: ['N9B'],  explicitHalf: true };
+  if (f === 'ac gym - court 9-ab')     return { tokens: ['N9PAIR'], explicitHalf: false };
 
-  if (f === 'ac gym - half court 10a') return ['10A'];
-  if (f === 'ac gym - half court 10b') return ['10B'];
-  if (f === 'ac gym - court 10-ab')    return ['10A','10B'];
+  if (f === 'ac gym - half court 10a') return { tokens: ['N10A'], explicitHalf: true };
+  if (f === 'ac gym - half court 10b') return { tokens: ['N10B'], explicitHalf: true };
+  if (f === 'ac gym - court 10-ab')    return { tokens: ['N10PAIR'], explicitHalf: false };
 
-  if (f.includes('full gym 9 & 10'))   return ['9A','9B','10A','10B'];
+  if (f.includes('full gym 9 & 10'))   return { tokens: ['NALL'], explicitHalf: false };
 
-  // Fieldhouse 3–8
-  if (/^ac fieldhouse - court\s*([3-8])$/i.test(clean(fac))) {
-    return [String(RegExp.$1)];
-  }
-  if (f === 'ac fieldhouse - court 3-8') return ['3','4','5','6','7','8'];
+  // --- Fieldhouse 3..8 ---
+  const m = clean(facility).match(/^AC Fieldhouse - Court\s*([3-8])$/i);
+  if (m) return { tokens: [m[1]], explicitHalf: true }; // treat as explicit
 
-  // Turf variants (kept if posted and not system-dropped)
-  if (f === 'ac fieldhouse - full turf') return ['3','4','5','6','7','8'];
-  if (f === 'ac fieldhouse - half turf north') return ['6','7','8'];
-  if (f === 'ac fieldhouse - half turf south') return ['3','4','5'];
+  if (f === 'ac fieldhouse - court 3-8')       return { tokens: ['3','4','5','6','7','8'], explicitHalf: true };
+  if (f === 'ac fieldhouse - full turf')       return { tokens: ['3','4','5','6','7','8'], explicitHalf: false };
+  if (f === 'ac fieldhouse - half turf north') return { tokens: ['6','7','8'], explicitHalf: false };
+  if (f === 'ac fieldhouse - half turf south') return { tokens: ['3','4','5'], explicitHalf: false };
 
-  return [];
+  return { tokens: [], explicitHalf: false };
 }
 
-// If a block includes any half-court(s), keep only halves for that side and drop wide/AB/Full.
-function narrowRooms(rooms) {
-  const set = new Set(rooms);
+/* ----------------- side resolver -----------------
+   Given the union of tokens for a time block + reservee/purpose:
+   - If any explicit south halves present, keep only those halves (ignore S1PAIR,S2PAIR,SALL,SCHAMP)
+   - Else expand as indicated by pairs/full/champ
+   Same for north.
+-------------------------------------------------- */
+function resolveRoomsFromTokens(tokenSet) {
+  const t = tokenSet; // Set<string>
 
-  const hasSouthHalf = ['1A','1B','2A','2B'].some(r => set.has(r));
-  const hasNorthHalf = ['9A','9B','10A','10B'].some(r => set.has(r));
+  // South
+  const southExplicit = [];
+  if (t.has('S1A')) southExplicit.push('1A');
+  if (t.has('S1B')) southExplicit.push('1B');
+  if (t.has('S2A')) southExplicit.push('2A');
+  if (t.has('S2B')) southExplicit.push('2B');
 
-  if (hasSouthHalf) {
-    for (const r of ['9A','9B','10A','10B','3','4','5','6','7','8']) set.delete(r);
+  const southFinal = [];
+  if (southExplicit.length) {
+    southFinal.push(...southExplicit);
+  } else {
+    if (t.has('S1PAIR')) southFinal.push('1A','1B');
+    if (t.has('S2PAIR')) southFinal.push('2A','2B');
+    if (t.has('SALL') || t.has('SCHAMP')) southFinal.push('1A','1B','2A','2B');
   }
-  if (hasNorthHalf) {
-    for (const r of ['1A','1B','2A','2B','3','4','5','6','7','8']) {
-      if (!hasSouthHalf) set.delete(r);
-    }
+
+  // North
+  const northExplicit = [];
+  if (t.has('N9A'))  northExplicit.push('9A');
+  if (t.has('N9B'))  northExplicit.push('9B');
+  if (t.has('N10A')) northExplicit.push('10A');
+  if (t.has('N10B')) northExplicit.push('10B');
+
+  const northFinal = [];
+  if (northExplicit.length) {
+    northFinal.push(...northExplicit);
+  } else {
+    if (t.has('N9PAIR'))  northFinal.push('9A','9B');
+    if (t.has('N10PAIR')) northFinal.push('10A','10B');
+    if (t.has('NALL'))    northFinal.push('9A','9B','10A','10B');
   }
-  return Array.from(set);
+
+  // Fieldhouse (tokens are already explicit court numbers)
+  const field = [];
+  for (const k of t) {
+    if (/^[3-8]$/.test(k)) field.push(k);
+  }
+
+  // union and stable sort
+  const rooms = Array.from(new Set([...southFinal, ...northFinal, ...field]));
+  const order = ['1A','1B','2A','2B','3','4','5','6','7','8','9A','9B','10A','10B'];
+  rooms.sort((a,b)=>order.indexOf(a)-order.indexOf(b));
+  return rooms;
 }
 
-// Canonicalize reservee/purpose for grouping
-function canon(s) { return clean(s).toLowerCase(); }
+/* ----------------- grouping key ----------------- */
+function canon(s) {
+  return clean(s).toLowerCase();
+}
 function groupKey(reservee, purpose, startMin, endMin) {
-  // strip booking #s in purpose so variants like "... #438632" still group if time matches
+  // normalize booking numbers so variants group together
   const p = canon(purpose).replace(/#\d{4,}/g, '').replace(/\(booking[^)]*\)/g,'').trim();
   const r = canon(reservee);
   return `${r}|${p}|${startMin}|${endMin}`;
 }
 
-function buildEmptyJson() {
+/* ----------------- output skeleton ----------------- */
+function scaffold() {
   return {
     dayStartMin: 360,
     dayEndMin: 1380,
@@ -169,22 +211,23 @@ function buildEmptyJson() {
   };
 }
 
+/* ----------------- main ----------------- */
 async function main() {
   if (!fs.existsSync(INPUT_CSV) || fs.statSync(INPUT_CSV).size === 0) {
-    fs.writeFileSync(OUTPUT_JSON, JSON.stringify(buildEmptyJson(), null, 2));
-    console.log('transform: no csv -> empty scaffold');
+    fs.writeFileSync(OUTPUT_JSON, JSON.stringify(scaffold(), null, 2));
+    console.log('transform: no csv -> scaffold');
     return;
   }
 
   const raw = fs.readFileSync(INPUT_CSV, 'utf8');
   const rows = parse(raw, { bom: true, skip_empty_lines: true });
   if (!rows.length) {
-    fs.writeFileSync(OUTPUT_JSON, JSON.stringify(buildEmptyJson(), null, 2));
-    console.log('transform: parsed 0 rows -> empty scaffold');
+    fs.writeFileSync(OUTPUT_JSON, JSON.stringify(scaffold(), null, 2));
+    console.log('transform: empty rows -> scaffold');
     return;
   }
 
-  const header = rows[0].map(h => clean(h).toLowerCase());
+  const header = rows[0].map(h => lc(h));
   const col = (name) => header.findIndex(h => h === name.toLowerCase());
 
   const iLocation = col('location:');
@@ -194,14 +237,14 @@ async function main() {
   const iPurpose  = col('reservation purpose');
 
   if (iFacility < 0 || iTime < 0 || iReservee < 0 || iPurpose < 0) {
-    fs.writeFileSync(OUTPUT_JSON, JSON.stringify(buildEmptyJson(), null, 2));
-    console.log('transform: headers missing -> empty scaffold');
+    fs.writeFileSync(OUTPUT_JSON, JSON.stringify(scaffold(), null, 2));
+    console.log('transform: headers missing -> scaffold');
     return;
   }
 
   const nowMin = nowMinutesLocal();
 
-  // pass 1 — collect
+  // collect kept rows (with tokens; do NOT expand pairs/full yet)
   const kept = [];
   let dropSystem = 0, dropPast = 0, dropNoMap = 0, dropNotRAEC = 0, dropNoTime = 0;
 
@@ -217,18 +260,21 @@ async function main() {
 
     const range = parseRangeToMinutes(timeText);
     if (!range) { dropNoTime++; continue; }
-
     if (range.endMin <= nowMin) { dropPast++; continue; }
 
     if (isSystemDrop(reservee, purpose)) { dropSystem++; continue; }
 
-    const rooms = mapFacilityToRooms(facility);
-    if (!rooms.length) { dropNoMap++; continue; }
+    const { tokens } = classifyFacility(facility);
+    if (!tokens.length) { dropNoMap++; continue; }
 
-    kept.push({ facility, reservee, purpose, startMin: range.startMin, endMin: range.endMin, rooms });
+    kept.push({
+      reservee, purpose,
+      startMin: range.startMin, endMin: range.endMin,
+      tokens
+    });
   }
 
-  // pass 2 — group by (reservee+purpose-without-booking# + time) and narrow
+  // group by reservee+purpose(time) and resolve with explicit-first logic
   const groups = new Map();
   for (const it of kept) {
     const key = groupKey(it.reservee, it.purpose, it.startMin, it.endMin);
@@ -238,29 +284,36 @@ async function main() {
 
   const slots = [];
   for (const arr of groups.values()) {
-    // union the rooms
-    const union = new Set();
-    for (const it of arr) for (const r of it.rooms) union.add(r);
-    const narrowed = narrowRooms(Array.from(union));
+    // union tokens
+    const tokenSet = new Set();
+    for (const it of arr) for (const tk of it.tokens) tokenSet.add(tk);
+
+    // pick final rooms using explicit-first rules
+    const rooms = resolveRoomsFromTokens(tokenSet);
+    if (!rooms.length) continue;
 
     const any = arr[0];
     const { title, subtitle, org, contact } = makeDisplay(any.reservee, any.purpose);
 
-    for (const roomId of narrowed) {
+    for (const roomId of rooms) {
       slots.push({ roomId, startMin: any.startMin, endMin: any.endMin, title, subtitle, org, contact });
     }
   }
 
-  // dedup safety
+  // dedup + sort
   const seen = new Set();
-  const finalSlots = [];
+  const final = [];
   for (const s of slots) {
     const k = `${s.roomId}|${s.startMin}|${s.endMin}|${s.title}|${s.subtitle}`;
-    if (!seen.has(k)) { seen.add(k); finalSlots.push(s); }
+    if (!seen.has(k)) { seen.add(k); final.push(s); }
   }
+  final.sort((a,b)=>{
+    const order = ['1A','1B','2A','2B','3','4','5','6','7','8','9A','9B','10A','10B'];
+    return (order.indexOf(a.roomId) - order.indexOf(b.roomId)) || (a.startMin - b.startMin);
+  });
 
-  const out = buildEmptyJson();
-  out.slots = finalSlots.sort((a,b) => (a.roomId.localeCompare(b.roomId) || a.startMin - b.startMin));
+  const out = scaffold();
+  out.slots = final;
 
   fs.writeFileSync(OUTPUT_JSON, JSON.stringify(out, null, 2));
   console.log(
