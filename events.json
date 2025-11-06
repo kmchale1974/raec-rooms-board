@@ -75,15 +75,6 @@
   ],
   "slots": [
     {
-      "roomId": "1A",
-      "startMin": 1200,
-      "endMin": 1320,
-      "title": "Catch Corner (Internal Holds",
-      "subtitle": "CatchCorner (Jeremy Gerena #449683 Volleyball)",
-      "org": "Catch Corner (Internal Holds",
-      "contact": "Catch Corner (Internal Holds)"
-    },
-    {
       "roomId": "1B",
       "startMin": 1230,
       "endMin": 1350,
