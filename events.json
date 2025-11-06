@@ -73,5 +73,90 @@
       "group": "north"
     }
   ],
-  "slots": []
+  "slots": [
+    {
+      "roomId": "9B",
+      "startMin": 960,
+      "endMin": 1140,
+      "title": "Sam Franklin Sam Franklin Training",
+      "subtitle": "2025 Q4 Pattern"
+    },
+    {
+      "roomId": "9A",
+      "startMin": 960,
+      "endMin": 1140,
+      "title": "Sam Franklin Sam Franklin Training",
+      "subtitle": "2025 Q4 Pattern"
+    },
+    {
+      "roomId": "10A",
+      "startMin": 960,
+      "endMin": 1140,
+      "title": "Sam Franklin Sam Franklin Training",
+      "subtitle": "2025 Q4 Pattern"
+    },
+    {
+      "roomId": "10B",
+      "startMin": 960,
+      "endMin": 1140,
+      "title": "Sam Franklin Sam Franklin Training",
+      "subtitle": "2025 Q4 Pattern"
+    },
+    {
+      "roomId": "2B",
+      "startMin": 1140,
+      "endMin": 1260,
+      "title": "Extreme Volleyball Extreme Volleyball",
+      "subtitle": "Volleyball"
+    },
+    {
+      "roomId": "2A",
+      "startMin": 1140,
+      "endMin": 1260,
+      "title": "Extreme Volleyball Extreme Volleyball",
+      "subtitle": "Volleyball"
+    },
+    {
+      "roomId": "1A",
+      "startMin": 1140,
+      "endMin": 1260,
+      "title": "Extreme Volleyball Extreme Volleyball",
+      "subtitle": "Volleyball"
+    },
+    {
+      "roomId": "1B",
+      "startMin": 1140,
+      "endMin": 1260,
+      "title": "Extreme Volleyball Extreme Volleyball",
+      "subtitle": "Volleyball"
+    },
+    {
+      "roomId": "1A",
+      "startMin": 1260,
+      "endMin": 1380,
+      "title": "Chicago Sport and Social Club Chicago Sport and Social Club",
+      "subtitle": "Volleyball (Grab A Game)"
+    },
+    {
+      "roomId": "1B",
+      "startMin": 1260,
+      "endMin": 1380,
+      "title": "Chicago Sport and Social Club Chicago Sport and Social Club",
+      "subtitle": "Volleyball (Grab A Game)"
+    },
+    {
+      "roomId": "2A",
+      "startMin": 1260,
+      "endMin": 1380,
+      "title": "Chicago Sport and Social Club Chicago Sport and Social Club",
+      "subtitle": "Volleyball (Grab A Game)"
+    },
+    {
+      "roomId": "2B",
+      "startMin": 1260,
+      "endMin": 1380,
+      "title": "Chicago Sport and Social Club Chicago Sport and Social Club",
+      "subtitle": "Volleyball (Grab A Game)"
+    }
+  ]
 }
