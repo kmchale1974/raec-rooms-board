@@ -75,34 +75,6 @@
   ],
   "slots": [
     {
-      "roomId": "1A",
-      "startMin": 570,
-      "endMin": 660,
-      "title": "Krissy Kinder Romeoville High School / SPED",
-      "subtitle": "Romeoville High School SPED"
-    },
-    {
-      "roomId": "1B",
-      "startMin": 570,
-      "endMin": 660,
-      "title": "Krissy Kinder Romeoville High School / SPED",
-      "subtitle": "Romeoville High School SPED"
-    },
-    {
-      "roomId": "2A",
-      "startMin": 570,
-      "endMin": 660,
-      "title": "Krissy Kinder Romeoville High School / SPED",
-      "subtitle": "Romeoville High School SPED"
-    },
-    {
-      "roomId": "2B",
-      "startMin": 570,
-      "endMin": 660,
-      "title": "Krissy Kinder Romeoville High School / SPED",
-      "subtitle": "Romeoville High School SPED"
-    },
-    {
       "roomId": "10A",
       "startMin": 1050,
       "endMin": 1230,
