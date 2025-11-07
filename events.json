@@ -99,33 +99,6 @@
       "subtitle": "Volleyball 2025 Q4 Pattern",
       "org": "Empower Volleyball (Rec)",
       "contact": "Dean Baxendale"
-    },
-    {
-      "roomId": "2A",
-      "startMin": 1110,
-      "endMin": 1290,
-      "title": "Llanos",
-      "subtitle": "Volleyball",
-      "org": "Llanos",
-      "contact": "David"
-    },
-    {
-      "roomId": "1A",
-      "startMin": 1140,
-      "endMin": 1290,
-      "title": "Sherwin Silvestre FFB",
-      "subtitle": "Basketball",
-      "org": "Sherwin Silvestre FFB",
-      "contact": ""
-    },
-    {
-      "roomId": "1B",
-      "startMin": 1140,
-      "endMin": 1290,
-      "title": "Sherwin Silvestre FFB",
-      "subtitle": "Basketball",
-      "org": "Sherwin Silvestre FFB",
-      "contact": ""
     }
   ]
 }
