@@ -1,6 +1,7 @@
 {
   "dayStartMin": 360,
   "dayEndMin": 1380,
+  "fieldhouseMode": "turf",
   "rooms": [
     {
       "id": "1A",
@@ -23,33 +24,23 @@
       "group": "south"
     },
     {
-      "id": "3",
-      "label": "3",
+      "id": "QSA",
+      "label": "Quarter Turf SA",
       "group": "fieldhouse"
     },
     {
-      "id": "4",
-      "label": "4",
+      "id": "QNA",
+      "label": "Quarter Turf NA",
       "group": "fieldhouse"
     },
     {
-      "id": "5",
-      "label": "5",
+      "id": "QSB",
+      "label": "Quarter Turf SB",
       "group": "fieldhouse"
     },
     {
-      "id": "6",
-      "label": "6",
-      "group": "fieldhouse"
-    },
-    {
-      "id": "7",
-      "label": "7",
-      "group": "fieldhouse"
-    },
-    {
-      "id": "8",
-      "label": "8",
+      "id": "QNB",
+      "label": "Quarter Turf NB",
       "group": "fieldhouse"
     },
     {
@@ -120,7 +111,7 @@
       "contact": "Catch Corner (Internal Holds)"
     },
     {
-      "roomId": "3",
+      "roomId": "QSA",
       "startMin": 1080,
       "endMin": 1140,
       "title": "Melissa Sweeney",
@@ -129,7 +120,7 @@
       "contact": ""
     },
     {
-      "roomId": "4",
+      "roomId": "QNA",
       "startMin": 1080,
       "endMin": 1140,
       "title": "Melissa Sweeney",
@@ -138,7 +129,7 @@
       "contact": ""
     },
     {
-      "roomId": "5",
+      "roomId": "QSB",
       "startMin": 1080,
       "endMin": 1140,
       "title": "Melissa Sweeney",
@@ -147,25 +138,7 @@
       "contact": ""
     },
     {
-      "roomId": "6",
-      "startMin": 1080,
-      "endMin": 1140,
-      "title": "Melissa Sweeney",
-      "subtitle": "Birthday Party",
-      "org": "Melissa Sweeney",
-      "contact": ""
-    },
-    {
-      "roomId": "7",
-      "startMin": 1080,
-      "endMin": 1140,
-      "title": "Melissa Sweeney",
-      "subtitle": "Birthday Party",
-      "org": "Melissa Sweeney",
-      "contact": ""
-    },
-    {
-      "roomId": "8",
+      "roomId": "QNB",
       "startMin": 1080,
       "endMin": 1140,
       "title": "Melissa Sweeney",
