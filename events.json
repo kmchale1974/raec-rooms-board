@@ -166,30 +166,12 @@
     },
     {
       "roomId": "10A",
-      "startMin": 630,
-      "endMin": 690,
-      "title": "Northern Will Co SRA, Northern Will Co SRA",
-      "subtitle": "Basketball",
-      "org": "Northern Will Co SRA, Northern Will Co SRA",
-      "contact": ""
-    },
-    {
-      "roomId": "10A",
       "startMin": 1035,
       "endMin": 1305,
       "title": "Empower Volleyball (Rec)",
       "subtitle": "Volleyball 2025 Q4 Pattern",
       "org": "Empower Volleyball (Rec)",
       "contact": "Dean Baxendale"
-    },
-    {
-      "roomId": "10B",
-      "startMin": 630,
-      "endMin": 690,
-      "title": "Open Pickleball",
-      "subtitle": "",
-      "org": "Open Pickleball",
-      "contact": ""
     },
     {
       "roomId": "10B",
