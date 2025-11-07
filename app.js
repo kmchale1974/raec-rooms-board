@@ -1,6 +1,6 @@
-// app.js — dynamic Fieldhouse (2×2 turf vs 2×3 court) + robust per-room rotor + debug
+// app.js — robust rotors (no loop on single), room-id normalization, AB splitting, 2×2 Turf vs 2×3 Court layout
 
-// ---------- small utils ----------
+// ----- time formatters -----
 const CLOCK_FMT = new Intl.DateTimeFormat(undefined, { hour: 'numeric', minute: '2-digit' });
 const DATE_FMT  = new Intl.DateTimeFormat(undefined, { weekday: 'long', month: 'long', day: 'numeric' });
 function pad(n){ return n<10 ? '0'+n : ''+n; }
@@ -21,28 +21,27 @@ function setHeaderClock(){
 setHeaderClock();
 setInterval(setHeaderClock, 1000);
 
+// ----- fetch data -----
 async function loadData(){
   const res = await fetch(`./events.json?ts=${Date.now()}`, { cache: 'no-store' });
   if (!res.ok) throw new Error(`Failed to fetch events.json: ${res.status}`);
   return res.json();
 }
 
-// ---------- build Fieldhouse grid (2×2 turf, 2×3 court) ----------
+// ----- Fieldhouse grid builder (2×2 turf when 4 rooms, 2×3 court when 6 rooms) -----
 function buildFieldhouse(rooms){
   const container = document.getElementById('fieldhousePager');
   if (!container) return;
 
-  // reset
   container.innerHTML = '';
 
   const fh = rooms.filter(r => r.group === 'fieldhouse');
   const count = fh.length;
 
-  // grid: 4 => 2×2 ; 6 => 2×3
-  let cols = 3, rows = 2;
-  if (count === 4) { cols = 2; rows = 2; }
+  let cols = 3, rows = 2;      // default 2×3 (courts 3..8)
+  if (count === 4) { cols = 2; rows = 2; } // 2×2 (turf quarters)
 
-  // apply layout inline (keeps your CSS simple)
+  // inline layout so we don’t rely on stale CSS
   container.style.display = 'grid';
   container.style.gridTemplateColumns = `repeat(${cols}, 1fr)`;
   container.style.gridTemplateRows    = `repeat(${rows}, 1fr)`;
@@ -58,30 +57,43 @@ function buildFieldhouse(rooms){
         <div class="id">${room.label}</div>
         <div class="count">reservations: <em>—</em></div>
       </div>
-      <div class="events">
-        <div class="single-rotor"></div>
-      </div>
+      <div class="events"><div class="single-rotor"></div></div>
     `;
     container.appendChild(card);
   });
 }
 
-// ---------- per-room helpers ----------
+// ----- room utilities -----
+function normalizeId(id){
+  return String(id || '')
+    .toUpperCase()
+    .replace(/[^A-Z0-9]/g, '');   // strip spaces/dashes like "10-AB" -> "10AB"
+}
+
+function expandAB(id){
+  // If transform ever emits AB, show on both halves.
+  switch (id) {
+    case '1AB':  return ['1A','1B'];
+    case '2AB':  return ['2A','2B'];
+    case '9AB':  return ['9A','9B'];
+    case '10AB': return ['10A','10B'];
+    default: return [id];
+  }
+}
+
 function ensureRotorBox(roomId){
   const rotor = document.querySelector(`#room-${CSS.escape(roomId)} .single-rotor`);
   if (!rotor) return null;
-
-  // Make absolutely sure this box has paintable height so cards don’t collapse
-  const ev = rotor.parentElement; // .events
+  const ev = rotor.parentElement; // .events shell
   if (ev) {
-    ev.style.position = 'relative';
-    ev.style.flex = '1 1 auto';
+    ev.style.position  = 'relative';
+    ev.style.flex      = '1 1 auto';
     ev.style.minHeight = '0';
-    ev.style.height = '100%';
-    ev.style.overflow = 'hidden';
+    ev.style.height    = '100%';
+    ev.style.overflow  = 'hidden';
   }
-  rotor.style.position = 'relative';
-  rotor.style.height   = '100%';
+  rotor.style.position  = 'relative';
+  rotor.style.height    = '100%';
   rotor.style.minHeight = '0';
   return rotor;
 }
@@ -114,7 +126,7 @@ function animateSwap(prev, next, shift=60, dur=700){
     next.style.transition = `opacity ${dur}ms cubic-bezier(.22,.61,.36,1), transform ${dur}ms cubic-bezier(.22,.61,.36,1)`;
     next.style.opacity = '0';
     next.style.transform = `translateX(${shift}px)`;
-    void next.offsetWidth; // reflow
+    void next.offsetWidth;
   }
   if (prev) {
     prev.style.transition = `opacity ${dur}ms cubic-bezier(.22,.61,.36,1), transform ${dur}ms cubic-bezier(.22,.61,.36,1)`;
@@ -135,19 +147,25 @@ function animateSwap(prev, next, shift=60, dur=700){
 }
 
 function startRoomRotor(roomId, slots, periodMs=6000){
-  // Always set the count (even if 0)
+  // always show count for visibility
   setCount(roomId, slots.length);
 
-  if (!slots.length) {
-    // no cards; leave the room visually empty (as requested)
+  if (!slots.length) return;      // empty room = no box text (your preference)
+
+  // If only ONE slot: mount and **do not** start interval (fixes your “slide forever”)
+  if (slots.length === 1) {
+    const card = mountEventCard(roomId, slots[0]);
+    if (card) {
+      card.style.opacity = '1';
+      card.style.transform = 'translateX(0)';
+    }
     return;
   }
 
-  // Mount the first card right away
+  // 2+ slots: normal rotor
   let idx = 0;
   let current = mountEventCard(roomId, slots[idx]);
   if (!current) return;
-  // Make the first card visible immediately (no flicker)
   current.style.opacity = '1';
   current.style.transform = 'translateX(0)';
 
@@ -162,45 +180,46 @@ function startRoomRotor(roomId, slots, periodMs=6000){
       current = next;
     }, 720);
   };
-
-  // cycle
   setInterval(tick, periodMs);
 }
 
-// ---------- orchestrate ----------
+// ----- orchestrate -----
 function distributeAndRender(data){
-  // Build Fieldhouse grid fresh (handles turf 2×2 vs court 2×3)
+  // Build dynamic fieldhouse (2×2 for turf quarters, 2×3 for courts 3..8)
   buildFieldhouse(data.rooms);
 
-  // Bucket slots by room
+  // Bucket slots by room with normalization + AB expansion
   const byRoom = new Map();
   for (const s of (data.slots || [])) {
-    if (!byRoom.has(s.roomId)) byRoom.set(s.roomId, []);
-    byRoom.get(s.roomId).push(s);
+    const raw = normalizeId(s.roomId);
+    const targets = expandAB(raw);
+    targets.forEach(t => {
+      if (!byRoom.has(t)) byRoom.set(t, []);
+      byRoom.get(t).push(s);
+    });
   }
+  // sort each room’s slots by time
   for (const [rid, arr] of byRoom) arr.sort((a,b) => a.startMin - b.startMin);
 
-  // List of rooms we have in the DOM
-  const ids = [
-    // south
+  // Render list (DOM rooms we expect to exist)
+  const fieldhouseIds = data.rooms.filter(r => r.group === 'fieldhouse').map(r => r.id).map(normalizeId);
+  const roomIds = [
     '1A','1B','2A','2B',
-    // fieldhouse (whatever the backend decided: 3–8 OR QSA/QNA/QSB/QNB)
-    ...data.rooms.filter(r => r.group === 'fieldhouse').map(r => r.id),
-    // north
+    ...fieldhouseIds,
     '9A','9B','10A','10B'
-  ];
+  ].map(normalizeId);
 
-  // Debug summary so we know what the frontend received
-  let totalSlots = 0;
-  ids.forEach(id => totalSlots += (byRoom.get(id)?.length || 0));
-  console.log(`Loaded rooms=${data.rooms.length} • slots=${(data.slots||[]).length} • visibleRoomSlots=${totalSlots}`);
-  ids.forEach(id => console.log(`room ${id}: ${byRoom.get(id)?.length || 0} slots`));
+  // Debug: counts
+  let visible = 0;
+  roomIds.forEach(id => visible += (byRoom.get(id)?.length || 0));
+  console.log(`Loaded rooms=${data.rooms.length} • slots=${(data.slots||[]).length} • visibleRoomSlots=${visible}`);
+  roomIds.forEach(id => console.log(`room ${id}: ${byRoom.get(id)?.length || 0} slots`));
 
-  // Start rotors
-  ids.forEach(id => startRoomRotor(id, byRoom.get(id) || []));
+  // Spin rotors
+  roomIds.forEach(id => startRoomRotor(id, byRoom.get(id) || []));
 }
 
-// ---------- boot ----------
+// ----- boot -----
 (async function init(){
   try {
     const data = await loadData();
@@ -210,7 +229,7 @@ function distributeAndRender(data){
   }
 })();
 
-// ---------- scale-to-fit (unchanged) ----------
+// ----- scale-to-fit (unchanged) -----
 (function fitStageSetup(){
   const W = 1920, H = 1080;
   function fit() {
