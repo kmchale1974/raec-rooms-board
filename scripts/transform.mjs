@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// RAEC transform: prefer explicit half courts over AB/Full/Champ; keep near-past with grace.
+// RAEC transform with Fieldhouse auto-mode (turf vs courts) and correct quarter/court mapping.
 
 import fs from 'fs';
 import path from 'path';
@@ -12,7 +12,7 @@ const __dirname  = path.dirname(__filename);
 const INPUT_CSV   = process.env.IN_CSV   || path.join(__dirname, '..', 'data', 'inbox', 'latest.csv');
 const OUTPUT_JSON = process.env.OUT_JSON || path.join(__dirname, '..', 'events.json');
 
-// ---------- utils ----------
+// --------------- helpers ---------------
 const clean = (s) => String(s ?? '').replace(/\s+/g, ' ').trim();
 const lc = (s) => clean(s).toLowerCase();
 
@@ -41,12 +41,13 @@ function normalizePersonName(reserveeRaw) {
   return m ? `${m[2]} ${m[1]}` : s;
 }
 
-// Only drop truly system-automation holds; keep Catch Corner, HS/SPED, etc.
+// Drop true system placeholders; we still use them for mode detection.
 function isSystemDrop(reservee, purpose) {
   const r = lc(reservee);
   const p = lc(purpose);
   if (r.includes('raec front desk')) return true;
-  if (p.includes('turf install')) return true;
+  if (p.includes('turf install per nm')) return true;
+  if (p.includes('fieldhouse installed per nm')) return true;
   return false;
 }
 
@@ -54,12 +55,12 @@ function makeDisplay(reservee, purpose) {
   const rRaw = clean(reservee);
   const pRaw = clean(purpose);
 
-  // Pickleball → normalized
+  // Pickleball normalization
   if (/pickleball/i.test(rRaw) || /pickleball/i.test(pRaw)) {
     return { title: 'Open Pickleball', subtitle: '', org: 'Open Pickleball', contact: '' };
   }
 
-  // Org, Contact — e.g., "Empower Volleyball (Rec), Dean Baxendale"
+  // Org , Contact → show org as title, purpose as subtitle
   if (rRaw.includes(',')) {
     const left  = rRaw.split(',')[0].trim();
     const right = rRaw.split(',').slice(1).join(',').trim();
@@ -77,8 +78,32 @@ function makeDisplay(reservee, purpose) {
   return { title: maybePerson, subtitle: pRaw, org: maybePerson, contact: '' };
 }
 
-// ---------- facility → tokens (explicit halves vs implied) ----------
-function classifyFacility(facility) {
+// --------------- Fieldhouse mode detection ---------------
+function detectFieldhouseMode(allRows, iFacility, iPurpose) {
+  let seenTurfInstall = false;
+  let seenFieldInstalled = false;
+
+  for (let r = 1; r < allRows.length; r++) {
+    const rec = allRows[r];
+    const facility = clean(rec[iFacility] ?? '');
+    const purpose  = clean(rec[iPurpose] ?? '');
+
+    if (/ac fieldhouse - full turf/i.test(facility) && /turf install per nm/i.test(purpose)) {
+      seenTurfInstall = true;
+    }
+    if (/ac fieldhouse - full turf/i.test(facility) && /fieldhouse installed per nm/i.test(purpose)) {
+      seenFieldInstalled = true;
+    }
+  }
+  // If both appear, prefer turf (more current/explicit signal).
+  if (seenTurfInstall) return 'turf';
+  if (seenFieldInstalled) return 'court';
+  // Default to court if nothing is present
+  return 'court';
+}
+
+// --------------- facility → tokens depending on mode ---------------
+function classifyFacility(facility, mode /* 'turf' | 'court' */) {
   const f = lc(facility);
 
   // South
@@ -104,19 +129,40 @@ function classifyFacility(facility) {
 
   if (f.includes('full gym 9 & 10'))   return { tokens: ['NALL'], explicitHalf: false };
 
-  // Fieldhouse 3..8
-  const m = clean(facility).match(/^AC Fieldhouse - Court\s*([3-8])$/i);
-  if (m) return { tokens: [m[1]], explicitHalf: true };
+  // Fieldhouse (mode-sensitive)
+  if (mode === 'court') {
+    // Courts 3..8
+    const m = clean(facility).match(/^AC Fieldhouse - Court\s*([3-8])$/i);
+    if (m) return { tokens: [m[1]], explicitHalf: true };
+    if (f === 'ac fieldhouse - court 3-8') return { tokens: ['3','4','5','6','7','8'], explicitHalf: true };
 
-  if (f === 'ac fieldhouse - court 3-8')       return { tokens: ['3','4','5','6','7','8'], explicitHalf: true };
-  if (f === 'ac fieldhouse - full turf')       return { tokens: ['3','4','5','6','7','8'], explicitHalf: false };
-  if (f === 'ac fieldhouse - half turf north') return { tokens: ['6','7','8'], explicitHalf: false };
-  if (f === 'ac fieldhouse - half turf south') return { tokens: ['3','4','5'], explicitHalf: false };
+    // Any turf-labeled entries (Full/Half/Quarter) are system/holds in court mode → no tokens
+    if (f.startsWith('ac fieldhouse - full turf'))       return { tokens: [], explicitHalf: false };
+    if (f.startsWith('ac fieldhouse - half turf north')) return { tokens: [], explicitHalf: false };
+    if (f.startsWith('ac fieldhouse - half turf south')) return { tokens: [], explicitHalf: false };
+    if (f.startsWith('ac fieldhouse - quarter turf'))    return { tokens: [], explicitHalf: false };
+
+  } else {
+    // TURF mode: quarters map to QSA,QSB,QNA,QNB
+    if (f === 'ac fieldhouse - full turf')       return { tokens: ['QSA','QSB','QNA','QNB'], explicitHalf: true };
+    if (f === 'ac fieldhouse - half turf north') return { tokens: ['QNA','QNB'], explicitHalf: true };
+    if (f === 'ac fieldhouse - half turf south') return { tokens: ['QSA','QSB'], explicitHalf: true };
+
+    if (f === 'ac fieldhouse - quarter turf sa') return { tokens: ['QSA'], explicitHalf: true };
+    if (f === 'ac fieldhouse - quarter turf sb') return { tokens: ['QSB'], explicitHalf: true };
+    if (f === 'ac fieldhouse - quarter turf na') return { tokens: ['QNA'], explicitHalf: true };
+    if (f === 'ac fieldhouse - quarter turf nb') return { tokens: ['QNB'], explicitHalf: true };
+
+    // “Court 3-8” rows in turf mode are system rows used by RecTrac to signal reconfig → ignore
+    if (f === 'ac fieldhouse - court 3-8')       return { tokens: [], explicitHalf: false };
+    const mCourt = clean(facility).match(/^AC Fieldhouse - Court\s*([3-8])$/i);
+    if (mCourt) return { tokens: [], explicitHalf: false };
+  }
 
   return { tokens: [], explicitHalf: false };
 }
 
-function resolveRoomsFromTokens(tokenSet) {
+function resolveRoomsFromTokens(tokenSet, mode) {
   const t = tokenSet;
 
   // South explicit halves first
@@ -151,12 +197,21 @@ function resolveRoomsFromTokens(tokenSet) {
     if (t.has('NALL'))    northFinal.push('9A','9B','10A','10B');
   }
 
-  // Fieldhouse tokens are explicit numbers
+  // Fieldhouse based on mode
   const field = [];
-  for (const k of t) if (/^[3-8]$/.test(k)) field.push(k);
+  if (mode === 'court') {
+    for (const k of t) if (/^[3-8]$/.test(k)) field.push(k);
+  } else {
+    if (t.has('QSA')) field.push('QSA');
+    if (t.has('QNA')) field.push('QNA');
+    if (t.has('QSB')) field.push('QSB');
+    if (t.has('QNB')) field.push('QNB');
+  }
 
   const rooms = Array.from(new Set([...southFinal, ...northFinal, ...field]));
-  const order = ['1A','1B','2A','2B','3','4','5','6','7','8','9A','9B','10A','10B'];
+  const order = ['1A','1B','2A','2B',
+                 ...(mode === 'court' ? ['3','4','5','6','7','8'] : ['QSA','QNA','QSB','QNB']),
+                 '9A','9B','10A','10B'];
   rooms.sort((a,b)=>order.indexOf(a)-order.indexOf(b));
   return rooms;
 }
@@ -168,21 +223,31 @@ function groupKey(reservee, purpose, startMin, endMin) {
   return `${r}|${p}|${startMin}|${endMin}`;
 }
 
-function scaffold(){
+function scaffold(mode) {
   return {
     dayStartMin: 360,
     dayEndMin: 1380,
+    fieldhouseMode: mode, // "court" or "turf" (for the front-end layout)
     rooms: [
       { id:'1A',  label:'1A',  group:'south' },
       { id:'1B',  label:'1B',  group:'south' },
       { id:'2A',  label:'2A',  group:'south' },
       { id:'2B',  label:'2B',  group:'south' },
-      { id:'3',   label:'3',   group:'fieldhouse' },
-      { id:'4',   label:'4',   group:'fieldhouse' },
-      { id:'5',   label:'5',   group:'fieldhouse' },
-      { id:'6',   label:'6',   group:'fieldhouse' },
-      { id:'7',   label:'7',   group:'fieldhouse' },
-      { id:'8',   label:'8',   group:'fieldhouse' },
+      ...(mode === 'court'
+        ? [
+            { id:'3', label:'3', group:'fieldhouse' },
+            { id:'4', label:'4', group:'fieldhouse' },
+            { id:'5', label:'5', group:'fieldhouse' },
+            { id:'6', label:'6', group:'fieldhouse' },
+            { id:'7', label:'7', group:'fieldhouse' },
+            { id:'8', label:'8', group:'fieldhouse' },
+          ]
+        : [
+            { id:'QSA', label:'Quarter Turf SA', group:'fieldhouse' }, // top-left
+            { id:'QNA', label:'Quarter Turf NA', group:'fieldhouse' }, // top-right
+            { id:'QSB', label:'Quarter Turf SB', group:'fieldhouse' }, // bottom-left
+            { id:'QNB', label:'Quarter Turf NB', group:'fieldhouse' }, // bottom-right
+          ]),
       { id:'9A',  label:'9A',  group:'north' },
       { id:'9B',  label:'9B',  group:'north' },
       { id:'10A', label:'10A', group:'north' },
@@ -192,18 +257,21 @@ function scaffold(){
   };
 }
 
+// --------------- main ---------------
 async function main(){
   if (!fs.existsSync(INPUT_CSV) || fs.statSync(INPUT_CSV).size === 0) {
-    fs.writeFileSync(OUTPUT_JSON, JSON.stringify(scaffold(), null, 2));
-    console.log('transform: no csv -> scaffold');
+    const out = scaffold('court');
+    fs.writeFileSync(OUTPUT_JSON, JSON.stringify(out, null, 2));
+    console.log('transform: no csv -> scaffold (court)');
     return;
   }
 
   const raw = fs.readFileSync(INPUT_CSV, 'utf8');
   const rows = parse(raw, { bom:true, skip_empty_lines:true });
   if (!rows.length) {
-    fs.writeFileSync(OUTPUT_JSON, JSON.stringify(scaffold(), null, 2));
-    console.log('transform: empty rows -> scaffold');
+    const out = scaffold('court');
+    fs.writeFileSync(OUTPUT_JSON, JSON.stringify(out, null, 2));
+    console.log('transform: empty rows -> scaffold (court)');
     return;
   }
 
@@ -215,9 +283,12 @@ async function main(){
   const iReservee = col('reservee');
   const iPurpose  = col('reservation purpose');
 
+  const mode = (iFacility >= 0 && iPurpose >= 0) ? detectFieldhouseMode(rows, iFacility, iPurpose) : 'court';
+
   if (iFacility < 0 || iTime < 0 || iReservee < 0 || iPurpose < 0) {
-    fs.writeFileSync(OUTPUT_JSON, JSON.stringify(scaffold(), null, 2));
-    console.log('transform: headers missing -> scaffold');
+    const out = scaffold(mode);
+    fs.writeFileSync(OUTPUT_JSON, JSON.stringify(out, null, 2));
+    console.log(`transform: headers missing -> scaffold (${mode})`);
     return;
   }
 
@@ -240,12 +311,13 @@ async function main(){
     const range = parseRangeToMinutes(timeText);
     if (!range) { dropNoTime++; continue; }
 
-    // Past filter with grace: drop only if ended more than 15 minutes ago
+    // Past with small grace
     if (range.endMin < (nowMin - PAST_GRACE_MIN)) { dropPast++; continue; }
 
+    // System placeholders never display (we still used them for mode)
     if (isSystemDrop(reservee, purpose)) { dropSystem++; continue; }
 
-    const { tokens } = classifyFacility(facility);
+    const { tokens } = classifyFacility(facility, mode);
     if (!tokens.length) { dropNoMap++; continue; }
 
     kept.push({ reservee, purpose, startMin: range.startMin, endMin: range.endMin, tokens });
@@ -264,7 +336,7 @@ async function main(){
     const tokenSet = new Set();
     for (const it of arr) for (const tk of it.tokens) tokenSet.add(tk);
 
-    const rooms = resolveRoomsFromTokens(tokenSet);
+    const rooms = resolveRoomsFromTokens(tokenSet, mode);
     if (!rooms.length) continue;
 
     const any = arr[0];
@@ -278,22 +350,25 @@ async function main(){
   // dedup + order
   const seen = new Set();
   const final = [];
+  const sortOrder = ['1A','1B','2A','2B',
+    ...(mode === 'court' ? ['3','4','5','6','7','8'] : ['QSA','QNA','QSB','QNB']),
+    '9A','9B','10A','10B'
+  ];
+
   for (const s of slots) {
     const k = `${s.roomId}|${s.startMin}|${s.endMin}|${s.title}|${s.subtitle}`;
     if (!seen.has(k)) { seen.add(k); final.push(s); }
   }
   final.sort((a,b)=>{
-    const order = ['1A','1B','2A','2B','3','4','5','6','7','8','9A','9B','10A','10B'];
-    return (order.indexOf(a.roomId) - order.indexOf(b.roomId)) || (a.startMin - b.startMin);
+    return (sortOrder.indexOf(a.roomId) - sortOrder.indexOf(b.roomId)) || (a.startMin - b.startMin);
   });
 
-  const out = scaffold();
+  const out = scaffold(mode);
   out.slots = final;
 
   fs.writeFileSync(OUTPUT_JSON, JSON.stringify(out, null, 2));
-
   console.log(
-    `transform: rows=${rows.length-1} kept=${kept.length} slots=${out.slots.length} ` +
+    `transform: fieldhouseMode=${mode} rows=${rows.length-1} kept=${kept.length} slots=${out.slots.length} ` +
     `drop[system=${dropSystem} past=${dropPast} notRAEC=${dropNotRAEC} noTime=${dropNoTime} noMap=${dropNoMap}]`
   );
 }
