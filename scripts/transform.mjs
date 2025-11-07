@@ -6,7 +6,7 @@
 // - "Last, First" → "First Last"
 // - Drop RAEC system holds / "Internal Hold per NM"
 // - Hide past (relative to TZ)
-// - Robust headers: Location/Facility/Reserved Time/Reservee/Reservation Purpose variants
+// - Forgiving regex for gym facility parsing
 
 import fs from 'fs';
 import path from 'path';
@@ -19,7 +19,6 @@ const __dirname  = path.dirname(__filename);
 const INPUT_CSV   = process.env.IN_CSV   || path.join(__dirname, '..', 'data', 'inbox', 'latest.csv');
 const OUTPUT_JSON = process.env.OUT_JSON || path.join(__dirname, '..', 'events.json');
 
-// Board day window
 const DAY_START_MIN = 360;   // 06:00
 const DAY_END_MIN   = 1380;  // 23:00
 
@@ -43,14 +42,12 @@ function parseRangeToMinutes(text) {
 }
 
 function minutesNowLocal() {
-  // Runner has TZ=America/Chicago in your workflow; we can use system time
   const now = new Date();
   return now.getHours()*60 + now.getMinutes();
 }
 
 // ---------- string helpers ----------
 function clean(s){ return String(s||'').replace(/\s+/g,' ').trim(); }
-
 function field(row, ...names) {
   for (const n of names) {
     if (n in row && row[n] != null && String(row[n]).length) return row[n];
@@ -87,7 +84,6 @@ function cleanPurpose(purpose) {
   s = s.replace(/internal hold per nm/i,'').trim();
   return s;
 }
-
 function isPickleball(purpose, reservee) {
   return /pickleball/i.test(purpose || '') || /pickleball/i.test(reservee || '');
 }
@@ -105,40 +101,31 @@ function detectFieldhouseSeason(rows) {
 
     if (/fieldhouse\s*-\s*(quarter|half|full)\s*turf/i.test(fac)) turfKeywords = true;
   }
-
-  // Turf season when we see turf install (or explicit turf areas) and not "Fieldhouse Installed per NM"
   if ((turfInstall || turfKeywords) && !fieldhouseInstalled) return 'turf';
   return 'court';
 }
 
-// ---------- gym patterns ----------
-const HALF_PATTERNS = [
-  { re: /^ac gym - half court 1a$/i, id: '1A' },
-  { re: /^ac gym - half court 1b$/i, id: '1B' },
-  { re: /^ac gym - half court 2a$/i, id: '2A' },
-  { re: /^ac gym - half court 2b$/i, id: '2B' },
-  { re: /^ac gym - half court 9a$/i, id: '9A' },
-  { re: /^ac gym - half court 9b$/i, id: '9B' },
-  { re: /^ac gym - half court 10a$/i, id: '10A' },
-  { re: /^ac gym - half court 10b$/i, id: '10B' },
-];
+// ---------- forgiving gym parsers ----------
+const reHalf = /^ac\s*gym\s*-\s*half\s*court\s*(1|2|9|10)\s*([ab])\s*$/i;
+const reAB   = /^ac\s*gym\s*-\s*court\s*(1|2|9|10)\s*-\s*ab\s*$/i;
+// Ignore-only (do not place)
+const reFull = /^ac\s*gym\s*-\s*full\s*gym\s*1ab\s*&\s*2ab\s*$/i;
+const reChamp= /^ac\s*gym\s*-\s*championship\s*court\s*$/i;
 
-const AB_PATTERNS = [
-  { re: /^ac gym - court 1-ab$/i, pair: '1' },
-  { re: /^ac gym - court 2-ab$/i, pair: '2' },
-  { re: /^ac gym - court 9-ab$/i, pair: '9' },
-  { re: /^ac gym - court 10-ab$/i, pair:'10' },
-];
-
-function matchHalf(facility) {
-  const f = clean(facility);
-  for (const p of HALF_PATTERNS) if (p.re.test(f)) return p.id;
-  return null;
+function parseHalfId(fac) {
+  const m = clean(fac).match(reHalf);
+  if (!m) return null;
+  const num = m[1];
+  const letter = m[2].toUpperCase();
+  return (num === '10') ? `10${letter}` : `${num}${letter}`;
 }
-function matchAB(facility) {
-  const f = clean(facility);
-  for (const p of AB_PATTERNS) if (p.re.test(f)) return p.pair;
-  return null;
+function parseABPair(fac) {
+  const m = clean(fac).match(reAB);
+  return m ? m[1] : null; // '1','2','9','10'
+}
+function isGymIgnore(fac) {
+  const f = clean(fac);
+  return reFull.test(f) || reChamp.test(f);
 }
 
 // ---------- room lists ----------
@@ -178,10 +165,7 @@ function allRooms(season) {
 // ---------- build slots ----------
 function buildSlots(rows, season) {
   const nowMin = minutesNowLocal();
-
-  // Group by (reservee + start + end) to collect all facility lines that belong together
   const groups = new Map();
-
   const isRAEC = (loc) => /athletic\s*&\s*event\s*center/i.test(loc || '');
 
   for (const r of rows) {
@@ -223,44 +207,38 @@ function buildSlots(rows, season) {
   for (const [, g] of groups) {
     const { startMin, endMin } = g;
 
-    // Decide title/subtitle
+    // Title/subtitle
     const who = normalizeReservee(g.reservee);
     const pur = cleanPurpose(g.purpose);
     let title = '', subtitle = '', org = '', contact = '';
 
     if (isPickleball(g.purpose, g.reservee)) {
-      title = 'Open Pickleball';
-      subtitle = '';
-      org = 'Open Pickleball';
+      title = 'Open Pickleball'; subtitle = ''; org = 'Open Pickleball';
     } else if (who.type === 'catch') {
-      title = 'Catch Corner';
-      subtitle = pur;
-      org = 'Catch Corner';
+      title = 'Catch Corner'; subtitle = pur; org = 'Catch Corner';
     } else if (who.type === 'person') {
-      title = who.person;
-      subtitle = pur;
-      org = who.person;
+      title = who.person; subtitle = pur; org = who.person;
     } else if (who.type === 'org+contact') {
-      title = who.org;
-      subtitle = pur || who.contact;
-      org = who.org; contact = who.contact;
+      title = who.org; subtitle = pur || who.contact; org = who.org; contact = who.contact;
     } else {
-      title = who.org || 'Reservation';
-      subtitle = pur;
-      org = who.org || '';
+      title = who.org || 'Reservation'; subtitle = pur; org = who.org || '';
     }
 
-    // -------- GYM MAPPING --------
-    // Collect halves and AB pairs present in this group.
+    const push = (roomId) =>
+      slots.push({ roomId, startMin, endMin, title, subtitle, org, contact });
+
+    // -------- GYM MAPPING (forgiving) --------
     const halves = new Set(); // 1A,1B,2A,2B,9A,9B,10A,10B
     const ab     = new Set(); // '1','2','9','10'
+    let gymFacSeen = 0;
 
     for (const f of g.facilities) {
-      const h = matchHalf(f); if (h) halves.add(h);
-      const k = matchAB(f);   if (k) ab.add(k);
+      if (isGymIgnore(f)) continue;
+      const h = parseHalfId(f);    if (h) { halves.add(h); gymFacSeen++; continue; }
+      const k = parseABPair(f);    if (k) { ab.add(k);     gymFacSeen++; continue; }
+      // not a gym item — might be fieldhouse/turf/etc., ignore here
     }
 
-    // Half wins; else AB fans; ignore Full/Championship completely for placement.
     const gymPairs = [
       { a:'1A', b:'1B', k:'1' },
       { a:'2A', b:'2B', k:'2' },
@@ -268,17 +246,13 @@ function buildSlots(rows, season) {
       { a:'10A', b:'10B', k:'10' },
     ];
 
-    function push(roomId){
-      slots.push({ roomId, startMin, endMin, title, subtitle, org, contact });
-    }
-
     for (const p of gymPairs) {
       const hasA = halves.has(p.a);
       const hasB = halves.has(p.b);
       if (hasA || hasB) {
         if (hasA) push(p.a);
         if (hasB) push(p.b);
-        continue; // ignore AB when halves exist
+        continue; // halves win
       }
       if (ab.has(p.k)) {
         push(p.a); push(p.b);
@@ -287,25 +261,23 @@ function buildSlots(rows, season) {
 
     // -------- FIELDHOUSE (TURF) MAPPING --------
     if (season === 'turf') {
-      // Quarter detection
       let hasNA=false, hasNB=false, hasSA=false, hasSB=false;
       let hasHalfNorth=false, hasHalfSouth=false, hasFull=false;
 
       for (const f of g.facilities) {
         const ff = f.toLowerCase();
 
-        if (/fieldhouse\s*-\s*quarter\s*turf\s*na/i.test(ff)) hasNA = true;
-        if (/fieldhouse\s*-\s*quarter\s*turf\s*nb/i.test(ff)) hasNB = true;
-        if (/fieldhouse\s*-\s*quarter\s*turf\s*sa/i.test(ff)) hasSA = true;
-        if (/fieldhouse\s*-\s*quarter\s*turf\s*sb/i.test(ff)) hasSB = true;
+        if (/fieldhouse\s*-\s*quarter\s*turf\s*na/.test(ff)) hasNA = true;
+        if (/fieldhouse\s*-\s*quarter\s*turf\s*nb/.test(ff)) hasNB = true;
+        if (/fieldhouse\s*-\s*quarter\s*turf\s*sa/.test(ff)) hasSA = true;
+        if (/fieldhouse\s*-\s*quarter\s*turf\s*sb/.test(ff)) hasSB = true;
 
-        if (/fieldhouse\s*-\s*half\s*turf\s*north/i.test(ff)) hasHalfNorth = true;
-        if (/fieldhouse\s*-\s*half\s*turf\s*south/i.test(ff)) hasHalfSouth = true;
+        if (/fieldhouse\s*-\s*half\s*turf\s*north/.test(ff)) hasHalfNorth = true;
+        if (/fieldhouse\s*-\s*half\s*turf\s*south/.test(ff)) hasHalfSouth = true;
 
-        if (/fieldhouse\s*-\s*full\s*turf/i.test(ff)) hasFull = true;
+        if (/fieldhouse\s*-\s*full\s*turf/.test(ff)) hasFull = true;
       }
 
-      // Expand Full/Half to quarters (and keep any explicit quarters)
       if (hasFull) { hasNA = true; hasNB = true; hasSA = true; hasSB = true; }
       if (hasHalfNorth) { hasNA = true; hasNB = true; }
       if (hasHalfSouth) { hasSA = true; hasSB = true; }
@@ -318,17 +290,20 @@ function buildSlots(rows, season) {
 
     // -------- FIELDHOUSE (COURT) MAPPING --------
     if (season === 'court') {
-      // Keep your previous 3..8 mapping only if you actually want to display them here.
-      // (Given your latest guidance, courts 3..8 are replaced by turf quarters during turf season,
-      // and during court season you will have lines like "AC Fieldhouse - Court 3", etc.)
       for (const f of g.facilities) {
         const m = String(f).match(/^AC Fieldhouse - Court\s*([3-8])$/i);
         if (m) push(m[1]);
       }
-      // A blanket "AC Fieldhouse Court 3-8" → fan to 3..8 (only if not internal/system)
       if (g.facilities.some(f => /AC Fieldhouse Court 3-8/i.test(f))) {
         ['3','4','5','6','7','8'].forEach(push);
       }
+    }
+
+    // Optional tiny debug in logs for gym recognition
+    if (gymFacSeen && ![...halves, ...['1','2','9','10'].filter(k=>ab.has(k))].length) {
+      // If we saw gym-like facs but mapped none, log the facilities once
+      // (kept minimal so logs stay clean)
+      // console.log('debug: gym facilities seen but no map', g.reservee, g.facilities);
     }
   }
 
@@ -359,7 +334,6 @@ function main() {
   const json = { dayStartMin: DAY_START_MIN, dayEndMin: DAY_END_MIN, rooms, slots };
   fs.writeFileSync(OUTPUT_JSON, JSON.stringify(json, null, 2));
 
-  // small summary for workflow logs
   const byRoom = {};
   for (const s of slots) byRoom[s.roomId] = (byRoom[s.roomId]||0) + 1;
   console.log(`transform: season=${season} • slots=${slots.length} • byRoom=${JSON.stringify(byRoom)}`);
