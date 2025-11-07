@@ -1,12 +1,11 @@
 #!/usr/bin/env node
-// CSV -> events.json with:
-// - Gym placement: Half wins; else AB fans; ignore Full/Championship for placement
-// - Turf season: quarters NA/NB/SA/SB; map Full/Half to quarters
+// RAEC: CSV -> events.json
+// - Gym mapping (forgiving): Half wins; else AB fans; ignore Full/Championship for placement
+// - Turf season vs Court season: detect from CSV purpose/fields; map Fieldhouse accordingly
 // - Pickleball normalization
-// - "Last, First" → "First Last"
-// - Drop RAEC system holds / "Internal Hold per NM"
-// - Hide past (relative to TZ)
-// - Forgiving regex for gym facility parsing
+// - "Last, First" -> "First Last"
+// - Drop RAEC system/internal holds
+// - Hide past events ONLY if the CSV is from *today* (local). Otherwise, show all.
 
 import fs from 'fs';
 import path from 'path';
@@ -46,7 +45,13 @@ function minutesNowLocal() {
   return now.getHours()*60 + now.getMinutes();
 }
 
-// ---------- string helpers ----------
+function sameLocalCalendarDay(a, b) {
+  return a.getFullYear() === b.getFullYear()
+      && a.getMonth()    === b.getMonth()
+      && a.getDate()     === b.getDate();
+}
+
+// ---------- string & header helpers ----------
 function clean(s){ return String(s||'').replace(/\s+/g,' ').trim(); }
 function field(row, ...names) {
   for (const n of names) {
@@ -98,7 +103,6 @@ function detectFieldhouseSeason(rows) {
 
     if (/turf install per nm/i.test(pur)) turfInstall = true;
     if (/fieldhouse installed per nm/i.test(pur)) fieldhouseInstalled = true;
-
     if (/fieldhouse\s*-\s*(quarter|half|full)\s*turf/i.test(fac)) turfKeywords = true;
   }
   if ((turfInstall || turfKeywords) && !fieldhouseInstalled) return 'turf';
@@ -163,7 +167,7 @@ function allRooms(season) {
 }
 
 // ---------- build slots ----------
-function buildSlots(rows, season) {
+function buildSlots(rows, season, filterPast) {
   const nowMin = minutesNowLocal();
   const groups = new Map();
   const isRAEC = (loc) => /athletic\s*&\s*event\s*center/i.test(loc || '');
@@ -186,8 +190,8 @@ function buildSlots(rows, season) {
     const range = parseRangeToMinutes(timeText);
     if (!range) continue;
 
-    // hide past
-    if (range.endMin <= nowMin) continue;
+    // hide past items ONLY when filterPast=true
+    if (filterPast && range.endMin <= nowMin) continue;
 
     const key = `${reservee}__${range.startMin}__${range.endMin}`;
     if (!groups.has(key)) {
@@ -230,13 +234,12 @@ function buildSlots(rows, season) {
     // -------- GYM MAPPING (forgiving) --------
     const halves = new Set(); // 1A,1B,2A,2B,9A,9B,10A,10B
     const ab     = new Set(); // '1','2','9','10'
-    let gymFacSeen = 0;
 
     for (const f of g.facilities) {
       if (isGymIgnore(f)) continue;
-      const h = parseHalfId(f);    if (h) { halves.add(h); gymFacSeen++; continue; }
-      const k = parseABPair(f);    if (k) { ab.add(k);     gymFacSeen++; continue; }
-      // not a gym item — might be fieldhouse/turf/etc., ignore here
+      const h = parseHalfId(f);    if (h) { halves.add(h); continue; }
+      const k = parseABPair(f);    if (k) { ab.add(k);     continue; }
+      // other facility types ignored here
     }
 
     const gymPairs = [
@@ -298,13 +301,6 @@ function buildSlots(rows, season) {
         ['3','4','5','6','7','8'].forEach(push);
       }
     }
-
-    // Optional tiny debug in logs for gym recognition
-    if (gymFacSeen && ![...halves, ...['1','2','9','10'].filter(k=>ab.has(k))].length) {
-      // If we saw gym-like facs but mapped none, log the facilities once
-      // (kept minimal so logs stay clean)
-      // console.log('debug: gym facilities seen but no map', g.reservee, g.facilities);
-    }
   }
 
   return slots;
@@ -312,12 +308,19 @@ function buildSlots(rows, season) {
 
 // ---------- main ----------
 function main() {
+  // Scaffold if CSV missing
   if (!fs.existsSync(INPUT_CSV) || fs.statSync(INPUT_CSV).size === 0) {
     const json = { dayStartMin: DAY_START_MIN, dayEndMin: DAY_END_MIN, rooms: allRooms('court'), slots: [] };
     fs.writeFileSync(OUTPUT_JSON, JSON.stringify(json, null, 2));
     console.log('transform: no CSV; wrote scaffold (court) with 0 slots');
     return;
   }
+
+  // Decide if we should hide “past” events based on CSV’s local calendar day
+  const csvStat  = fs.statSync(INPUT_CSV);
+  const csvMTime = new Date(csvStat.mtime);
+  const today    = new Date();
+  const filterPast = sameLocalCalendarDay(csvMTime, today);
 
   const raw = fs.readFileSync(INPUT_CSV, 'utf8');
   const rows = parseCSV(raw, {
@@ -328,7 +331,7 @@ function main() {
   });
 
   const season = detectFieldhouseSeason(rows);
-  const slots  = buildSlots(rows, season);
+  const slots  = buildSlots(rows, season, filterPast);
   const rooms  = allRooms(season);
 
   const json = { dayStartMin: DAY_START_MIN, dayEndMin: DAY_END_MIN, rooms, slots };
@@ -336,7 +339,7 @@ function main() {
 
   const byRoom = {};
   for (const s of slots) byRoom[s.roomId] = (byRoom[s.roomId]||0) + 1;
-  console.log(`transform: season=${season} • slots=${slots.length} • byRoom=${JSON.stringify(byRoom)}`);
+  console.log(`transform: season=${season} • filterPast=${filterPast} • slots=${slots.length} • byRoom=${JSON.stringify(byRoom)}`);
 }
 
 try {
