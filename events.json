@@ -63,42 +63,5 @@
       "group": "north"
     }
   ],
-  "slots": [
-    {
-      "roomId": "9A",
-      "startMin": 1035,
-      "endMin": 1305,
-      "title": "Empower Volleyball (Rec)",
-      "subtitle": "Volleyball 2025 Q4 Pattern",
-      "org": "Empower Volleyball (Rec)",
-      "contact": "Dean Baxendale"
-    },
-    {
-      "roomId": "9B",
-      "startMin": 1035,
-      "endMin": 1305,
-      "title": "Empower Volleyball (Rec)",
-      "subtitle": "Volleyball 2025 Q4 Pattern",
-      "org": "Empower Volleyball (Rec)",
-      "contact": "Dean Baxendale"
-    },
-    {
-      "roomId": "10A",
-      "startMin": 1035,
-      "endMin": 1305,
-      "title": "Empower Volleyball (Rec)",
-      "subtitle": "Volleyball 2025 Q4 Pattern",
-      "org": "Empower Volleyball (Rec)",
-      "contact": "Dean Baxendale"
-    },
-    {
-      "roomId": "10B",
-      "startMin": 1035,
-      "endMin": 1305,
-      "title": "Empower Volleyball (Rec)",
-      "subtitle": "Volleyball 2025 Q4 Pattern",
-      "org": "Empower Volleyball (Rec)",
-      "contact": "Dean Baxendale"
-    }
-  ]
+  "slots": []
 }
