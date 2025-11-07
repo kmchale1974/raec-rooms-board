@@ -76,12 +76,30 @@
   "slots": [
     {
       "roomId": "1A",
+      "startMin": 570,
+      "endMin": 660,
+      "title": "Romeoville High School / SPED",
+      "subtitle": "Romeoville High School SPED",
+      "org": "Romeoville High School / SPED",
+      "contact": "Krissy Kinder"
+    },
+    {
+      "roomId": "1A",
       "startMin": 1200,
       "endMin": 1320,
       "title": "Catch Corner (Internal Holds",
       "subtitle": "CatchCorner (Jeremy Gerena #449683 Volleyball)",
       "org": "Catch Corner (Internal Holds",
       "contact": "Catch Corner (Internal Holds)"
+    },
+    {
+      "roomId": "1B",
+      "startMin": 570,
+      "endMin": 660,
+      "title": "Romeoville High School / SPED",
+      "subtitle": "Romeoville High School SPED",
+      "org": "Romeoville High School / SPED",
+      "contact": "Krissy Kinder"
     },
     {
       "roomId": "1B",
@@ -112,6 +130,15 @@
     },
     {
       "roomId": "2A",
+      "startMin": 570,
+      "endMin": 660,
+      "title": "Romeoville High School / SPED",
+      "subtitle": "Romeoville High School SPED",
+      "org": "Romeoville High School / SPED",
+      "contact": "Krissy Kinder"
+    },
+    {
+      "roomId": "2A",
       "startMin": 1110,
       "endMin": 1170,
       "title": "Catch Corner (Internal Holds",
@@ -136,6 +163,15 @@
       "subtitle": "CatchCorner (Jeremy Gerena Volleyball Booking # 452510)",
       "org": "Catch Corner (Internal Holds",
       "contact": "Catch Corner (Internal Holds)"
+    },
+    {
+      "roomId": "2B",
+      "startMin": 570,
+      "endMin": 660,
+      "title": "Romeoville High School / SPED",
+      "subtitle": "Romeoville High School SPED",
+      "org": "Romeoville High School / SPED",
+      "contact": "Krissy Kinder"
     },
     {
       "roomId": "2B",
