@@ -65,6 +65,24 @@
   ],
   "slots": [
     {
+      "roomId": "10A",
+      "startMin": 630,
+      "endMin": 690,
+      "title": "Northern Will Co SRA",
+      "subtitle": "Basketball",
+      "org": "Northern Will Co SRA",
+      "contact": "Northern Will Co SRA"
+    },
+    {
+      "roomId": "10B",
+      "startMin": 630,
+      "endMin": 690,
+      "title": "Northern Will Co SRA",
+      "subtitle": "Basketball",
+      "org": "Northern Will Co SRA",
+      "contact": "Northern Will Co SRA"
+    },
+    {
       "roomId": "1A",
       "startMin": 960,
       "endMin": 1140,
