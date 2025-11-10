@@ -1,218 +1,235 @@
-/* app.js — stable grid fill (no pager wrapper), robust & defensive */
+/* app.js – polished renderer (no layout changes)
+   - Cache-bust + no-store for events.json
+   - Smooth single-rotor animation only when >1 event
+   - Hide empty subtitles
+   - Use textContent (no HTML truncation by JS)
+   - Robust: skips missing DOM nodes without crashing
+*/
 
-const ROTATE_MS = 8000;
+(function () {
+  const TICK_MS = 1000;
+  const ROTATE_MS = 8000;           // time between slides
+  const SLIDE_MS = 420;             // CSS should match/slightly exceed
+  const NOW_PAD_MIN = 0;            // don’t show events that ended already
 
-const SOUTH = ['1A', '1B', '2A', '2B'];
-const NORTH = ['9A', '9B', '10A', '10B'];
-const FH_COURTS = ['3', '4', '5', '6', '7', '8'];
-const FH_TURF   = ['QUARTER TURF NA', 'QUARTER TURF NB', 'QUARTER TURF SA', 'QUARTER TURF SB'];
+  const ROOMS_FIXED = [
+    '1A', '1B', '2A', '2B',
+    // Fieldhouse/turf may be dynamic; we’ll render only if boxes exist
+    '3','4','5','6','7','8','NA','NB','SA','SB',
+    '9A', '9B', '10A', '10B'
+  ];
 
-const $ = (s, r=document) => r.querySelector(s);
-const esc = (s) => String(s ?? '').replace(/[&<>]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;'}[c]));
-
-// ---------- time formatting ----------
-function fmtRange(startMin, endMin) {
-  if (typeof startMin !== 'number' || typeof endMin !== 'number') return '';
-  const f = m => {
-    let h = Math.floor(m / 60);
-    const min = m % 60;
-    const am = h < 12;
-    h = h % 12; if (h === 0) h = 12;
-    return `${h}:${String(min).padStart(2, '0')}${am ? 'am' : 'pm'}`;
-  };
-  return `${f(startMin)} – ${f(endMin)}`;
-}
-
-// ---------- rotors (1-at-a-time) ----------
-function makeChip(slot) {
-  const div = document.createElement('div');
-  div.className = 'event';
-  div.style.position = 'absolute';
-  div.style.inset = '0';
-  div.style.opacity = '0';
-  div.style.transform = 'translateX(40px)';
-  div.style.transition = 'transform 400ms ease, opacity 400ms ease';
-  div.innerHTML = `
-    <div class="who">${esc(slot.title || '')}</div>
-    ${slot.subtitle ? `<div class="what">${esc(slot.subtitle)}` : ''}</div>
-    <div class="when">${fmtRange(slot.startMin, slot.endMin)}</div>
-  `;
-  return div;
-}
-function raf2() { return new Promise(r => requestAnimationFrame(() => requestAnimationFrame(r))); }
-
-async function startRotor(rotorEl, slots) {
-  if (!rotorEl) return;
-  rotorEl.innerHTML = '';
-
-  const roomEl = rotorEl.closest('.room');
-  const countEl = roomEl?.querySelector('.roomHeader .count em');
-  if (countEl) countEl.textContent = String(slots.length);
-
-  if (!slots.length) return;
-
-  const items = [...slots].sort((a,b) => (a.startMin??0) - (b.startMin??0));
-
-  // Single item: show it (no interval)
-  if (items.length === 1) {
-    const chip = makeChip(items[0]);
-    rotorEl.appendChild(chip);
-    await raf2();
-    chip.style.opacity = '1';
-    chip.style.transform = 'translateX(0)';
-    return;
+  // ---------- time helpers ----------
+  function minutesToRangeText(startMin, endMin) {
+    const fmt = m => {
+      let h = Math.floor(m / 60);
+      const min = m % 60;
+      const mer = h >= 12 ? 'pm' : 'am';
+      if (h === 0) h = 12;
+      else if (h > 12) h -= 12;
+      return `${h}:${String(min).padStart(2, '0')}${mer}`;
+    };
+    return `${fmt(startMin)} – ${fmt(endMin)}`;
   }
 
-  let idx = 0;
-  let cur = makeChip(items[idx]);
-  rotorEl.appendChild(cur);
-  await raf2();
-  cur.style.opacity = '1';
-  cur.style.transform = 'translateX(0)';
-
-  setInterval(async () => {
-    const nextIdx = (idx + 1) % items.length;
-    const next = makeChip(items[nextIdx]);
-    rotorEl.appendChild(next);
-    await raf2();
-    cur.style.opacity = '0';
-    cur.style.transform = 'translateX(-40px)';
-    next.style.opacity = '1';
-    next.style.transform = 'translateX(0)';
-    setTimeout(() => { try { cur.remove(); } catch {} }, 420);
-    idx = nextIdx;
-    cur = next;
-  }, ROTATE_MS);
-}
-
-// ---------- helpers ----------
-function normRoomId(x) { return String(x ?? '').trim().toUpperCase(); }
-function labelFor(id) {
-  const u = normRoomId(id);
-  if (u.startsWith('QUARTER TURF ')) return u.replace('QUARTER TURF ', '');
-  return u;
-}
-function ensureRotorIn(host) {
-  if (!host) return null;
-  let rotor = host.querySelector('.events .single-rotor') || host.querySelector('.single-rotor');
-  if (rotor) return rotor;
-  const eventsHost = host.querySelector('.events') || host;
-  const wrap = document.createElement('div');
-  wrap.className = 'single-rotor';
-  wrap.style.position = 'relative';
-  wrap.style.height = '100%';
-  wrap.style.width  = '100%';
-  eventsHost.appendChild(wrap);
-  return wrap;
-}
-
-// ---------- fixed South/North (use existing cards in HTML) ----------
-function fillFixedRoom(roomId, slots) {
-  const host = document.getElementById(`room-${roomId}`);
-  if (!host) {
-    console.warn(`DOM missing #room-${roomId}`);
-    return;
+  function nowMinutes() {
+    const d = new Date();
+    return d.getHours() * 60 + d.getMinutes();
   }
-  const badge = host.querySelector('.roomHeader .count em');
-  if (badge) badge.textContent = String(slots.length || 0);
-  const rotor = ensureRotorIn(host);
-  if (!rotor) return;
-  startRotor(rotor, slots);
-}
 
-// ---------- Fieldhouse grid (no pager wrapper) ----------
-function detectFHMode(keys) {
-  const hasTurf = keys.some(k => normRoomId(k).startsWith('QUARTER TURF '));
-  if (hasTurf) return 'turf';
-  const hasCourts = keys.some(k => FH_COURTS.includes(normRoomId(k)));
-  return hasCourts ? 'courts' : 'courts';
-}
+  // ---------- content helpers ----------
+  function cleanSubtitle(s) {
+    if (!s) return '';
+    const t = String(s).replace(/\s+/g, ' ').trim();
+    return t;
+  }
 
-function renderFieldhouse(byRoom) {
-  const mount = document.getElementById('fieldhousePager'); // your HTML uses this id
-  if (!mount) return;
+  function el(q, root = document) {
+    return root.querySelector(q);
+  }
 
-  // Build cards directly inside the existing .rooms-fieldhouse grid
-  mount.innerHTML = '';
-
-  // Decide layout based on what's actually in events.json
-  const keysWithData = [...byRoom.entries()].filter(([k, v]) => v.length > 0).map(([k]) => k);
-  const mode = detectFHMode(keysWithData);
-  const order = mode === 'turf' ? FH_TURF : FH_COURTS;
-
-  // Always render all Fieldhouse boxes so the grid appears, even if count=0
-  order.forEach(id => {
+  function createEventCard(slot) {
     const card = document.createElement('div');
-    card.className = 'room';
-    card.innerHTML = `
-      <div class="roomHeader">
-        <div class="id">${esc(labelFor(id))}</div>
-        <div class="count">reservations: <em>0</em></div>
-      </div>
-      <div class="events"><div class="single-rotor"></div></div>
-    `;
-    mount.appendChild(card);
+    card.className = 'event';
 
-    const slots = byRoom.get(normRoomId(id)) || [];
-    const badge = card.querySelector('.roomHeader .count em');
-    if (badge) badge.textContent = String(slots.length || 0);
+    // Who (title)
+    const who = document.createElement('div');
+    who.className = 'who';
+    who.textContent = slot.title || ''; // show full text; no truncation in JS
+    card.appendChild(who);
 
-    const rotor = ensureRotorIn(card);
-    if (slots.length) startRotor(rotor, slots);
-  });
-}
+    // What (subtitle) – hide if empty
+    const sub = cleanSubtitle(slot.subtitle);
+    if (sub) {
+      const what = document.createElement('div');
+      what.className = 'what';
+      what.textContent = sub;
+      card.appendChild(what);
+    }
 
-// ---------- main ----------
-async function boot() {
-  // Header date/clock
-  const dateEl = document.getElementById('headerDate');
-  const clockEl = document.getElementById('headerClock');
-  const tick = () => {
-    const now = new Date();
-    try {
-      dateEl.textContent = now.toLocaleDateString('en-US', { weekday:'long', month:'long', day:'numeric' });
-      clockEl.textContent = now.toLocaleTimeString('en-US', { hour:'numeric', minute:'2-digit' });
-    } catch {}
-  };
-  tick();
-  setInterval(tick, 1000);
+    // When
+    const when = document.createElement('div');
+    when.className = 'when';
+    when.textContent = minutesToRangeText(slot.startMin, slot.endMin);
+    card.appendChild(when);
 
-  // Load events.json (cache-busted)
-  const res = await fetch(`./events.json?cb=${Date.now()}`, { cache: 'no-store' });
-  const data = await res.json();
-
-  const rawSlots = Array.isArray(data?.slots) ? data.slots : [];
-  const slots = rawSlots.map(s => ({
-    ...s,
-    roomId: normRoomId(s.roomId),
-    title: s.title ?? '',
-    subtitle: s.subtitle ?? '',
-  }));
-
-  // Bucket by all possible rooms so counts are stable
-  const allRooms = new Set([
-    ...SOUTH.map(normRoomId),
-    ...NORTH.map(normRoomId),
-    ...FH_COURTS.map(normRoomId),
-    ...FH_TURF.map(normRoomId),
-  ]);
-  const byRoom = new Map([...allRooms].map(k => [k, []]));
-  for (const s of slots) {
-    if (!byRoom.has(s.roomId)) byRoom.set(s.roomId, []);
-    byRoom.get(s.roomId).push(s);
+    return card;
   }
 
-  // Debug
-  const dbg = {};
-  for (const [k, v] of byRoom.entries()) if (v.length) dbg[k] = v.length;
-  console.log('events.json loaded:', { totalSlots: slots.length, nonEmptyRooms: dbg });
+  // ---------- rotor (slides only when >1) ----------
+  function startRotor(container, events) {
+    // container is .single-rotor
+    if (!container) return;
+    container.innerHTML = '';
 
-  // South & North (use existing DOM cards)
-  SOUTH.forEach(id => fillFixedRoom(id, byRoom.get(normRoomId(id)) || []));
-  NORTH.forEach(id => fillFixedRoom(id, byRoom.get(normRoomId(id)) || []));
+    // If nothing upcoming → leave empty (per your preference)
+    if (!events || events.length === 0) {
+      return;
+    }
 
-  // Fieldhouse (fill grid directly)
-  renderFieldhouse(byRoom);
-}
+    // If only one → render once, no animation
+    if (events.length === 1) {
+      const only = createEventCard(events[0]);
+      container.appendChild(only);
+      return;
+    }
 
-boot().catch(err => console.error('app init failed:', err));
+    // More than one → animate left
+    let idx = 0;
+
+    const place = (i) => {
+      const card = createEventCard(events[i]);
+      card.style.position = 'absolute';
+      card.style.inset = '0';
+      return card;
+    };
+
+    // current and next
+    let curr = place(idx);
+    container.appendChild(curr);
+
+    const step = () => {
+      const nextIdx = (idx + 1) % events.length;
+      const next = place(nextIdx);
+
+      // set start positions
+      next.style.opacity = '0';
+      next.style.transform = 'translateX(60px)';
+
+      container.appendChild(next);
+
+      // trigger transition (ensure layout reflow)
+      requestAnimationFrame(() => {
+        // animate current out
+        curr.style.transition = `transform ${SLIDE_MS}ms cubic-bezier(.22,.61,.36,1), opacity ${SLIDE_MS}ms cubic-bezier(.22,.61,.36,1)`;
+        curr.style.transform = 'translateX(-60px)';
+        curr.style.opacity = '0';
+
+        // animate next in
+        next.style.transition = `transform ${SLIDE_MS}ms cubic-bezier(.22,.61,.36,1), opacity ${SLIDE_MS}ms cubic-bezier(.22,.61,.36,1)`;
+        next.style.transform = 'translateX(0)';
+        next.style.opacity = '1';
+
+        // cleanup after animation
+        setTimeout(() => {
+          container.removeChild(curr);
+          curr = next;
+          idx = nextIdx;
+        }, SLIDE_MS + 20);
+      });
+    };
+
+    // rotate
+    const timer = setInterval(step, ROTATE_MS);
+    // store to allow future cleanup if needed
+    container._rotorTimer = timer;
+  }
+
+  function setRoomCount(roomEl, count) {
+    if (!roomEl) return;
+    const badge = el('.roomHeader .count em', roomEl);
+    if (badge) badge.textContent = String(count);
+  }
+
+  function fillFixedRoom(roomId, slots) {
+    // room markup: #room-<id> .events .single-rotor
+    const roomEl = el(`#room-${CSS.escape(roomId)}`);
+    if (!roomEl) return;
+
+    const rotor = el('.events .single-rotor', roomEl);
+    if (!rotor) return;
+
+    // future-only, sorted by start time
+    const nowMin = nowMinutes();
+    const upcoming = (slots || [])
+      .filter(s => s.endMin > (nowMin + NOW_PAD_MIN))
+      .sort((a, b) => a.startMin - b.startMin || a.endMin - b.endMin);
+
+    // update count
+    setRoomCount(roomEl, upcoming.length);
+
+    // render
+    startRotor(rotor, upcoming);
+  }
+
+  // ---------- header clock ----------
+  function updateHeader() {
+    const d = new Date();
+    const dow = d.toLocaleDateString(undefined, { weekday: 'long' });
+    const date = d.toLocaleDateString(undefined, { month: 'long', day: 'numeric', year: 'numeric' });
+    const time = d.toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' });
+
+    const dateEl = el('#headerDate');
+    const clockEl = el('#headerClock');
+
+    if (dateEl) dateEl.textContent = `${dow}, ${date}`;
+    if (clockEl) clockEl.textContent = time;
+  }
+
+  // ---------- boot ----------
+  async function boot() {
+    updateHeader();
+    setInterval(updateHeader, TICK_MS);
+
+    // Fetch events.json (cache-busted, no-store)
+    const res = await fetch(`./events.json?cb=${Date.now()}`, { cache: 'no-store' });
+    const data = await res.json();
+
+    const slots = Array.isArray(data?.slots) ? data.slots : [];
+    console.log('events.json loaded:', { totalSlots: slots.length });
+
+    // group slots by roomId
+    const byRoom = new Map();
+    for (const s of slots) {
+      if (!s || !s.roomId) continue;
+      if (!byRoom.has(s.roomId)) byRoom.set(s.roomId, []);
+      byRoom.get(s.roomId).push(s);
+    }
+
+    // render all known rooms that exist in the DOM
+    ROOMS_FIXED.forEach(rid => {
+      const roomEl = el(`#room-${CSS.escape(rid)}`);
+      if (!roomEl) return; // skip if this card doesn't exist in HTML
+      fillFixedRoom(rid, byRoom.get(rid) || []);
+    });
+
+    // Also render any dynamic rooms present in JSON but not in ROOMS_FIXED
+    // (won’t hurt if HTML has matching cards)
+    if (Array.isArray(data.rooms)) {
+      data.rooms.forEach(r => {
+        if (!r?.id) return;
+        if (ROOMS_FIXED.includes(r.id)) return; // already covered
+        const roomEl = el(`#room-${CSS.escape(r.id)}`);
+        if (!roomEl) return;
+        fillFixedRoom(r.id, byRoom.get(r.id) || []);
+      });
+    }
+  }
+
+  // Wait for DOM
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', () => boot().catch(err => console.error('app init failed:', err)));
+  } else {
+    boot().catch(err => console.error('app init failed:', err));
+  }
+})();
