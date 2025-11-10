@@ -1,25 +1,21 @@
-/* app.js – polished renderer (no layout changes)
-   - Cache-bust + no-store for events.json
-   - Smooth single-rotor animation only when >1 event
-   - Hide empty subtitles
-   - Use textContent (no HTML truncation by JS)
-   - Robust: skips missing DOM nodes without crashing
+/* app.js – dynamic fieldhouse + robust rendering
+   - Detect turf vs court from events.json (rooms include NA/NB/SA/SB)
+   - Build middle column cards (#fieldhousePager) accordingly
+   - Cache-busted fetch + no-store
+   - Show full names; hide empty subtitles
+   - Only animate if >1 upcoming event
 */
 
 (function () {
   const TICK_MS = 1000;
-  const ROTATE_MS = 8000;           // time between slides
-  const SLIDE_MS = 420;             // CSS should match/slightly exceed
-  const NOW_PAD_MIN = 0;            // don’t show events that ended already
+  const ROTATE_MS = 8000;
+  const SLIDE_MS = 420;
+  const NOW_PAD_MIN = 0; // don’t show events that already ended
 
-  const ROOMS_FIXED = [
-    '1A', '1B', '2A', '2B',
-    // Fieldhouse/turf may be dynamic; we’ll render only if boxes exist
-    '3','4','5','6','7','8','NA','NB','SA','SB',
-    '9A', '9B', '10A', '10B'
-  ];
+  // South/North fixed in HTML
+  const FIXED_ROOM_IDS = ['1A','1B','2A','2B','9A','9B','10A','10B'];
 
-  // ---------- time helpers ----------
+  // ---------- Time helpers ----------
   function minutesToRangeText(startMin, endMin) {
     const fmt = m => {
       let h = Math.floor(m / 60);
@@ -31,34 +27,62 @@
     };
     return `${fmt(startMin)} – ${fmt(endMin)}`;
   }
-
   function nowMinutes() {
     const d = new Date();
     return d.getHours() * 60 + d.getMinutes();
   }
 
-  // ---------- content helpers ----------
+  // ---------- DOM helpers ----------
+  const $ = (q, root=document) => root.querySelector(q);
+  const $$ = (q, root=document) => Array.from(root.querySelectorAll(q));
+
   function cleanSubtitle(s) {
     if (!s) return '';
-    const t = String(s).replace(/\s+/g, ' ').trim();
-    return t;
+    return String(s).replace(/\s+/g, ' ').trim();
   }
 
-  function el(q, root = document) {
-    return root.querySelector(q);
+  function createRoomCard(id, labelText) {
+    const wrap = document.createElement('div');
+    wrap.className = 'room';
+    wrap.id = `room-${id}`;
+
+    const header = document.createElement('div');
+    header.className = 'roomHeader';
+    const left = document.createElement('div');
+    left.className = 'id';
+    left.textContent = labelText || id;
+    const right = document.createElement('div');
+    right.className = 'count';
+    right.innerHTML = 'reservations: <em>—</em>';
+    header.appendChild(left);
+    header.appendChild(right);
+
+    const events = document.createElement('div');
+    events.className = 'events';
+    const rotor = document.createElement('div');
+    rotor.className = 'single-rotor';
+    events.appendChild(rotor);
+
+    wrap.appendChild(header);
+    wrap.appendChild(events);
+    return wrap;
+  }
+
+  function setRoomCount(roomEl, count) {
+    if (!roomEl) return;
+    const badge = $('.roomHeader .count em', roomEl);
+    if (badge) badge.textContent = String(count);
   }
 
   function createEventCard(slot) {
     const card = document.createElement('div');
     card.className = 'event';
 
-    // Who (title)
     const who = document.createElement('div');
     who.className = 'who';
-    who.textContent = slot.title || ''; // show full text; no truncation in JS
+    who.textContent = slot.title || '';
     card.appendChild(who);
 
-    // What (subtitle) – hide if empty
     const sub = cleanSubtitle(slot.subtitle);
     if (sub) {
       const what = document.createElement('div');
@@ -67,7 +91,6 @@
       card.appendChild(what);
     }
 
-    // When
     const when = document.createElement('div');
     when.className = 'when';
     when.textContent = minutesToRangeText(slot.startMin, slot.endMin);
@@ -76,129 +99,134 @@
     return card;
   }
 
-  // ---------- rotor (slides only when >1) ----------
+  // ---------- Rotor (animate only if >1) ----------
   function startRotor(container, events) {
-    // container is .single-rotor
     if (!container) return;
     container.innerHTML = '';
 
-    // If nothing upcoming → leave empty (per your preference)
-    if (!events || events.length === 0) {
-      return;
-    }
+    if (!events || events.length === 0) return;
 
-    // If only one → render once, no animation
     if (events.length === 1) {
-      const only = createEventCard(events[0]);
-      container.appendChild(only);
-      return;
+      container.appendChild(createEventCard(events[0]));
+      return; // no animation
     }
 
-    // More than one → animate left
     let idx = 0;
-
-    const place = (i) => {
-      const card = createEventCard(events[i]);
-      card.style.position = 'absolute';
-      card.style.inset = '0';
-      return card;
+    const place = i => {
+      const el = createEventCard(events[i]);
+      el.style.position = 'absolute';
+      el.style.inset = '0';
+      return el;
     };
 
-    // current and next
     let curr = place(idx);
     container.appendChild(curr);
 
     const step = () => {
       const nextIdx = (idx + 1) % events.length;
       const next = place(nextIdx);
-
-      // set start positions
       next.style.opacity = '0';
       next.style.transform = 'translateX(60px)';
-
       container.appendChild(next);
 
-      // trigger transition (ensure layout reflow)
       requestAnimationFrame(() => {
-        // animate current out
         curr.style.transition = `transform ${SLIDE_MS}ms cubic-bezier(.22,.61,.36,1), opacity ${SLIDE_MS}ms cubic-bezier(.22,.61,.36,1)`;
         curr.style.transform = 'translateX(-60px)';
         curr.style.opacity = '0';
 
-        // animate next in
         next.style.transition = `transform ${SLIDE_MS}ms cubic-bezier(.22,.61,.36,1), opacity ${SLIDE_MS}ms cubic-bezier(.22,.61,.36,1)`;
         next.style.transform = 'translateX(0)';
         next.style.opacity = '1';
 
-        // cleanup after animation
         setTimeout(() => {
-          container.removeChild(curr);
+          try { container.removeChild(curr); } catch {}
           curr = next;
           idx = nextIdx;
         }, SLIDE_MS + 20);
       });
     };
 
-    // rotate
-    const timer = setInterval(step, ROTATE_MS);
-    // store to allow future cleanup if needed
-    container._rotorTimer = timer;
+    container._rotorTimer && clearInterval(container._rotorTimer);
+    container._rotorTimer = setInterval(step, ROTATE_MS);
   }
 
-  function setRoomCount(roomEl, count) {
-    if (!roomEl) return;
-    const badge = el('.roomHeader .count em', roomEl);
-    if (badge) badge.textContent = String(count);
-  }
-
-  function fillFixedRoom(roomId, slots) {
-    // room markup: #room-<id> .events .single-rotor
-    const roomEl = el(`#room-${CSS.escape(roomId)}`);
+  function fillRoom(roomId, slots) {
+    const roomEl = $(`#room-${CSS.escape(roomId)}`);
     if (!roomEl) return;
 
-    const rotor = el('.events .single-rotor', roomEl);
+    const rotor = $('.events .single-rotor', roomEl);
     if (!rotor) return;
 
-    // future-only, sorted by start time
     const nowMin = nowMinutes();
     const upcoming = (slots || [])
       .filter(s => s.endMin > (nowMin + NOW_PAD_MIN))
       .sort((a, b) => a.startMin - b.startMin || a.endMin - b.endMin);
 
-    // update count
     setRoomCount(roomEl, upcoming.length);
-
-    // render
     startRotor(rotor, upcoming);
   }
 
-  // ---------- header clock ----------
+  // ---------- Fieldhouse builder ----------
+  function buildFieldhouse(isTurf) {
+    const host = $('#fieldhousePager');
+    if (!host) return { ids: [] };
+
+    host.innerHTML = ''; // clear
+
+    const grid = document.createElement('div');
+    grid.className = isTurf ? 'rooms-fieldhouse turf' : 'rooms-fieldhouse courts';
+    grid.style.display = 'grid';
+    grid.style.gridTemplateColumns = isTurf ? '1fr 1fr' : 'repeat(3, 1fr)';
+    grid.style.gridTemplateRows = isTurf ? '1fr 1fr' : '1fr 1fr';
+    grid.style.gap = '12px';
+    grid.style.minHeight = '0';
+
+    const ids = isTurf
+      ? ['SA','NA','SB','NB'] // order: top-left SA, top-right NA, bottom-left SB, bottom-right NB
+      : ['3','4','5','6','7','8']; // courts 3..8
+
+    const labels = {
+      'SA': 'Quarter Turf SA',
+      'SB': 'Quarter Turf SB',
+      'NA': 'Quarter Turf NA',
+      'NB': 'Quarter Turf NB'
+    };
+
+    ids.forEach(id => {
+      const card = createRoomCard(id, labels[id] || id);
+      grid.appendChild(card);
+    });
+
+    host.appendChild(grid);
+    return { ids };
+  }
+
+  // ---------- Header clock ----------
   function updateHeader() {
     const d = new Date();
     const dow = d.toLocaleDateString(undefined, { weekday: 'long' });
     const date = d.toLocaleDateString(undefined, { month: 'long', day: 'numeric', year: 'numeric' });
     const time = d.toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' });
 
-    const dateEl = el('#headerDate');
-    const clockEl = el('#headerClock');
-
+    const dateEl = $('#headerDate');
+    const clockEl = $('#headerClock');
     if (dateEl) dateEl.textContent = `${dow}, ${date}`;
     if (clockEl) clockEl.textContent = time;
   }
 
-  // ---------- boot ----------
+  // ---------- Boot ----------
   async function boot() {
     updateHeader();
     setInterval(updateHeader, TICK_MS);
 
-    // Fetch events.json (cache-busted, no-store)
+    // Fetch events.json fresh
     const res = await fetch(`./events.json?cb=${Date.now()}`, { cache: 'no-store' });
     const data = await res.json();
 
     const slots = Array.isArray(data?.slots) ? data.slots : [];
     console.log('events.json loaded:', { totalSlots: slots.length });
 
-    // group slots by roomId
+    // Group by room
     const byRoom = new Map();
     for (const s of slots) {
       if (!s || !s.roomId) continue;
@@ -206,27 +234,25 @@
       byRoom.get(s.roomId).push(s);
     }
 
-    // render all known rooms that exist in the DOM
-    ROOMS_FIXED.forEach(rid => {
-      const roomEl = el(`#room-${CSS.escape(rid)}`);
-      if (!roomEl) return; // skip if this card doesn't exist in HTML
-      fillFixedRoom(rid, byRoom.get(rid) || []);
-    });
+    // Detect turf season (rooms NA/NB/SA/SB present in JSON)
+    const roomIdsInData = new Set((data.rooms || []).map(r => r.id));
+    const turfIds = ['NA','NB','SA','SB'];
+    const isTurf = turfIds.some(id => roomIdsInData.has(id) || byRoom.has(id));
 
-    // Also render any dynamic rooms present in JSON but not in ROOMS_FIXED
-    // (won’t hurt if HTML has matching cards)
-    if (Array.isArray(data.rooms)) {
-      data.rooms.forEach(r => {
-        if (!r?.id) return;
-        if (ROOMS_FIXED.includes(r.id)) return; // already covered
-        const roomEl = el(`#room-${CSS.escape(r.id)}`);
-        if (!roomEl) return;
-        fillFixedRoom(r.id, byRoom.get(r.id) || []);
-      });
-    }
+    // Build Fieldhouse cards dynamically
+    const { ids: fieldhouseIds } = buildFieldhouse(isTurf);
+
+    // Render South/North (these boxes exist in your HTML)
+    FIXED_ROOM_IDS.forEach(id => fillRoom(id, byRoom.get(id) || []));
+
+    // Render Fieldhouse rooms we just created
+    fieldhouseIds.forEach(id => fillRoom(id, byRoom.get(id) || []));
+
+    // If you want a visual hint in the Fieldhouse title, uncomment:
+    // const fhTitle = document.querySelector('section.group:nth-child(2) .title');
+    // if (fhTitle) fhTitle.textContent = isTurf ? 'Fieldhouse (Turf)' : 'Fieldhouse (Courts 3–8)';
   }
 
-  // Wait for DOM
   if (document.readyState === 'loading') {
     document.addEventListener('DOMContentLoaded', () => boot().catch(err => console.error('app init failed:', err)));
   } else {
