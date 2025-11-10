@@ -33,7 +33,6 @@ function parseCSV(text) {
     cell += ch; i++;
   }
   cur.push(cell); rows.push(cur);
-  // trim trailing empty line
   if (rows.length && rows[rows.length - 1].every(x => x === '')) rows.pop();
   return rows;
 }
@@ -47,19 +46,18 @@ function clean(s) {
   return String(s ?? '').replace(/\s+/g, ' ').trim();
 }
 
+// Do NOT strip trailing "("; keep org names intact (e.g. D1 Training (Stay 22uned, Inc.))
 function personFromLastFirst(s) {
   const t = clean(s);
   if (!t) return '';
-  // strip dangling "("
-  const cleaned = t.replace(/\s*\($/, '');
-  if (cleaned.includes(',')) {
-    const [left, ...rest] = cleaned.split(',');
+  if (t.includes(',')) {
+    const [left, ...rest] = t.split(',');
     const right = rest.join(',').trim();
     if (/^[A-Za-z'.-]+\s+[A-Za-z'.-]+/.test(right) && /^[A-Za-z'.-]+$/.test(left.trim())) {
       return `${right} ${left}`.replace(/\s+/g, ' ').trim();
     }
   }
-  return cleaned;
+  return t;
 }
 
 function rangeToMinutes(text) {
@@ -73,9 +71,9 @@ function rangeToMinutes(text) {
   return { startMin: toMin(m[1],m[2],m[3]), endMin: toMin(m[4],m[5],m[6]) };
 }
 
+// truly non-display maintenance items
 function isInstallOrInternal(purpose) {
   const t = String(purpose || '').toLowerCase();
-  // These are truly non-display items
   return (
     /turf install per nm/.test(t) ||
     /fieldhouse installed per nm/.test(t) ||
@@ -83,24 +81,22 @@ function isInstallOrInternal(purpose) {
   );
 }
 
+// e.g. “Volleyball - Hold per NM for WELCH VB” -> title “Welch VB”, subtitle “Volleyball”
 function extractWelchOrSimilarFromPurpose(purpose) {
-  // Examples:
-  // "Volleyball - Hold per NM for WELCH VB" => {title: "Welch VB", subtitle: "Volleyball"}
   const p = String(purpose || '');
   const sportMatch = p.match(/^(Volleyball|Basketball|Soccer|Flag Football|Pickleball)\b/i);
   const whoMatch   = p.match(/for\s+(.+?)\s*$/i);
   if (whoMatch) {
-    const title    = clean(whoMatch[1].replace(/VB$/i, 'VB')); // leave as is
+    const title    = clean(whoMatch[1]);
     const subtitle = sportMatch ? sportMatch[1] : '';
     if (title) return { title, subtitle };
   }
   return null;
 }
 
-function normalizeCatchCornerTitle(purpose) {
-  // "CatchCorner (Prolific Basketball Booking #438632)" -> "Catch Corner"
-  const t = String(purpose || '');
-  if (/catch\s*corner/i.test(t) || /catchcorner/i.test(t)) {
+function normalizeCatchCornerTitle(reservee, purpose) {
+  const combined = `${reservee} ${purpose}`;
+  if (/catch\s*corner/i.test(combined) || /catchcorner/i.test(combined)) {
     return 'Catch Corner';
   }
   return null;
@@ -109,7 +105,7 @@ function normalizeCatchCornerTitle(purpose) {
 function mapFacilityToRooms(facility) {
   const f = clean(facility).toLowerCase();
 
-  // South 1/2
+  // South (1/2 families)
   if (/ac gym - half court 1a/i.test(f)) return ['1A'];
   if (/ac gym - half court 1b/i.test(f)) return ['1B'];
   if (/ac gym - court 1-ab/i.test(f))    return ['1A','1B'];
@@ -120,7 +116,7 @@ function mapFacilityToRooms(facility) {
 
   if (/full gym 1ab & 2ab/i.test(f) || /championship court/i.test(f)) return ['1A','1B','2A','2B'];
 
-  // North 9/10
+  // North (9/10 families)
   if (/ac gym - half court 9a/i.test(f)) return ['9A'];
   if (/ac gym - half court 9b/i.test(f)) return ['9B'];
   if (/ac gym - court 9-ab/i.test(f))    return ['9A','9B'];
@@ -131,16 +127,16 @@ function mapFacilityToRooms(facility) {
 
   if (/full gym 9 & 10/i.test(f))         return ['9A','9B','10A','10B'];
 
-  // Fieldhouse floor (3..8 when courts down)
-  if (/ac fieldhouse - court\s*([3-8])$/i.test(clean(facility))) {
+  // Fieldhouse floor (3..8 courts)
+  if (/^ac fieldhouse - court\s*([3-8])$/i.test(clean(facility))) {
     return [String(RegExp.$1)];
   }
   if (/ac fieldhouse - court 3-8/i.test(f)) return ['3','4','5','6','7','8'];
 
-  // Turf (we'll detect season separately)
+  // Turf
   if (/ac fieldhouse - full turf/i.test(f)) return ['QT-ALL'];
-  if (/ac fieldhouse - half turf north/i.test(f)) return ['QT-NA','QT-NB']; // north halves
-  if (/ac fieldhouse - half turf south/i.test(f)) return ['QT-SA','QT-SB']; // south halves
+  if (/ac fieldhouse - half turf north/i.test(f)) return ['QT-NA','QT-NB'];
+  if (/ac fieldhouse - half turf south/i.test(f)) return ['QT-SA','QT-SB'];
   if (/ac fieldhouse - quarter turf na/i.test(f)) return ['QT-NA'];
   if (/ac fieldhouse - quarter turf nb/i.test(f)) return ['QT-NB'];
   if (/ac fieldhouse - quarter turf sa/i.test(f)) return ['QT-SA'];
@@ -149,52 +145,67 @@ function mapFacilityToRooms(facility) {
   return [];
 }
 
-function isTurfSeason(rows) {
-  // turf when we see Full Turf + purpose mentions "Turf Install per NM"
-  return rows.some(r =>
+// turf season if we see Full Turf + “Turf Install per NM” in purpose anywhere in the CSV
+function isTurfSeason(allRows) {
+  return allRows.some(r =>
     /ac fieldhouse - full turf/i.test(r.facility || '') &&
     /turf install per nm/i.test(r.purpose || '')
   );
 }
 
-function toDisplayTitle(reservee, purpose) {
+function toDisplay(reservee, purpose) {
   const r = personFromLastFirst(reservee);
-  // Pickleball override by either field
+
+  // Pickleball: any mention
   if (/pickleball/i.test(r) || /pickleball/i.test(purpose || '')) {
     return { title: 'Open Pickleball', subtitle: '' };
   }
-  // Catch Corner normalization
-  const cc = normalizeCatchCornerTitle(purpose) || (/\bcatch\s*corner\b/i.test(r) ? 'Catch Corner' : null);
-  if (cc) return { title: cc, subtitle: clean(purpose).replace(/Catch\s*Corner|CatchCorner/ig,'').replace(/\s+/g,' ').trim() };
 
-  // RAEC Front Desk … “for WELCH VB”
+  // Catch Corner normalization (strip noisy suffix, keep clean subtitle)
+  const cc = normalizeCatchCornerTitle(r, purpose);
+  if (cc) {
+    const sub = clean(String(purpose || '')
+      .replace(/Catch\s*Corner|CatchCorner/ig,'')
+      .replace(/\(Prolific.*?\)/i,'')
+      .replace(/Booking\s*#\d+/ig,'')
+    ).trim();
+    return { title: cc, subtitle: sub };
+  }
+
+  // RAEC Front Desk “for WELCH VB”
   if (/^raec\s*front\s*desk/i.test(r)) {
     const wh = extractWelchOrSimilarFromPurpose(purpose);
     if (wh) return wh;
   }
 
+  // default
   return { title: r, subtitle: clean(purpose) };
 }
 
-function overlaps(a, b) {
-  return a.startMin < b.endMin && b.startMin < a.endMin;
+function overlaps(a, b) { return a.startMin < b.endMin && b.startMin < a.endMin; }
+
+function familyOf(roomId) {
+  if (['1A','1B','2A','2B'].includes(roomId)) return 'south';
+  if (['9A','9B','10A','10B'].includes(roomId)) return 'north';
+  if (['3','4','5','6','7','8'].includes(roomId)) return 'fieldhouse-courts';
+  if (/^QT-/.test(roomId)) return 'fieldhouse-turf';
+  return 'other';
 }
 
 // -------------------- MAIN --------------------
 function main() {
+  // empty file -> scaffold
   if (!fs.existsSync(INPUT_CSV) || fs.statSync(INPUT_CSV).size === 0) {
-    const empty = scaffold([]);
-    fs.writeFileSync(OUTPUT_JSON, JSON.stringify(empty, null, 2));
-    console.log('transform: empty CSV -> empty scaffold');
+    writeScaffold([]);
+    console.log('transform: empty CSV');
     return;
   }
 
   const raw = fs.readFileSync(INPUT_CSV, 'utf8');
   const rowsCsv = parseCSV(raw);
   if (!rowsCsv.length) {
-    const empty = scaffold([]);
-    fs.writeFileSync(OUTPUT_JSON, JSON.stringify(empty, null, 2));
-    console.log('transform: no rows -> empty scaffold');
+    writeScaffold([]);
+    console.log('transform: no rows');
     return;
   }
 
@@ -215,48 +226,47 @@ function main() {
 
   const turfMode = isTurfSeason(rows);
 
-  const keep = [];
   const now = new Date();
   const nowMin = now.getHours()*60 + now.getMinutes();
   const GRACE = 10;
 
+  // Build raw items
+  const items = [];
   for (const r of rows) {
     if (!/athletic\s*&\s*event\s*center/i.test(r.location || '')) continue;
     if (!r.facility || !r.time) continue;
 
-    // Skip maintenance/internal only
+    // skip only the pure maintenance/internal items
     if (isInstallOrInternal(r.purpose)) continue;
 
     const range = rangeToMinutes(r.time);
     if (!range) continue;
-    if (range.endMin < (nowMin - GRACE)) continue; // too far past
+    if (range.endMin < (nowMin - GRACE)) continue;
 
     let rooms = mapFacilityToRooms(r.facility);
 
-    // Turf full -> expand to quarters
-    if (turfMode) {
-      if (rooms.includes('QT-ALL')) rooms = ['QT-NA','QT-NB','QT-SA','QT-SB'];
+    // Turf expansion
+    if (turfMode && rooms.includes('QT-ALL')) {
+      rooms = ['QT-NA','QT-NB','QT-SA','QT-SB'];
     }
 
     if (!rooms.length) continue;
 
-    const { title, subtitle } = toDisplayTitle(r.reservee, r.purpose);
+    const { title, subtitle } = toDisplay(r.reservee, r.purpose);
 
-    keep.push({
+    items.push({
       rooms,
       startMin: range.startMin,
       endMin:   range.endMin,
       title, subtitle,
-      keyOrg: title.toLowerCase().replace(/\s+/g,' ').trim(), // for merging
+      orgKey: title.toLowerCase().replace(/\s+/g,' ').trim(),
+      rawFacility: r.facility
     });
   }
 
-  // Blanket-vs-specific resolution per org+time window per *room family*
-  // Families: [1A,1B,1AB,Full], [2A,2B,2AB,Full], [9A,9B,9AB,Full9&10], [10A,10B,9AB,10AB,Full9&10]
-  // Implementation: expand every item to (roomId, start,end,title,subtitle),
-  // then remove blanket occurrences when a more specific for same org/time exists for that exact room.
+  // Expand for blanket/specific resolution
   const expanded = [];
-  for (const it of keep) {
+  for (const it of items) {
     for (const r of it.rooms) {
       expanded.push({
         roomId: r,
@@ -264,69 +274,81 @@ function main() {
         endMin: it.endMin,
         title: it.title,
         subtitle: it.subtitle,
-        keyOrg: it.keyOrg,
-        rawRooms: it.rooms
+        orgKey: it.orgKey,
+        rawRoomsCount: it.rooms.length
       });
     }
   }
 
-  function isBlanket(roomId, rawRooms) {
-    // blanket if:
-    // - south/north AB bookings or Full Gym rows emitted both halves (2 rooms or 4 rooms)
-    if (['1A','1B','2A','2B'].includes(roomId)) {
-      return rawRooms.length > 1; // Championship / 1-AB / Full Gym produced >1
-    }
-    if (['9A','9B','10A','10B'].includes(roomId)) {
-      return rawRooms.length > 1;
-    }
-    // Fieldhouse courts: similar behavior (Court 3-8 blanket vs single)
-    if (['3','4','5','6','7','8'].includes(roomId)) {
-      return rawRooms.length > 1;
-    }
-    // Turf: QT-ALL expands to four rooms; specific quarters have rawRooms = 1
-    if (/^QT-/.test(roomId)) {
-      return rawRooms.length > 1;
-    }
-    return false;
+  // Blanket vs specific rules:
+  // - If a room occurrence comes from a row that emitted multiple rooms (rawRoomsCount > 1),
+  //   then it's a blanket. Drop it when a same-org overlapping *specific* (rawRoomsCount==1)
+  //   exists for that exact room.
+  // - Additional enhancement: if NO specific exists for *either* half in the family window,
+  //   keep the blanket so “Full Gym 1AB & 2AB” occupies all four when that’s all we have.
+  const result = [];
+
+  // Helper: find if any specific exists for same family/time/org
+  function specificExistsForFamily(slot) {
+    const fam = familyOf(slot.roomId);
+    const famRooms = {
+      south: ['1A','1B','2A','2B'],
+      north: ['9A','9B','10A','10B'],
+      'fieldhouse-courts': ['3','4','5','6','7','8'],
+      'fieldhouse-turf': ['QT-NA','QT-NB','QT-SA','QT-SB']
+    }[fam] || [slot.roomId];
+
+    return expanded.some(sp =>
+      sp !== slot &&
+      famRooms.includes(sp.roomId) &&
+      sp.orgKey === slot.orgKey &&
+      sp.rawRoomsCount === 1 &&
+      overlaps(sp, slot)
+    );
   }
 
-  const result = [];
   for (const slot of expanded) {
-    if (isBlanket(slot.roomId, slot.rawRooms)) {
-      // Only keep blanket if no specific same-org overlapping single exists for that same room
-      const hasSpecific = expanded.some(sp =>
+    if (slot.rawRoomsCount > 1) {
+      // blanket
+      const hasSpecificSameRoom = expanded.some(sp =>
         sp !== slot &&
         sp.roomId === slot.roomId &&
-        sp.keyOrg === slot.keyOrg &&
-        sp.rawRooms.length === 1 &&     // specific
+        sp.orgKey === slot.orgKey &&
+        sp.rawRoomsCount === 1 &&
         overlaps(sp, slot)
       );
-      if (hasSpecific) continue; // drop blanket for this room
+      if (hasSpecificSameRoom) continue;
+
+      // if no specific in the whole family, keep blanket so it occupies the family
+      // otherwise, keep blanket for rooms that were not covered by specifics
+      // (the check above already drops the specific-covered room case)
+      if (specificExistsForFamily(slot)) {
+        // already dropped specific-covered rooms; keep this blanket for uncovered rooms
+        result.push({ ...slot });
+      } else {
+        // no specifics anywhere: keep blanket (e.g., Chicago Sport & Social booking all courts)
+        result.push({ ...slot });
+      }
+    } else {
+      // specific
+      result.push({ ...slot });
     }
-    result.push({
-      roomId: slot.roomId,
-      startMin: slot.startMin,
-      endMin: slot.endMin,
-      title: slot.title,
-      subtitle: slot.subtitle
-    });
   }
 
-  // Final trim & sort per room/time
+  // Final sort
   result.sort((a,b) => a.roomId.localeCompare(b.roomId) || a.startMin - b.startMin);
 
-  const out = scaffold(result);
-  fs.writeFileSync(OUTPUT_JSON, JSON.stringify(out, null, 2));
+  // Write out
+  writeScaffold(result);
 
-  // Debug summary
+  // Debug line
   const byRoom = {};
   for (const s of result) byRoom[s.roomId] = (byRoom[s.roomId]||0)+1;
   console.log(`transform: season=${turfMode ? 'turf' : 'courts'} • slots=${result.length} • byRoom=${JSON.stringify(byRoom)}`);
 }
 
-// ---------- scaffold (rooms list stays constant, UI builds fieldhouse dynamically) ----------
-function scaffold(slots) {
-  return {
+function writeScaffold(slots) {
+  const out = {
     dayStartMin: 360,
     dayEndMin: 1380,
     rooms: [
@@ -334,12 +356,15 @@ function scaffold(slots) {
       { id: '1B',  label: '1B', group: 'south' },
       { id: '2A',  label: '2A', group: 'south' },
       { id: '2B',  label: '2B', group: 'south' },
+
+      // Fieldhouse 3..8 (court season) — the UI will detect turf (QT-*) and swap layout automatically
       { id: '3',   label: '3',  group: 'fieldhouse' },
       { id: '4',   label: '4',  group: 'fieldhouse' },
       { id: '5',   label: '5',  group: 'fieldhouse' },
       { id: '6',   label: '6',  group: 'fieldhouse' },
       { id: '7',   label: '7',  group: 'fieldhouse' },
       { id: '8',   label: '8',  group: 'fieldhouse' },
+
       { id: '9A',  label: '9A', group: 'north' },
       { id: '9B',  label: '9B', group: 'north' },
       { id: '10A', label: '10A',group: 'north' },
@@ -347,6 +372,7 @@ function scaffold(slots) {
     ],
     slots
   };
+  fs.writeFileSync(OUTPUT_JSON, JSON.stringify(out, null, 2));
 }
 
 main();
