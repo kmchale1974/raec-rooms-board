@@ -1,336 +1,378 @@
-// app.js — safe renderer for RAEC board (matches your HTML)
-// ------------------------------------------------------------
+#!/usr/bin/env node
+// scripts/transform.mjs
+// Build events.json from latest CSV with RAEC-specific rules.
 
-const NOW_GRACE_MIN = 10;          // keep events that just ended within 10 min
-const ROTATE_MS      = 8000;       // only used when >1 event in a room
-const EASING         = 'cubic-bezier(.22,.61,.36,1)';
+import fs from 'fs';
+import path from 'path';
+import { fileURLToPath } from 'url';
 
-// ---- tiny utils ------------------------------------------------
-const byId = (id) => document.getElementById(id);
-const fmtTime = (m) => {
-  const h = Math.floor(m / 60);
-  const mm = String(m % 60).padStart(2, '0');
-  const h12 = ((h + 11) % 12) + 1;
-  const ampm = h < 12 ? 'AM' : 'PM';
-  return `${h12}:${mm} ${ampm}`;
-};
+// ---------- Paths ----------
+const __filename = fileURLToPath(import.meta.url);
+const __dirname  = path.dirname(__filename);
 
-function normalizeReserveeName(raw) {
-  const s = String(raw || '').trim();
-  if (!s) return '';
-  // Fix trailing "(" artifacts
-  const cleaned = s.replace(/\s*\($/, '');
-  // "Last, First" → "First Last" when it looks like a person
-  if (cleaned.includes(',')) {
-    const [left, ...rest] = cleaned.split(',');
+const INPUT_CSV   = process.env.IN_CSV  || path.join(__dirname, '..', 'data', 'inbox', 'latest.csv');
+const OUTPUT_JSON = process.env.OUT_JSON || path.join(__dirname, '..', 'events.json');
+
+// ---------- Small CSV parser (handles quotes & commas) ----------
+function parseCSV(text) {
+  const rows = [];
+  let i = 0, cur = [], cell = '', inQ = false;
+  while (i < text.length) {
+    const ch = text[i];
+    if (inQ) {
+      if (ch === '"') {
+        if (text[i + 1] === '"') { cell += '"'; i += 2; continue; }
+        inQ = false; i++; continue;
+      }
+      cell += ch; i++; continue;
+    }
+    if (ch === '"') { inQ = true; i++; continue; }
+    if (ch === ',') { cur.push(cell); cell = ''; i++; continue; }
+    if (ch === '\n') { cur.push(cell); rows.push(cur); cur = []; cell = ''; i++; continue; }
+    if (ch === '\r') { i++; continue; }
+    cell += ch; i++;
+  }
+  cur.push(cell); rows.push(cur);
+  if (rows.length && rows[rows.length - 1].every(x => x === '')) rows.pop();
+  return rows;
+}
+
+function indexOfHeader(headers, name) {
+  const needle = name.trim().toLowerCase();
+  return headers.findIndex(h => String(h || '').trim().toLowerCase() === needle);
+}
+
+function clean(s) {
+  return String(s ?? '').replace(/\s+/g, ' ').trim();
+}
+
+// Do NOT strip trailing "("; keep org names intact (e.g. D1 Training (Stay 22uned, Inc.))
+function personFromLastFirst(s) {
+  const t = clean(s);
+  if (!t) return '';
+  if (t.includes(',')) {
+    const [left, ...rest] = t.split(',');
     const right = rest.join(',').trim();
     if (/^[A-Za-z'.-]+\s+[A-Za-z'.-]+/.test(right) && /^[A-Za-z'.-]+$/.test(left.trim())) {
       return `${right} ${left}`.replace(/\s+/g, ' ').trim();
     }
   }
-  return cleaned;
+  return t;
 }
 
-function isInternalHold(s) {
-  const t = String(s || '').toLowerCase();
+function rangeToMinutes(text) {
+  const m = String(text||'').match(/(\d{1,2}):(\d{2})\s*([ap])m\s*-\s*(\d{1,2}):(\d{2})\s*([ap])m/i);
+  if (!m) return null;
+  const toMin = (hh, mm, ap) => {
+    let h = parseInt(hh, 10) % 12;
+    if (ap.toLowerCase() === 'p') h += 12;
+    return h * 60 + parseInt(mm, 10);
+  };
+  return { startMin: toMin(m[1],m[2],m[3]), endMin: toMin(m[4],m[5],m[6]) };
+}
+
+// truly non-display maintenance items
+function isInstallOrInternal(purpose) {
+  const t = String(purpose || '').toLowerCase();
   return (
-    /internal hold per nm/.test(t) ||
-    /installed per nm/.test(t) ||
-    /hold per nm/.test(t) ||
-    /raec front desk/.test(t)
+    /turf install per nm/.test(t) ||
+    /fieldhouse installed per nm/.test(t) ||
+    /internal hold per nm/.test(t)
   );
 }
 
-function isPickleball(s) {
-  return /pickleball/i.test(String(s || ''));
+// e.g. “Volleyball - Hold per NM for WELCH VB” -> title “Welch VB”, subtitle “Volleyball”
+function extractWelchOrSimilarFromPurpose(purpose) {
+  const p = String(purpose || '');
+  const sportMatch = p.match(/^(Volleyball|Basketball|Soccer|Flag Football|Pickleball)\b/i);
+  const whoMatch   = p.match(/for\s+(.+?)\s*$/i);
+  if (whoMatch) {
+    const title    = clean(whoMatch[1]);
+    const subtitle = sportMatch ? sportMatch[1] : '';
+    if (title) return { title, subtitle };
+  }
+  return null;
 }
 
-function nowMinutesLocal() {
-  const d = new Date();
-  return d.getHours() * 60 + d.getMinutes();
+function normalizeCatchCornerTitle(reservee, purpose) {
+  const combined = `${reservee} ${purpose}`;
+  if (/catch\s*corner/i.test(combined) || /catchcorner/i.test(combined)) {
+    return 'Catch Corner';
+  }
+  return null;
 }
 
-// ---- card + rotor ----------------------------------------------
-function renderCard(slot) {
-  const el = document.createElement('div');
-  el.className = 'event';
+function mapFacilityToRooms(facility) {
+  const f = clean(facility).toLowerCase();
 
-  const who = document.createElement('div');
-  who.className = 'who';
-  who.textContent = slot.title || '';
+  // South (1/2 families)
+  if (/ac gym - half court 1a/i.test(f)) return ['1A'];
+  if (/ac gym - half court 1b/i.test(f)) return ['1B'];
+  if (/ac gym - court 1-ab/i.test(f))    return ['1A','1B'];
 
-  const what = document.createElement('div');
-  what.className = 'what';
-  if (slot.subtitle) {
-    what.textContent = slot.subtitle;
+  if (/ac gym - half court 2a/i.test(f)) return ['2A'];
+  if (/ac gym - half court 2b/i.test(f)) return ['2B'];
+  if (/ac gym - court 2-ab/i.test(f))    return ['2A','2B'];
+
+  if (/full gym 1ab & 2ab/i.test(f) || /championship court/i.test(f)) return ['1A','1B','2A','2B'];
+
+  // North (9/10 families)
+  if (/ac gym - half court 9a/i.test(f)) return ['9A'];
+  if (/ac gym - half court 9b/i.test(f)) return ['9B'];
+  if (/ac gym - court 9-ab/i.test(f))    return ['9A','9B'];
+
+  if (/ac gym - half court 10a/i.test(f)) return ['10A'];
+  if (/ac gym - half court 10b/i.test(f)) return ['10B'];
+  if (/ac gym - court 10-ab/i.test(f))    return ['10A','10B'];
+
+  if (/full gym 9 & 10/i.test(f))         return ['9A','9B','10A','10B'];
+
+  // Fieldhouse floor (3..8 courts)
+  if (/^ac fieldhouse - court\s*([3-8])$/i.test(clean(facility))) {
+    return [String(RegExp.$1)];
+  }
+  if (/ac fieldhouse - court 3-8/i.test(f)) return ['3','4','5','6','7','8'];
+
+  // Turf
+  if (/ac fieldhouse - full turf/i.test(f)) return ['QT-ALL'];
+  if (/ac fieldhouse - half turf north/i.test(f)) return ['QT-NA','QT-NB'];
+  if (/ac fieldhouse - half turf south/i.test(f)) return ['QT-SA','QT-SB'];
+  if (/ac fieldhouse - quarter turf na/i.test(f)) return ['QT-NA'];
+  if (/ac fieldhouse - quarter turf nb/i.test(f)) return ['QT-NB'];
+  if (/ac fieldhouse - quarter turf sa/i.test(f)) return ['QT-SA'];
+  if (/ac fieldhouse - quarter turf sb/i.test(f)) return ['QT-SB'];
+
+  return [];
+}
+
+// turf season if we see Full Turf + “Turf Install per NM” in purpose anywhere in the CSV
+function isTurfSeason(allRows) {
+  return allRows.some(r =>
+    /ac fieldhouse - full turf/i.test(r.facility || '') &&
+    /turf install per nm/i.test(r.purpose || '')
+  );
+}
+
+function toDisplay(reservee, purpose) {
+  const r = personFromLastFirst(reservee);
+
+  // Pickleball: any mention
+  if (/pickleball/i.test(r) || /pickleball/i.test(purpose || '')) {
+    return { title: 'Open Pickleball', subtitle: '' };
   }
 
-  const when = document.createElement('div');
-  when.className = 'when';
-  when.textContent = `${fmtTime(slot.startMin)} – ${fmtTime(slot.endMin)}`;
-
-  el.appendChild(who);
-  if (slot.subtitle) el.appendChild(what);
-  el.appendChild(when);
-  return el;
-}
-
-/**
- * Start a rotor inside the room's ".events" box.
- * If there is no ".single-rotor" child, we create one.
- */
-function startRotor(eventsBox, items) {
-  if (!eventsBox) return;
-
-  // Ensure a rotor element exists
-  let rotor = eventsBox.querySelector('.single-rotor');
-  if (!rotor) {
-    rotor = document.createElement('div');
-    rotor.className = 'single-rotor';
-    eventsBox.innerHTML = '';
-    eventsBox.appendChild(rotor);
+  // Catch Corner normalization (strip noisy suffix, keep clean subtitle)
+  const cc = normalizeCatchCornerTitle(r, purpose);
+  if (cc) {
+    const sub = clean(String(purpose || '')
+      .replace(/Catch\s*Corner|CatchCorner/ig,'')
+      .replace(/\(Prolific.*?\)/i,'')
+      .replace(/Booking\s*#\d+/ig,'')
+    ).trim();
+    return { title: cc, subtitle: sub };
   }
 
-  // Clean previous content/timers
-  rotor._rotTimer && clearTimeout(rotor._rotTimer);
-  rotor.innerHTML = '';
+  // RAEC Front Desk “for WELCH VB”
+  if (/^raec\s*front\s*desk/i.test(r)) {
+    const wh = extractWelchOrSimilarFromPurpose(purpose);
+    if (wh) return wh;
+  }
 
-  if (!items || items.length === 0) {
-    // Render nothing if empty
+  // default
+  return { title: r, subtitle: clean(purpose) };
+}
+
+function overlaps(a, b) { return a.startMin < b.endMin && b.startMin < a.endMin; }
+
+function familyOf(roomId) {
+  if (['1A','1B','2A','2B'].includes(roomId)) return 'south';
+  if (['9A','9B','10A','10B'].includes(roomId)) return 'north';
+  if (['3','4','5','6','7','8'].includes(roomId)) return 'fieldhouse-courts';
+  if (/^QT-/.test(roomId)) return 'fieldhouse-turf';
+  return 'other';
+}
+
+// -------------------- MAIN --------------------
+function main() {
+  // empty file -> scaffold
+  if (!fs.existsSync(INPUT_CSV) || fs.statSync(INPUT_CSV).size === 0) {
+    writeScaffold([]);
+    console.log('transform: empty CSV');
     return;
   }
 
-  if (items.length === 1) {
-    // Single card, no animation
-    rotor.appendChild(renderCard(items[0]));
+  const raw = fs.readFileSync(INPUT_CSV, 'utf8');
+  const rowsCsv = parseCSV(raw);
+  if (!rowsCsv.length) {
+    writeScaffold([]);
+    console.log('transform: no rows');
     return;
   }
 
-  // Rotate multiple
-  let idx = 0;
-  let current = renderCard(items[idx]);
-  rotor.appendChild(current);
+  const headers = rowsCsv[0];
+  const iLoc = indexOfHeader(headers, 'Location:');
+  const iFac = indexOfHeader(headers, 'Facility');
+  const iTime= indexOfHeader(headers, 'Reserved Time');
+  const iRes = indexOfHeader(headers, 'Reservee');
+  const iPur = indexOfHeader(headers, 'Reservation Purpose');
 
-  const tick = () => {
-    const nextIdx = (idx + 1) % items.length;
-    const next = renderCard(items[nextIdx]);
-
-    // stage next off to the right
-    next.style.position = 'absolute';
-    next.style.inset = '0';
-    next.style.transform = 'translateX(60px)';
-    next.style.opacity = '0';
-    next.style.transition = `transform 740ms ${EASING}, opacity 740ms ${EASING}`;
-    rotor.appendChild(next);
-
-    // animate current out left, next in
-    requestAnimationFrame(() => {
-      current.style.transition = `transform 740ms ${EASING}, opacity 740ms ${EASING}`;
-      current.style.transform = 'translateX(-60px)';
-      current.style.opacity = '0';
-
-      next.style.transform = 'translateX(0)';
-      next.style.opacity = '1';
-    });
-
-    // cleanup
-    setTimeout(() => {
-      if (current && current.parentNode === rotor) rotor.removeChild(current);
-      current = next;
-      idx = nextIdx;
-    }, 760);
-  };
-
-  const loop = () => {
-    if (!rotor.isConnected) return;
-    if (items.length <= 1) return;
-    tick();
-    rotor._rotTimer = setTimeout(loop, ROTATE_MS);
-  };
-
-  rotor._rotTimer = setTimeout(loop, ROTATE_MS);
-}
-
-// ---- render fixed rooms (1/2/9/10) ------------------------------
-function fillFixedRoom(roomId, slots) {
-  const roomEl = byId(`room-${roomId}`);
-  if (!roomEl) return;
-
-  const countEl  = roomEl.querySelector('.roomHeader .count em');
-  const eventsEl = roomEl.querySelector('.events');
-  if (!eventsEl) return;
-
-  const cards = (slots || []).map(s => ({
-    ...s,
-    title: normalizeReserveeName(s.title),
+  const rows = rowsCsv.slice(1).map(r => ({
+    location: clean(r[iLoc]),
+    facility: clean(r[iFac]),
+    time:     clean(r[iTime]),
+    reservee: clean(r[iRes]),
+    purpose:  clean(r[iPur]),
   }));
 
-  if (countEl) countEl.textContent = String(cards.length || '0');
-  startRotor(eventsEl, cards);
-}
+  const turfMode = isTurfSeason(rows);
 
-// ---- render fieldhouse (courts 3..8 OR quarter turf NA/NB/SA/SB) ---
-function renderFieldhouse(grouped) {
-  const host = document.getElementById('fieldhousePager');
-  if (!host) return;
+  const now = new Date();
+  const nowMin = now.getHours()*60 + now.getMinutes();
+  const GRACE = 10;
 
-  host.innerHTML = ''; // rebuild fresh each load
+  // Build raw items
+  const items = [];
+  for (const r of rows) {
+    if (!/athletic\s*&\s*event\s*center/i.test(r.location || '')) continue;
+    if (!r.facility || !r.time) continue;
 
-  const turfKeys = ['QT-NA', 'QT-NB', 'QT-SA', 'QT-SB'];
-  const hasTurf = turfKeys.some(k => (grouped[k] || []).length > 0);
+    // skip only the pure maintenance/internal items
+    if (isInstallOrInternal(r.purpose)) continue;
 
-  if (hasTurf) {
-    // 2x2: SA (top-left), NA (top-right), SB (bottom-left), NB (bottom-right)
-    const order = [
-      ['Quarter Turf SA', 'QT-SA'],
-      ['Quarter Turf NA', 'QT-NA'],
-      ['Quarter Turf SB', 'QT-SB'],
-      ['Quarter Turf NB', 'QT-NB'],
-    ];
+    const range = rangeToMinutes(r.time);
+    if (!range) continue;
+    if (range.endMin < (nowMin - GRACE)) continue;
 
-    const grid = document.createElement('div');
-    grid.className = 'rooms-fieldhouse';
-    grid.style.display = 'grid';
-    grid.style.gridTemplateColumns = '1fr 1fr';
-    grid.style.gridTemplateRows = '1fr 1fr';
-    grid.style.gap = '12px';
+    let rooms = mapFacilityToRooms(r.facility);
 
-    order.forEach(([label, key]) => {
-      const card = document.createElement('div');
-      card.className = 'room';
-      card.innerHTML = `
-        <div class="roomHeader">
-          <div class="id">${label}</div>
-          <div class="count">reservations: <em>—</em></div>
-        </div>
-        <div class="events"></div>
-      `;
-      grid.appendChild(card);
+    // Turf expansion
+    if (turfMode && rooms.includes('QT-ALL')) {
+      rooms = ['QT-NA','QT-NB','QT-SA','QT-SB'];
+    }
 
-      const eventsBox = card.querySelector('.events');
-      const count     = card.querySelector('.count em');
-      const items     = (grouped[key] || []).map(s => ({
-        ...s,
-        title: normalizeReserveeName(s.title),
-      }));
-      if (count) count.textContent = String(items.length || '0');
-      startRotor(eventsBox, items);
+    if (!rooms.length) continue;
+
+    const { title, subtitle } = toDisplay(r.reservee, r.purpose);
+
+    items.push({
+      rooms,
+      startMin: range.startMin,
+      endMin:   range.endMin,
+      title, subtitle,
+      orgKey: title.toLowerCase().replace(/\s+/g,' ').trim(),
+      rawFacility: r.facility
     });
-
-    host.appendChild(grid);
-  } else {
-    // Courts 3..8 in a 3x2 grid (3,4,5 / 6,7,8)
-    const order = ['3','4','5','6','7','8'];
-
-    const grid = document.createElement('div');
-    grid.className = 'rooms-fieldhouse';
-    grid.style.display = 'grid';
-    grid.style.gridTemplateColumns = 'repeat(3, 1fr)';
-    grid.style.gridTemplateRows = '1fr 1fr';
-    grid.style.gap = '12px';
-
-    order.forEach(id => {
-      const card = document.createElement('div');
-      card.className = 'room';
-      card.innerHTML = `
-        <div class="roomHeader">
-          <div class="id">${id}</div>
-          <div class="count">reservations: <em>—</em></div>
-        </div>
-        <div class="events"></div>
-      `;
-      grid.appendChild(card);
-
-      const eventsBox = card.querySelector('.events');
-      const count     = card.querySelector('.count em');
-      const items     = (grouped[id] || []).map(s => ({
-        ...s,
-        title: normalizeReserveeName(s.title),
-      }));
-      if (count) count.textContent = String(items.length || '0');
-      startRotor(eventsBox, items);
-    });
-
-    host.appendChild(grid);
   }
-}
 
-// ---- data shaping ------------------------------------------------
-function groupByRoomSlots(slots) {
-  const g = {};
-  for (const s of slots) {
-    if (!g[s.roomId]) g[s.roomId] = [];
-    g[s.roomId].push(s);
+  // Expand for blanket/specific resolution
+  const expanded = [];
+  for (const it of items) {
+    for (const r of it.rooms) {
+      expanded.push({
+        roomId: r,
+        startMin: it.startMin,
+        endMin: it.endMin,
+        title: it.title,
+        subtitle: it.subtitle,
+        orgKey: it.orgKey,
+        rawRoomsCount: it.rooms.length
+      });
+    }
   }
-  // sort each room chronologically
-  Object.values(g).forEach(list => list.sort((a,b) => a.startMin - b.startMin));
-  return g;
-}
 
-function visibleSlots(raw) {
-  const now = nowMinutesLocal();
-  const keepPastFloor = now - NOW_GRACE_MIN;
+  // Blanket vs specific rules:
+  // - If a room occurrence comes from a row that emitted multiple rooms (rawRoomsCount > 1),
+  //   then it's a blanket. Drop it when a same-org overlapping *specific* (rawRoomsCount==1)
+  //   exists for that exact room.
+  // - Additional enhancement: if NO specific exists for *either* half in the family window,
+  //   keep the blanket so “Full Gym 1AB & 2AB” occupies all four when that’s all we have.
+  const result = [];
 
-  return (raw || [])
-    .filter(s => {
-      // drop internal/front-desk/turf-install noise
-      if (isInternalHold(s.subtitle) || isInternalHold(s.title)) return false;
-      // drop stale past events (with grace)
-      if (s.endMin < keepPastFloor) return false;
-      return true;
-    })
-    .map(s => {
-      // Normalize Pickleball
-      if (isPickleball(s.title) || isPickleball(s.subtitle)) {
-        return { ...s, title: 'Open Pickleball', subtitle: '' };
+  // Helper: find if any specific exists for same family/time/org
+  function specificExistsForFamily(slot) {
+    const fam = familyOf(slot.roomId);
+    const famRooms = {
+      south: ['1A','1B','2A','2B'],
+      north: ['9A','9B','10A','10B'],
+      'fieldhouse-courts': ['3','4','5','6','7','8'],
+      'fieldhouse-turf': ['QT-NA','QT-NB','QT-SA','QT-SB']
+    }[fam] || [slot.roomId];
+
+    return expanded.some(sp =>
+      sp !== slot &&
+      famRooms.includes(sp.roomId) &&
+      sp.orgKey === slot.orgKey &&
+      sp.rawRoomsCount === 1 &&
+      overlaps(sp, slot)
+    );
+  }
+
+  for (const slot of expanded) {
+    if (slot.rawRoomsCount > 1) {
+      // blanket
+      const hasSpecificSameRoom = expanded.some(sp =>
+        sp !== slot &&
+        sp.roomId === slot.roomId &&
+        sp.orgKey === slot.orgKey &&
+        sp.rawRoomsCount === 1 &&
+        overlaps(sp, slot)
+      );
+      if (hasSpecificSameRoom) continue;
+
+      // if no specific in the whole family, keep blanket so it occupies the family
+      // otherwise, keep blanket for rooms that were not covered by specifics
+      // (the check above already drops the specific-covered room case)
+      if (specificExistsForFamily(slot)) {
+        // already dropped specific-covered rooms; keep this blanket for uncovered rooms
+        result.push({ ...slot });
+      } else {
+        // no specifics anywhere: keep blanket (e.g., Chicago Sport & Social booking all courts)
+        result.push({ ...slot });
       }
-      return s;
-    });
+    } else {
+      // specific
+      result.push({ ...slot });
+    }
+  }
+
+  // Final sort
+  result.sort((a,b) => a.roomId.localeCompare(b.roomId) || a.startMin - b.startMin);
+
+  // Write out
+  writeScaffold(result);
+
+  // Debug line
+  const byRoom = {};
+  for (const s of result) byRoom[s.roomId] = (byRoom[s.roomId]||0)+1;
+  console.log(`transform: season=${turfMode ? 'turf' : 'courts'} • slots=${result.length} • byRoom=${JSON.stringify(byRoom)}`);
 }
 
-// ---- clock/date --------------------------------------------------
-function startClock() {
-  const dEl = byId('headerDate');
-  const cEl = byId('headerClock');
+function writeScaffold(slots) {
+  const out = {
+    dayStartMin: 360,
+    dayEndMin: 1380,
+    rooms: [
+      { id: '1A',  label: '1A', group: 'south' },
+      { id: '1B',  label: '1B', group: 'south' },
+      { id: '2A',  label: '2A', group: 'south' },
+      { id: '2B',  label: '2B', group: 'south' },
 
-  const tick = () => {
-    const d = new Date();
-    const day  = d.toLocaleDateString(undefined, { weekday: 'long' });
-    const date = d.toLocaleDateString(undefined, { month: 'long', day: 'numeric', year: 'numeric' });
-    const time = d.toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' });
-    if (dEl) dEl.textContent = `${day}, ${date}`;
-    if (cEl) cEl.textContent = time;
+      // Fieldhouse 3..8 (court season) — the UI will detect turf (QT-*) and swap layout automatically
+      { id: '3',   label: '3',  group: 'fieldhouse' },
+      { id: '4',   label: '4',  group: 'fieldhouse' },
+      { id: '5',   label: '5',  group: 'fieldhouse' },
+      { id: '6',   label: '6',  group: 'fieldhouse' },
+      { id: '7',   label: '7',  group: 'fieldhouse' },
+      { id: '8',   label: '8',  group: 'fieldhouse' },
+
+      { id: '9A',  label: '9A', group: 'north' },
+      { id: '9B',  label: '9B', group: 'north' },
+      { id: '10A', label: '10A',group: 'north' },
+      { id: '10B', label: '10B',group: 'north' }
+    ],
+    slots
   };
-  tick();
-  setInterval(tick, 1000);
+  fs.writeFileSync(OUTPUT_JSON, JSON.stringify(out, null, 2));
 }
 
-// ---- boot --------------------------------------------------------
-async function boot() {
-  startClock();
-
-  // Cache-busted fetch
-  const res = await fetch(`./events.json?cb=${Date.now()}`, { cache: 'no-store' });
-  const data = await res.json();
-
-  const all = visibleSlots(Array.isArray(data?.slots) ? data.slots : []);
-
-  // Group per room id
-  const grouped = groupByRoomSlots(all);
-
-  // Fixed rooms (your HTML IDs exist for each of these)
-  ['1A','1B','2A','2B','9A','9B','10A','10B'].forEach(id => {
-    fillFixedRoom(id, grouped[id] || []);
-  });
-
-  // Fieldhouse / Turf (auto)
-  renderFieldhouse(grouped);
-
-  // debug to console
-  const nonEmpty = Object.fromEntries(Object.entries(grouped).filter(([,v]) => v.length));
-  console.log('events.json loaded:', { totalSlots: all.length, nonEmptyRooms: nonEmpty });
-}
-
-boot().catch(err => {
-  console.error('app init failed:', err);
-});
+main();
