@@ -1,4 +1,4 @@
-// app.js — safe renderer for RAEC board
+// app.js — safe renderer for RAEC board (matches your HTML)
 // ------------------------------------------------------------
 
 const NOW_GRACE_MIN = 10;          // keep events that just ended within 10 min
@@ -14,30 +14,35 @@ const fmtTime = (m) => {
   const ampm = h < 12 ? 'AM' : 'PM';
   return `${h12}:${mm} ${ampm}`;
 };
-const clamp = (n, a, b) => Math.max(a, Math.min(b, n));
 
-// Name cleaner: "Last, First" => "First Last"
 function normalizeReserveeName(raw) {
   const s = String(raw || '').trim();
-  // remove doubled org repetition like "X, X"
-  if (/,/.test(s)) {
-    const [a, ...rest] = s.split(',');
+  if (!s) return '';
+  // Fix trailing "(" artifacts
+  const cleaned = s.replace(/\s*\($/, '');
+  // "Last, First" → "First Last" when it looks like a person
+  if (cleaned.includes(',')) {
+    const [left, ...rest] = cleaned.split(',');
     const right = rest.join(',').trim();
-    // If right looks like "First Last" and left is single token => swap
-    if (/^[A-Za-z'.-]+\s+[A-Za-z'.-]+/.test(right) && /^[A-Za-z'.-]+$/.test(a.trim())) {
-      return `${right} ${a}`.replace(/\s+/g, ' ').trim();
+    if (/^[A-Za-z'.-]+\s+[A-Za-z'.-]+/.test(right) && /^[A-Za-z'.-]+$/.test(left.trim())) {
+      return `${right} ${left}`.replace(/\s+/g, ' ').trim();
     }
   }
-  return s.replace(/\s*\($/, '').trim(); // strip accidental trailing "("
+  return cleaned;
 }
 
-function isInternalHold(purpose) {
-  const s = String(purpose || '').toLowerCase();
-  return /internal hold per nm|installed per nm|hold per nm/.test(s);
+function isInternalHold(s) {
+  const t = String(s || '').toLowerCase();
+  return (
+    /internal hold per nm/.test(t) ||
+    /installed per nm/.test(t) ||
+    /hold per nm/.test(t) ||
+    /raec front desk/.test(t)
+  );
 }
 
-function isPickleball(titleOrPurpose) {
-  return /pickleball/i.test(String(titleOrPurpose || ''));
+function isPickleball(s) {
+  return /pickleball/i.test(String(s || ''));
 }
 
 function nowMinutesLocal() {
@@ -45,27 +50,66 @@ function nowMinutesLocal() {
   return d.getHours() * 60 + d.getMinutes();
 }
 
-// ---- rotor (single card) ---------------------------------------
-function startRotor(container, items) {
-  // Defensive: container must exist
-  if (!container) return;
+// ---- card + rotor ----------------------------------------------
+function renderCard(slot) {
+  const el = document.createElement('div');
+  el.className = 'event';
 
-  // Clean slate
-  container.innerHTML = '';
+  const who = document.createElement('div');
+  who.className = 'who';
+  who.textContent = slot.title || '';
 
-  // Nothing -> render nothing
-  if (!items || items.length === 0) return;
+  const what = document.createElement('div');
+  what.className = 'what';
+  if (slot.subtitle) {
+    what.textContent = slot.subtitle;
+  }
 
-  // If only one, just render static and do NOT animate
-  if (items.length === 1) {
-    container.appendChild(renderCard(items[0]));
+  const when = document.createElement('div');
+  when.className = 'when';
+  when.textContent = `${fmtTime(slot.startMin)} – ${fmtTime(slot.endMin)}`;
+
+  el.appendChild(who);
+  if (slot.subtitle) el.appendChild(what);
+  el.appendChild(when);
+  return el;
+}
+
+/**
+ * Start a rotor inside the room's ".events" box.
+ * If there is no ".single-rotor" child, we create one.
+ */
+function startRotor(eventsBox, items) {
+  if (!eventsBox) return;
+
+  // Ensure a rotor element exists
+  let rotor = eventsBox.querySelector('.single-rotor');
+  if (!rotor) {
+    rotor = document.createElement('div');
+    rotor.className = 'single-rotor';
+    eventsBox.innerHTML = '';
+    eventsBox.appendChild(rotor);
+  }
+
+  // Clean previous content/timers
+  rotor._rotTimer && clearTimeout(rotor._rotTimer);
+  rotor.innerHTML = '';
+
+  if (!items || items.length === 0) {
+    // Render nothing if empty
     return;
   }
 
-  // Otherwise, rotate
+  if (items.length === 1) {
+    // Single card, no animation
+    rotor.appendChild(renderCard(items[0]));
+    return;
+  }
+
+  // Rotate multiple
   let idx = 0;
   let current = renderCard(items[idx]);
-  container.appendChild(current);
+  rotor.appendChild(current);
 
   const tick = () => {
     const nextIdx = (idx + 1) % items.length;
@@ -77,7 +121,7 @@ function startRotor(container, items) {
     next.style.transform = 'translateX(60px)';
     next.style.opacity = '0';
     next.style.transition = `transform 740ms ${EASING}, opacity 740ms ${EASING}`;
-    container.appendChild(next);
+    rotor.appendChild(next);
 
     // animate current out left, next in
     requestAnimationFrame(() => {
@@ -91,43 +135,20 @@ function startRotor(container, items) {
 
     // cleanup
     setTimeout(() => {
-      if (current && current.parentNode === container) container.removeChild(current);
+      if (current && current.parentNode === rotor) rotor.removeChild(current);
       current = next;
       idx = nextIdx;
     }, 760);
   };
 
   const loop = () => {
-    // Skip anim if items length collapsed to 1 somehow
-    if (!container.isConnected) return;
+    if (!rotor.isConnected) return;
     if (items.length <= 1) return;
     tick();
-    container._rotTimer = setTimeout(loop, ROTATE_MS);
+    rotor._rotTimer = setTimeout(loop, ROTATE_MS);
   };
 
-  container._rotTimer && clearTimeout(container._rotTimer);
-  container._rotTimer = setTimeout(loop, ROTATE_MS);
-}
-
-function renderCard(slot) {
-  const el = document.createElement('div');
-  el.className = 'event';
-  const who = document.createElement('div');
-  who.className = 'who';
-  who.textContent = slot.title || '';
-
-  const what = document.createElement('div');
-  what.className = 'what';
-  what.textContent = slot.subtitle || '';
-
-  const when = document.createElement('div');
-  when.className = 'when';
-  when.textContent = `${fmtTime(slot.startMin)} – ${fmtTime(slot.endMin)}`;
-
-  el.appendChild(who);
-  if (slot.subtitle) el.appendChild(what);
-  el.appendChild(when);
-  return el;
+  rotor._rotTimer = setTimeout(loop, ROTATE_MS);
 }
 
 // ---- render fixed rooms (1/2/9/10) ------------------------------
@@ -135,34 +156,31 @@ function fillFixedRoom(roomId, slots) {
   const roomEl = byId(`room-${roomId}`);
   if (!roomEl) return;
 
-  const countEl = roomEl.querySelector('.roomHeader .count em');
-  const rotorEl = roomEl.querySelector('.events .single-rotor');
-  if (!rotorEl) return;
+  const countEl  = roomEl.querySelector('.roomHeader .count em');
+  const eventsEl = roomEl.querySelector('.events');
+  if (!eventsEl) return;
 
-  // Per room, one card at a time
-  const cards = slots.map(s => ({
+  const cards = (slots || []).map(s => ({
     ...s,
     title: normalizeReserveeName(s.title),
   }));
 
-  // update count
-  countEl && (countEl.textContent = String(cards.length || '0'));
-  startRotor(rotorEl, cards);
+  if (countEl) countEl.textContent = String(cards.length || '0');
+  startRotor(eventsEl, cards);
 }
 
 // ---- render fieldhouse (courts 3..8 OR quarter turf NA/NB/SA/SB) ---
 function renderFieldhouse(grouped) {
-  const host = document.getElementById('fieldhousePager') || document.querySelector('.rooms-fieldhouse');
+  const host = document.getElementById('fieldhousePager');
   if (!host) return;
 
-  // If the page already has cards built into HTML (static 3x2), clear it and rebuild:
-  host.innerHTML = '';
+  host.innerHTML = ''; // rebuild fresh each load
 
-  const turfKeys = ['NA', 'NB', 'SA', 'SB'];
-  const hasTurf = turfKeys.some(k => grouped[`QT-${k}`] && grouped[`QT-${k}`].length);
+  const turfKeys = ['QT-NA', 'QT-NB', 'QT-SA', 'QT-SB'];
+  const hasTurf = turfKeys.some(k => (grouped[k] || []).length > 0);
 
   if (hasTurf) {
-    // Build 2x2 grid: SA (top-left), NA (top-right), SB (bottom-left), NB (bottom-right)
+    // 2x2: SA (top-left), NA (top-right), SB (bottom-left), NB (bottom-right)
     const order = [
       ['Quarter Turf SA', 'QT-SA'],
       ['Quarter Turf NA', 'QT-NA'],
@@ -170,7 +188,6 @@ function renderFieldhouse(grouped) {
       ['Quarter Turf NB', 'QT-NB'],
     ];
 
-    // wrapper grid that matches your CSS for fieldhouse
     const grid = document.createElement('div');
     grid.className = 'rooms-fieldhouse';
     grid.style.display = 'grid';
@@ -186,23 +203,25 @@ function renderFieldhouse(grouped) {
           <div class="id">${label}</div>
           <div class="count">reservations: <em>—</em></div>
         </div>
-        <div class="events"><div class="single-rotor"></div></div>
+        <div class="events"></div>
       `;
       grid.appendChild(card);
 
-      const rotor = card.querySelector('.single-rotor');
-      const count = card.querySelector('.count em');
-      const items = (grouped[key] || []).map(s => ({
+      const eventsBox = card.querySelector('.events');
+      const count     = card.querySelector('.count em');
+      const items     = (grouped[key] || []).map(s => ({
         ...s,
         title: normalizeReserveeName(s.title),
       }));
-      count.textContent = String(items.length || '0');
-      startRotor(rotor, items);
+      if (count) count.textContent = String(items.length || '0');
+      startRotor(eventsBox, items);
     });
 
     host.appendChild(grid);
   } else {
     // Courts 3..8 in a 3x2 grid (3,4,5 / 6,7,8)
+    const order = ['3','4','5','6','7','8'];
+
     const grid = document.createElement('div');
     grid.className = 'rooms-fieldhouse';
     grid.style.display = 'grid';
@@ -210,7 +229,6 @@ function renderFieldhouse(grouped) {
     grid.style.gridTemplateRows = '1fr 1fr';
     grid.style.gap = '12px';
 
-    const order = ['3','4','5','6','7','8'];
     order.forEach(id => {
       const card = document.createElement('div');
       card.className = 'room';
@@ -219,18 +237,18 @@ function renderFieldhouse(grouped) {
           <div class="id">${id}</div>
           <div class="count">reservations: <em>—</em></div>
         </div>
-        <div class="events"><div class="single-rotor"></div></div>
+        <div class="events"></div>
       `;
       grid.appendChild(card);
 
-      const rotor = card.querySelector('.single-rotor');
-      const count = card.querySelector('.count em');
-      const items = (grouped[id] || []).map(s => ({
+      const eventsBox = card.querySelector('.events');
+      const count     = card.querySelector('.count em');
+      const items     = (grouped[id] || []).map(s => ({
         ...s,
         title: normalizeReserveeName(s.title),
       }));
-      count.textContent = String(items.length || '0');
-      startRotor(rotor, items);
+      if (count) count.textContent = String(items.length || '0');
+      startRotor(eventsBox, items);
     });
 
     host.appendChild(grid);
@@ -255,22 +273,16 @@ function visibleSlots(raw) {
 
   return (raw || [])
     .filter(s => {
-      // drop "internal hold per NM"
+      // drop internal/front-desk/turf-install noise
       if (isInternalHold(s.subtitle) || isInternalHold(s.title)) return false;
-
-      // drop stale past events
+      // drop stale past events (with grace)
       if (s.endMin < keepPastFloor) return false;
-
       return true;
     })
     .map(s => {
-      // Pickleball normalization
+      // Normalize Pickleball
       if (isPickleball(s.title) || isPickleball(s.subtitle)) {
-        return {
-          ...s,
-          title: 'Open Pickleball',
-          subtitle: '',
-        };
+        return { ...s, title: 'Open Pickleball', subtitle: '' };
       }
       return s;
     });
@@ -283,10 +295,9 @@ function startClock() {
 
   const tick = () => {
     const d = new Date();
-    const day = d.toLocaleDateString(undefined, { weekday: 'long' });
+    const day  = d.toLocaleDateString(undefined, { weekday: 'long' });
     const date = d.toLocaleDateString(undefined, { month: 'long', day: 'numeric', year: 'numeric' });
     const time = d.toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' });
-
     if (dEl) dEl.textContent = `${day}, ${date}`;
     if (cEl) cEl.textContent = time;
   };
@@ -307,20 +318,17 @@ async function boot() {
   // Group per room id
   const grouped = groupByRoomSlots(all);
 
-  // Fixed rooms
+  // Fixed rooms (your HTML IDs exist for each of these)
   ['1A','1B','2A','2B','9A','9B','10A','10B'].forEach(id => {
     fillFixedRoom(id, grouped[id] || []);
   });
 
-  // Fieldhouse / Turf
+  // Fieldhouse / Turf (auto)
   renderFieldhouse(grouped);
 
   // debug to console
   const nonEmpty = Object.fromEntries(Object.entries(grouped).filter(([,v]) => v.length));
-  console.log('events.json loaded:', {
-    totalSlots: all.length,
-    nonEmptyRooms: nonEmpty
-  });
+  console.log('events.json loaded:', { totalSlots: all.length, nonEmptyRooms: nonEmpty });
 }
 
 boot().catch(err => {
