@@ -75,85 +75,186 @@
   ],
   "slots": [
     {
+      "roomId": "3",
+      "startMin": 540,
+      "endMin": 1380,
+      "title": "Reservation",
+      "subtitle": "Turf Season per NM"
+    },
+    {
+      "roomId": "4",
+      "startMin": 540,
+      "endMin": 1380,
+      "title": "Reservation",
+      "subtitle": "Turf Season per NM"
+    },
+    {
+      "roomId": "5",
+      "startMin": 540,
+      "endMin": 1380,
+      "title": "Reservation",
+      "subtitle": "Turf Season per NM"
+    },
+    {
+      "roomId": "6",
+      "startMin": 540,
+      "endMin": 1380,
+      "title": "Reservation",
+      "subtitle": "Turf Season per NM"
+    },
+    {
+      "roomId": "7",
+      "startMin": 540,
+      "endMin": 1380,
+      "title": "Reservation",
+      "subtitle": "Turf Season per NM"
+    },
+    {
+      "roomId": "8",
+      "startMin": 540,
+      "endMin": 1380,
+      "title": "Reservation",
+      "subtitle": "Turf Season per NM"
+    },
+    {
+      "roomId": "10A",
+      "startMin": 570,
+      "endMin": 750,
+      "title": "Open Pickleball",
+      "subtitle": ""
+    },
+    {
+      "roomId": "10B",
+      "startMin": 570,
+      "endMin": 750,
+      "title": "Open Pickleball",
+      "subtitle": ""
+    },
+    {
       "roomId": "9A",
-      "startMin": 1080,
-      "endMin": 1260,
-      "title": "D1 Training (Stay 22uned",
-      "subtitle": "Basketball",
-      "org": "D1 Training (Stay 22uned",
-      "contact": "Inc.), D1 Training (Stay 22uned, Inc.)"
+      "startMin": 570,
+      "endMin": 750,
+      "title": "Open Pickleball",
+      "subtitle": ""
     },
     {
       "roomId": "9B",
+      "startMin": 570,
+      "endMin": 750,
+      "title": "Open Pickleball",
+      "subtitle": ""
+    },
+    {
+      "roomId": "1A",
       "startMin": 1080,
-      "endMin": 1260,
-      "title": "D1 Training (Stay 22uned",
-      "subtitle": "Basketball",
-      "org": "D1 Training (Stay 22uned",
-      "contact": "Inc.), D1 Training (Stay 22uned, Inc.)"
+      "endMin": 1170,
+      "title": "WELCH VB",
+      "subtitle": "Volleyball"
+    },
+    {
+      "roomId": "1B",
+      "startMin": 1080,
+      "endMin": 1170,
+      "title": "WELCH VB",
+      "subtitle": "Volleyball"
+    },
+    {
+      "roomId": "2A",
+      "startMin": 1080,
+      "endMin": 1170,
+      "title": "WELCH VB",
+      "subtitle": "Volleyball"
+    },
+    {
+      "roomId": "2B",
+      "startMin": 1080,
+      "endMin": 1170,
+      "title": "WELCH VB",
+      "subtitle": "Volleyball"
     },
     {
       "roomId": "10A",
       "startMin": 1080,
       "endMin": 1260,
-      "title": "D1 Training (Stay 22uned",
-      "subtitle": "Basketball",
-      "org": "D1 Training (Stay 22uned",
-      "contact": "Inc.), D1 Training (Stay 22uned, Inc.)"
+      "title": "D1 Training (Stay 22uned, Inc.), D1 Training (Stay 22uned, Inc.)",
+      "subtitle": "Basketball"
     },
     {
       "roomId": "10B",
       "startMin": 1080,
       "endMin": 1260,
-      "title": "D1 Training (Stay 22uned",
-      "subtitle": "Basketball",
-      "org": "D1 Training (Stay 22uned",
-      "contact": "Inc.), D1 Training (Stay 22uned, Inc.)"
+      "title": "D1 Training (Stay 22uned, Inc.), D1 Training (Stay 22uned, Inc.)",
+      "subtitle": "Basketball"
+    },
+    {
+      "roomId": "9A",
+      "startMin": 1080,
+      "endMin": 1260,
+      "title": "D1 Training (Stay 22uned, Inc.), D1 Training (Stay 22uned, Inc.)",
+      "subtitle": "Basketball"
+    },
+    {
+      "roomId": "9B",
+      "startMin": 1080,
+      "endMin": 1260,
+      "title": "D1 Training (Stay 22uned, Inc.), D1 Training (Stay 22uned, Inc.)",
+      "subtitle": "Basketball"
+    },
+    {
+      "roomId": "2A",
+      "startMin": 1140,
+      "endMin": 1260,
+      "title": "Extreme Volleyball",
+      "subtitle": "Volleyball"
     },
     {
       "roomId": "2B",
       "startMin": 1140,
       "endMin": 1260,
       "title": "Extreme Volleyball",
-      "subtitle": "Volleyball",
-      "org": "Extreme Volleyball",
-      "contact": "Extreme Volleyball"
+      "subtitle": "Volleyball"
+    },
+    {
+      "roomId": "1A",
+      "startMin": 1140,
+      "endMin": 1260,
+      "title": "Extreme Volleyball",
+      "subtitle": "Volleyball"
+    },
+    {
+      "roomId": "1B",
+      "startMin": 1140,
+      "endMin": 1260,
+      "title": "Extreme Volleyball",
+      "subtitle": "Volleyball"
     },
     {
       "roomId": "1A",
       "startMin": 1260,
       "endMin": 1380,
       "title": "Chicago Sport and Social Club",
-      "subtitle": "Volleyball (Grab A Game",
-      "org": "Chicago Sport and Social Club",
-      "contact": "Chicago Sport and Social Club"
+      "subtitle": "Volleyball (Grab A Game"
     },
     {
       "roomId": "1B",
       "startMin": 1260,
       "endMin": 1380,
       "title": "Chicago Sport and Social Club",
-      "subtitle": "Volleyball (Grab A Game",
-      "org": "Chicago Sport and Social Club",
-      "contact": "Chicago Sport and Social Club"
+      "subtitle": "Volleyball (Grab A Game"
     },
     {
       "roomId": "2A",
       "startMin": 1260,
       "endMin": 1380,
       "title": "Chicago Sport and Social Club",
-      "subtitle": "Volleyball (Grab A Game",
-      "org": "Chicago Sport and Social Club",
-      "contact": "Chicago Sport and Social Club"
+      "subtitle": "Volleyball (Grab A Game"
     },
     {
       "roomId": "2B",
       "startMin": 1260,
       "endMin": 1380,
       "title": "Chicago Sport and Social Club",
-      "subtitle": "Volleyball (Grab A Game",
-      "org": "Chicago Sport and Social Club",
-      "contact": "Chicago Sport and Social Club"
+      "subtitle": "Volleyball (Grab A Game"
     }
   ]
 }
