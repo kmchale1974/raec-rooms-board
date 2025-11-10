@@ -75,76 +75,85 @@
   ],
   "slots": [
     {
-      "roomId": "1A",
-      "startMin": 540,
-      "endMin": 1320,
-      "title": "3 Step Sports",
-      "subtitle": "3 STEP SPORTS",
-      "org": "3 Step Sports",
-      "contact": "Ray Glassman"
-    },
-    {
-      "roomId": "1B",
-      "startMin": 540,
-      "endMin": 1320,
-      "title": "3 Step Sports",
-      "subtitle": "3 STEP SPORTS",
-      "org": "3 Step Sports",
-      "contact": "Ray Glassman"
-    },
-    {
-      "roomId": "2A",
-      "startMin": 540,
-      "endMin": 1320,
-      "title": "3 Step Sports",
-      "subtitle": "3 STEP SPORTS",
-      "org": "3 Step Sports",
-      "contact": "Ray Glassman"
-    },
-    {
-      "roomId": "2B",
-      "startMin": 540,
-      "endMin": 1320,
-      "title": "3 Step Sports",
-      "subtitle": "3 STEP SPORTS",
-      "org": "3 Step Sports",
-      "contact": "Ray Glassman"
-    },
-    {
       "roomId": "9A",
-      "startMin": 540,
-      "endMin": 1320,
-      "title": "3 Step Sports",
-      "subtitle": "3 STEP SPORTS",
-      "org": "3 Step Sports",
-      "contact": "Ray Glassman"
+      "startMin": 1080,
+      "endMin": 1260,
+      "title": "D1 Training (Stay 22uned",
+      "subtitle": "Basketball",
+      "org": "D1 Training (Stay 22uned",
+      "contact": "Inc.), D1 Training (Stay 22uned, Inc.)"
     },
     {
       "roomId": "9B",
-      "startMin": 540,
-      "endMin": 1320,
-      "title": "3 Step Sports",
-      "subtitle": "3 STEP SPORTS",
-      "org": "3 Step Sports",
-      "contact": "Ray Glassman"
+      "startMin": 1080,
+      "endMin": 1260,
+      "title": "D1 Training (Stay 22uned",
+      "subtitle": "Basketball",
+      "org": "D1 Training (Stay 22uned",
+      "contact": "Inc.), D1 Training (Stay 22uned, Inc.)"
     },
     {
       "roomId": "10A",
-      "startMin": 540,
-      "endMin": 1320,
-      "title": "3 Step Sports",
-      "subtitle": "3 STEP SPORTS",
-      "org": "3 Step Sports",
-      "contact": "Ray Glassman"
+      "startMin": 1080,
+      "endMin": 1260,
+      "title": "D1 Training (Stay 22uned",
+      "subtitle": "Basketball",
+      "org": "D1 Training (Stay 22uned",
+      "contact": "Inc.), D1 Training (Stay 22uned, Inc.)"
     },
     {
       "roomId": "10B",
-      "startMin": 540,
-      "endMin": 1320,
-      "title": "3 Step Sports",
-      "subtitle": "3 STEP SPORTS",
-      "org": "3 Step Sports",
-      "contact": "Ray Glassman"
+      "startMin": 1080,
+      "endMin": 1260,
+      "title": "D1 Training (Stay 22uned",
+      "subtitle": "Basketball",
+      "org": "D1 Training (Stay 22uned",
+      "contact": "Inc.), D1 Training (Stay 22uned, Inc.)"
+    },
+    {
+      "roomId": "2B",
+      "startMin": 1140,
+      "endMin": 1260,
+      "title": "Extreme Volleyball",
+      "subtitle": "Volleyball",
+      "org": "Extreme Volleyball",
+      "contact": "Extreme Volleyball"
+    },
+    {
+      "roomId": "1A",
+      "startMin": 1260,
+      "endMin": 1380,
+      "title": "Chicago Sport and Social Club",
+      "subtitle": "Volleyball (Grab A Game",
+      "org": "Chicago Sport and Social Club",
+      "contact": "Chicago Sport and Social Club"
+    },
+    {
+      "roomId": "1B",
+      "startMin": 1260,
+      "endMin": 1380,
+      "title": "Chicago Sport and Social Club",
+      "subtitle": "Volleyball (Grab A Game",
+      "org": "Chicago Sport and Social Club",
+      "contact": "Chicago Sport and Social Club"
+    },
+    {
+      "roomId": "2A",
+      "startMin": 1260,
+      "endMin": 1380,
+      "title": "Chicago Sport and Social Club",
+      "subtitle": "Volleyball (Grab A Game",
+      "org": "Chicago Sport and Social Club",
+      "contact": "Chicago Sport and Social Club"
+    },
+    {
+      "roomId": "2B",
+      "startMin": 1260,
+      "endMin": 1380,
+      "title": "Chicago Sport and Social Club",
+      "subtitle": "Volleyball (Grab A Game",
+      "org": "Chicago Sport and Social Club",
+      "contact": "Chicago Sport and Social Club"
     }
   ]
 }
