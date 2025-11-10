@@ -1,261 +1,328 @@
-/* app.js – dynamic fieldhouse + robust rendering
-   - Detect turf vs court from events.json (rooms include NA/NB/SA/SB)
-   - Build middle column cards (#fieldhousePager) accordingly
-   - Cache-busted fetch + no-store
-   - Show full names; hide empty subtitles
-   - Only animate if >1 upcoming event
-*/
+// app.js — safe renderer for RAEC board
+// ------------------------------------------------------------
 
-(function () {
-  const TICK_MS = 1000;
-  const ROTATE_MS = 8000;
-  const SLIDE_MS = 420;
-  const NOW_PAD_MIN = 0; // don’t show events that already ended
+const NOW_GRACE_MIN = 10;          // keep events that just ended within 10 min
+const ROTATE_MS      = 8000;       // only used when >1 event in a room
+const EASING         = 'cubic-bezier(.22,.61,.36,1)';
 
-  // South/North fixed in HTML
-  const FIXED_ROOM_IDS = ['1A','1B','2A','2B','9A','9B','10A','10B'];
+// ---- tiny utils ------------------------------------------------
+const byId = (id) => document.getElementById(id);
+const fmtTime = (m) => {
+  const h = Math.floor(m / 60);
+  const mm = String(m % 60).padStart(2, '0');
+  const h12 = ((h + 11) % 12) + 1;
+  const ampm = h < 12 ? 'AM' : 'PM';
+  return `${h12}:${mm} ${ampm}`;
+};
+const clamp = (n, a, b) => Math.max(a, Math.min(b, n));
 
-  // ---------- Time helpers ----------
-  function minutesToRangeText(startMin, endMin) {
-    const fmt = m => {
-      let h = Math.floor(m / 60);
-      const min = m % 60;
-      const mer = h >= 12 ? 'pm' : 'am';
-      if (h === 0) h = 12;
-      else if (h > 12) h -= 12;
-      return `${h}:${String(min).padStart(2, '0')}${mer}`;
-    };
-    return `${fmt(startMin)} – ${fmt(endMin)}`;
-  }
-  function nowMinutes() {
-    const d = new Date();
-    return d.getHours() * 60 + d.getMinutes();
-  }
-
-  // ---------- DOM helpers ----------
-  const $ = (q, root=document) => root.querySelector(q);
-  const $$ = (q, root=document) => Array.from(root.querySelectorAll(q));
-
-  function cleanSubtitle(s) {
-    if (!s) return '';
-    return String(s).replace(/\s+/g, ' ').trim();
-  }
-
-  function createRoomCard(id, labelText) {
-    const wrap = document.createElement('div');
-    wrap.className = 'room';
-    wrap.id = `room-${id}`;
-
-    const header = document.createElement('div');
-    header.className = 'roomHeader';
-    const left = document.createElement('div');
-    left.className = 'id';
-    left.textContent = labelText || id;
-    const right = document.createElement('div');
-    right.className = 'count';
-    right.innerHTML = 'reservations: <em>—</em>';
-    header.appendChild(left);
-    header.appendChild(right);
-
-    const events = document.createElement('div');
-    events.className = 'events';
-    const rotor = document.createElement('div');
-    rotor.className = 'single-rotor';
-    events.appendChild(rotor);
-
-    wrap.appendChild(header);
-    wrap.appendChild(events);
-    return wrap;
-  }
-
-  function setRoomCount(roomEl, count) {
-    if (!roomEl) return;
-    const badge = $('.roomHeader .count em', roomEl);
-    if (badge) badge.textContent = String(count);
-  }
-
-  function createEventCard(slot) {
-    const card = document.createElement('div');
-    card.className = 'event';
-
-    const who = document.createElement('div');
-    who.className = 'who';
-    who.textContent = slot.title || '';
-    card.appendChild(who);
-
-    const sub = cleanSubtitle(slot.subtitle);
-    if (sub) {
-      const what = document.createElement('div');
-      what.className = 'what';
-      what.textContent = sub;
-      card.appendChild(what);
+// Name cleaner: "Last, First" => "First Last"
+function normalizeReserveeName(raw) {
+  const s = String(raw || '').trim();
+  // remove doubled org repetition like "X, X"
+  if (/,/.test(s)) {
+    const [a, ...rest] = s.split(',');
+    const right = rest.join(',').trim();
+    // If right looks like "First Last" and left is single token => swap
+    if (/^[A-Za-z'.-]+\s+[A-Za-z'.-]+/.test(right) && /^[A-Za-z'.-]+$/.test(a.trim())) {
+      return `${right} ${a}`.replace(/\s+/g, ' ').trim();
     }
+  }
+  return s.replace(/\s*\($/, '').trim(); // strip accidental trailing "("
+}
 
-    const when = document.createElement('div');
-    when.className = 'when';
-    when.textContent = minutesToRangeText(slot.startMin, slot.endMin);
-    card.appendChild(when);
+function isInternalHold(purpose) {
+  const s = String(purpose || '').toLowerCase();
+  return /internal hold per nm|installed per nm|hold per nm/.test(s);
+}
 
-    return card;
+function isPickleball(titleOrPurpose) {
+  return /pickleball/i.test(String(titleOrPurpose || ''));
+}
+
+function nowMinutesLocal() {
+  const d = new Date();
+  return d.getHours() * 60 + d.getMinutes();
+}
+
+// ---- rotor (single card) ---------------------------------------
+function startRotor(container, items) {
+  // Defensive: container must exist
+  if (!container) return;
+
+  // Clean slate
+  container.innerHTML = '';
+
+  // Nothing -> render nothing
+  if (!items || items.length === 0) return;
+
+  // If only one, just render static and do NOT animate
+  if (items.length === 1) {
+    container.appendChild(renderCard(items[0]));
+    return;
   }
 
-  // ---------- Rotor (animate only if >1) ----------
-  function startRotor(container, events) {
-    if (!container) return;
-    container.innerHTML = '';
+  // Otherwise, rotate
+  let idx = 0;
+  let current = renderCard(items[idx]);
+  container.appendChild(current);
 
-    if (!events || events.length === 0) return;
+  const tick = () => {
+    const nextIdx = (idx + 1) % items.length;
+    const next = renderCard(items[nextIdx]);
 
-    if (events.length === 1) {
-      container.appendChild(createEventCard(events[0]));
-      return; // no animation
-    }
+    // stage next off to the right
+    next.style.position = 'absolute';
+    next.style.inset = '0';
+    next.style.transform = 'translateX(60px)';
+    next.style.opacity = '0';
+    next.style.transition = `transform 740ms ${EASING}, opacity 740ms ${EASING}`;
+    container.appendChild(next);
 
-    let idx = 0;
-    const place = i => {
-      const el = createEventCard(events[i]);
-      el.style.position = 'absolute';
-      el.style.inset = '0';
-      return el;
-    };
+    // animate current out left, next in
+    requestAnimationFrame(() => {
+      current.style.transition = `transform 740ms ${EASING}, opacity 740ms ${EASING}`;
+      current.style.transform = 'translateX(-60px)';
+      current.style.opacity = '0';
 
-    let curr = place(idx);
-    container.appendChild(curr);
+      next.style.transform = 'translateX(0)';
+      next.style.opacity = '1';
+    });
 
-    const step = () => {
-      const nextIdx = (idx + 1) % events.length;
-      const next = place(nextIdx);
-      next.style.opacity = '0';
-      next.style.transform = 'translateX(60px)';
-      container.appendChild(next);
+    // cleanup
+    setTimeout(() => {
+      if (current && current.parentNode === container) container.removeChild(current);
+      current = next;
+      idx = nextIdx;
+    }, 760);
+  };
 
-      requestAnimationFrame(() => {
-        curr.style.transition = `transform ${SLIDE_MS}ms cubic-bezier(.22,.61,.36,1), opacity ${SLIDE_MS}ms cubic-bezier(.22,.61,.36,1)`;
-        curr.style.transform = 'translateX(-60px)';
-        curr.style.opacity = '0';
+  const loop = () => {
+    // Skip anim if items length collapsed to 1 somehow
+    if (!container.isConnected) return;
+    if (items.length <= 1) return;
+    tick();
+    container._rotTimer = setTimeout(loop, ROTATE_MS);
+  };
 
-        next.style.transition = `transform ${SLIDE_MS}ms cubic-bezier(.22,.61,.36,1), opacity ${SLIDE_MS}ms cubic-bezier(.22,.61,.36,1)`;
-        next.style.transform = 'translateX(0)';
-        next.style.opacity = '1';
+  container._rotTimer && clearTimeout(container._rotTimer);
+  container._rotTimer = setTimeout(loop, ROTATE_MS);
+}
 
-        setTimeout(() => {
-          try { container.removeChild(curr); } catch {}
-          curr = next;
-          idx = nextIdx;
-        }, SLIDE_MS + 20);
-      });
-    };
+function renderCard(slot) {
+  const el = document.createElement('div');
+  el.className = 'event';
+  const who = document.createElement('div');
+  who.className = 'who';
+  who.textContent = slot.title || '';
 
-    container._rotorTimer && clearInterval(container._rotorTimer);
-    container._rotorTimer = setInterval(step, ROTATE_MS);
-  }
+  const what = document.createElement('div');
+  what.className = 'what';
+  what.textContent = slot.subtitle || '';
 
-  function fillRoom(roomId, slots) {
-    const roomEl = $(`#room-${CSS.escape(roomId)}`);
-    if (!roomEl) return;
+  const when = document.createElement('div');
+  when.className = 'when';
+  when.textContent = `${fmtTime(slot.startMin)} – ${fmtTime(slot.endMin)}`;
 
-    const rotor = $('.events .single-rotor', roomEl);
-    if (!rotor) return;
+  el.appendChild(who);
+  if (slot.subtitle) el.appendChild(what);
+  el.appendChild(when);
+  return el;
+}
 
-    const nowMin = nowMinutes();
-    const upcoming = (slots || [])
-      .filter(s => s.endMin > (nowMin + NOW_PAD_MIN))
-      .sort((a, b) => a.startMin - b.startMin || a.endMin - b.endMin);
+// ---- render fixed rooms (1/2/9/10) ------------------------------
+function fillFixedRoom(roomId, slots) {
+  const roomEl = byId(`room-${roomId}`);
+  if (!roomEl) return;
 
-    setRoomCount(roomEl, upcoming.length);
-    startRotor(rotor, upcoming);
-  }
+  const countEl = roomEl.querySelector('.roomHeader .count em');
+  const rotorEl = roomEl.querySelector('.events .single-rotor');
+  if (!rotorEl) return;
 
-  // ---------- Fieldhouse builder ----------
-  function buildFieldhouse(isTurf) {
-    const host = $('#fieldhousePager');
-    if (!host) return { ids: [] };
+  // Per room, one card at a time
+  const cards = slots.map(s => ({
+    ...s,
+    title: normalizeReserveeName(s.title),
+  }));
 
-    host.innerHTML = ''; // clear
+  // update count
+  countEl && (countEl.textContent = String(cards.length || '0'));
+  startRotor(rotorEl, cards);
+}
 
+// ---- render fieldhouse (courts 3..8 OR quarter turf NA/NB/SA/SB) ---
+function renderFieldhouse(grouped) {
+  const host = document.getElementById('fieldhousePager') || document.querySelector('.rooms-fieldhouse');
+  if (!host) return;
+
+  // If the page already has cards built into HTML (static 3x2), clear it and rebuild:
+  host.innerHTML = '';
+
+  const turfKeys = ['NA', 'NB', 'SA', 'SB'];
+  const hasTurf = turfKeys.some(k => grouped[`QT-${k}`] && grouped[`QT-${k}`].length);
+
+  if (hasTurf) {
+    // Build 2x2 grid: SA (top-left), NA (top-right), SB (bottom-left), NB (bottom-right)
+    const order = [
+      ['Quarter Turf SA', 'QT-SA'],
+      ['Quarter Turf NA', 'QT-NA'],
+      ['Quarter Turf SB', 'QT-SB'],
+      ['Quarter Turf NB', 'QT-NB'],
+    ];
+
+    // wrapper grid that matches your CSS for fieldhouse
     const grid = document.createElement('div');
-    grid.className = isTurf ? 'rooms-fieldhouse turf' : 'rooms-fieldhouse courts';
+    grid.className = 'rooms-fieldhouse';
     grid.style.display = 'grid';
-    grid.style.gridTemplateColumns = isTurf ? '1fr 1fr' : 'repeat(3, 1fr)';
-    grid.style.gridTemplateRows = isTurf ? '1fr 1fr' : '1fr 1fr';
+    grid.style.gridTemplateColumns = '1fr 1fr';
+    grid.style.gridTemplateRows = '1fr 1fr';
     grid.style.gap = '12px';
-    grid.style.minHeight = '0';
 
-    const ids = isTurf
-      ? ['SA','NA','SB','NB'] // order: top-left SA, top-right NA, bottom-left SB, bottom-right NB
-      : ['3','4','5','6','7','8']; // courts 3..8
-
-    const labels = {
-      'SA': 'Quarter Turf SA',
-      'SB': 'Quarter Turf SB',
-      'NA': 'Quarter Turf NA',
-      'NB': 'Quarter Turf NB'
-    };
-
-    ids.forEach(id => {
-      const card = createRoomCard(id, labels[id] || id);
+    order.forEach(([label, key]) => {
+      const card = document.createElement('div');
+      card.className = 'room';
+      card.innerHTML = `
+        <div class="roomHeader">
+          <div class="id">${label}</div>
+          <div class="count">reservations: <em>—</em></div>
+        </div>
+        <div class="events"><div class="single-rotor"></div></div>
+      `;
       grid.appendChild(card);
+
+      const rotor = card.querySelector('.single-rotor');
+      const count = card.querySelector('.count em');
+      const items = (grouped[key] || []).map(s => ({
+        ...s,
+        title: normalizeReserveeName(s.title),
+      }));
+      count.textContent = String(items.length || '0');
+      startRotor(rotor, items);
     });
 
     host.appendChild(grid);
-    return { ids };
-  }
+  } else {
+    // Courts 3..8 in a 3x2 grid (3,4,5 / 6,7,8)
+    const grid = document.createElement('div');
+    grid.className = 'rooms-fieldhouse';
+    grid.style.display = 'grid';
+    grid.style.gridTemplateColumns = 'repeat(3, 1fr)';
+    grid.style.gridTemplateRows = '1fr 1fr';
+    grid.style.gap = '12px';
 
-  // ---------- Header clock ----------
-  function updateHeader() {
+    const order = ['3','4','5','6','7','8'];
+    order.forEach(id => {
+      const card = document.createElement('div');
+      card.className = 'room';
+      card.innerHTML = `
+        <div class="roomHeader">
+          <div class="id">${id}</div>
+          <div class="count">reservations: <em>—</em></div>
+        </div>
+        <div class="events"><div class="single-rotor"></div></div>
+      `;
+      grid.appendChild(card);
+
+      const rotor = card.querySelector('.single-rotor');
+      const count = card.querySelector('.count em');
+      const items = (grouped[id] || []).map(s => ({
+        ...s,
+        title: normalizeReserveeName(s.title),
+      }));
+      count.textContent = String(items.length || '0');
+      startRotor(rotor, items);
+    });
+
+    host.appendChild(grid);
+  }
+}
+
+// ---- data shaping ------------------------------------------------
+function groupByRoomSlots(slots) {
+  const g = {};
+  for (const s of slots) {
+    if (!g[s.roomId]) g[s.roomId] = [];
+    g[s.roomId].push(s);
+  }
+  // sort each room chronologically
+  Object.values(g).forEach(list => list.sort((a,b) => a.startMin - b.startMin));
+  return g;
+}
+
+function visibleSlots(raw) {
+  const now = nowMinutesLocal();
+  const keepPastFloor = now - NOW_GRACE_MIN;
+
+  return (raw || [])
+    .filter(s => {
+      // drop "internal hold per NM"
+      if (isInternalHold(s.subtitle) || isInternalHold(s.title)) return false;
+
+      // drop stale past events
+      if (s.endMin < keepPastFloor) return false;
+
+      return true;
+    })
+    .map(s => {
+      // Pickleball normalization
+      if (isPickleball(s.title) || isPickleball(s.subtitle)) {
+        return {
+          ...s,
+          title: 'Open Pickleball',
+          subtitle: '',
+        };
+      }
+      return s;
+    });
+}
+
+// ---- clock/date --------------------------------------------------
+function startClock() {
+  const dEl = byId('headerDate');
+  const cEl = byId('headerClock');
+
+  const tick = () => {
     const d = new Date();
-    const dow = d.toLocaleDateString(undefined, { weekday: 'long' });
+    const day = d.toLocaleDateString(undefined, { weekday: 'long' });
     const date = d.toLocaleDateString(undefined, { month: 'long', day: 'numeric', year: 'numeric' });
     const time = d.toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' });
 
-    const dateEl = $('#headerDate');
-    const clockEl = $('#headerClock');
-    if (dateEl) dateEl.textContent = `${dow}, ${date}`;
-    if (clockEl) clockEl.textContent = time;
-  }
+    if (dEl) dEl.textContent = `${day}, ${date}`;
+    if (cEl) cEl.textContent = time;
+  };
+  tick();
+  setInterval(tick, 1000);
+}
 
-  // ---------- Boot ----------
-  async function boot() {
-    updateHeader();
-    setInterval(updateHeader, TICK_MS);
+// ---- boot --------------------------------------------------------
+async function boot() {
+  startClock();
 
-    // Fetch events.json fresh
-    const res = await fetch(`./events.json?cb=${Date.now()}`, { cache: 'no-store' });
-    const data = await res.json();
+  // Cache-busted fetch
+  const res = await fetch(`./events.json?cb=${Date.now()}`, { cache: 'no-store' });
+  const data = await res.json();
 
-    const slots = Array.isArray(data?.slots) ? data.slots : [];
-    console.log('events.json loaded:', { totalSlots: slots.length });
+  const all = visibleSlots(Array.isArray(data?.slots) ? data.slots : []);
 
-    // Group by room
-    const byRoom = new Map();
-    for (const s of slots) {
-      if (!s || !s.roomId) continue;
-      if (!byRoom.has(s.roomId)) byRoom.set(s.roomId, []);
-      byRoom.get(s.roomId).push(s);
-    }
+  // Group per room id
+  const grouped = groupByRoomSlots(all);
 
-    // Detect turf season (rooms NA/NB/SA/SB present in JSON)
-    const roomIdsInData = new Set((data.rooms || []).map(r => r.id));
-    const turfIds = ['NA','NB','SA','SB'];
-    const isTurf = turfIds.some(id => roomIdsInData.has(id) || byRoom.has(id));
+  // Fixed rooms
+  ['1A','1B','2A','2B','9A','9B','10A','10B'].forEach(id => {
+    fillFixedRoom(id, grouped[id] || []);
+  });
 
-    // Build Fieldhouse cards dynamically
-    const { ids: fieldhouseIds } = buildFieldhouse(isTurf);
+  // Fieldhouse / Turf
+  renderFieldhouse(grouped);
 
-    // Render South/North (these boxes exist in your HTML)
-    FIXED_ROOM_IDS.forEach(id => fillRoom(id, byRoom.get(id) || []));
+  // debug to console
+  const nonEmpty = Object.fromEntries(Object.entries(grouped).filter(([,v]) => v.length));
+  console.log('events.json loaded:', {
+    totalSlots: all.length,
+    nonEmptyRooms: nonEmpty
+  });
+}
 
-    // Render Fieldhouse rooms we just created
-    fieldhouseIds.forEach(id => fillRoom(id, byRoom.get(id) || []));
-
-    // If you want a visual hint in the Fieldhouse title, uncomment:
-    // const fhTitle = document.querySelector('section.group:nth-child(2) .title');
-    // if (fhTitle) fhTitle.textContent = isTurf ? 'Fieldhouse (Turf)' : 'Fieldhouse (Courts 3–8)';
-  }
-
-  if (document.readyState === 'loading') {
-    document.addEventListener('DOMContentLoaded', () => boot().catch(err => console.error('app init failed:', err)));
-  } else {
-    boot().catch(err => console.error('app init failed:', err));
-  }
-})();
+boot().catch(err => {
+  console.error('app init failed:', err);
+});
