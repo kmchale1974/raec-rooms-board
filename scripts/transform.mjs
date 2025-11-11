@@ -147,14 +147,17 @@ function mapFacilityToRooms(facility) {
 
 // turf season if we see Full Turf + “Turf Install per NM” in purpose anywhere in the CSV
 function isTurfSeason(allRows) {
-  return allRows.some(r =>
-    /ac fieldhouse - full turf/i.test(r.facility || '') &&
-    /turf install per nm/i.test(r.purpose || '')
-  );
+  // True if ANY Fieldhouse row mentions Quarter/Half/Full Turf,
+  // OR if any Fieldhouse row's purpose says "Turf Install per NM".
+  return allRows.some(r => {
+    const fac = String(r.facility || '').toLowerCase();
+    const pur = String(r.purpose  || '').toLowerCase();
+    const isFieldhouse = /ac\s*fieldhouse/i.test(fac);
+    const mentionsTurf =
+      /quarter turf|half turf|full turf/.test(fac) || /turf install per nm/.test(pur);
+    return isFieldhouse && mentionsTurf;
+  });
 }
-
-function toDisplay(reservee, purpose) {
-  const r = personFromLastFirst(reservee);
 
   // Pickleball: any mention
   if (/pickleball/i.test(r) || /pickleball/i.test(purpose || '')) {
@@ -348,16 +351,21 @@ function main() {
 }
 
 function writeScaffold(slots) {
+  // If any slot is QT-*, we’re clearly turf. Otherwise fall back to detector
+  const inferredTurf = slots.some(s => /^QT-/.test(s.roomId));
+  const fieldhouseMode = inferredTurf ? 'turf' : 'courts';
+
   const out = {
     dayStartMin: 360,
     dayEndMin: 1380,
+    fieldhouseMode,               // <— NEW: tells the UI how to lay out the middle column
     rooms: [
       { id: '1A',  label: '1A', group: 'south' },
       { id: '1B',  label: '1B', group: 'south' },
       { id: '2A',  label: '2A', group: 'south' },
       { id: '2B',  label: '2B', group: 'south' },
 
-      // Fieldhouse 3..8 (court season) — the UI will detect turf (QT-*) and swap layout automatically
+      // Court-season IDs (the UI swaps to QT-* when fieldhouseMode === 'turf')
       { id: '3',   label: '3',  group: 'fieldhouse' },
       { id: '4',   label: '4',  group: 'fieldhouse' },
       { id: '5',   label: '5',  group: 'fieldhouse' },
