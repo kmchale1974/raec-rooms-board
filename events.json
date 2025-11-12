@@ -1,4 +1,5 @@
 {
+  "fieldhouseMode": "courts",
   "dayStartMin": 360,
   "dayEndMin": 1380,
   "rooms": [
@@ -21,6 +22,26 @@
       "id": "2B",
       "label": "2B",
       "group": "south"
+    },
+    {
+      "id": "9A",
+      "label": "9A",
+      "group": "north"
+    },
+    {
+      "id": "9B",
+      "label": "9B",
+      "group": "north"
+    },
+    {
+      "id": "10A",
+      "label": "10A",
+      "group": "north"
+    },
+    {
+      "id": "10B",
+      "label": "10B",
+      "group": "north"
     },
     {
       "id": "3",
@@ -51,271 +72,113 @@
       "id": "8",
       "label": "8",
       "group": "fieldhouse"
-    },
-    {
-      "id": "9A",
-      "label": "9A",
-      "group": "north"
-    },
-    {
-      "id": "9B",
-      "label": "9B",
-      "group": "north"
-    },
-    {
-      "id": "10A",
-      "label": "10A",
-      "group": "north"
-    },
-    {
-      "id": "10B",
-      "label": "10B",
-      "group": "north"
     }
   ],
   "slots": [
     {
       "roomId": "10A",
       "startMin": 1080,
+      "endMin": 1140,
+      "title": "Sam Franklin Training",
+      "subtitle": "2025 Q4 Pattern"
+    },
+    {
+      "roomId": "10A",
+      "startMin": 1140,
       "endMin": 1260,
-      "title": "D1 Training (Stay 22uned, Inc.), D1 Training (Stay 22uned, Inc.)",
-      "subtitle": "Basketball",
-      "orgKey": "d1 training (stay 22uned, inc.), d1 training (stay 22uned, inc.)",
-      "rawRoomsCount": 1
+      "title": "Catch Corner (Internal Holds",
+      "subtitle": "CatchCorner (Illinois Lady Elite #438329 Basketball)"
     },
     {
       "roomId": "10B",
       "startMin": 1080,
-      "endMin": 1260,
-      "title": "D1 Training (Stay 22uned, Inc.), D1 Training (Stay 22uned, Inc.)",
-      "subtitle": "Basketball",
-      "orgKey": "d1 training (stay 22uned, inc.), d1 training (stay 22uned, inc.)",
-      "rawRoomsCount": 1
+      "endMin": 1140,
+      "title": "Sam Franklin Training",
+      "subtitle": "2025 Q4 Pattern"
     },
     {
-      "roomId": "1A",
-      "startMin": 1080,
-      "endMin": 1170,
-      "title": "WELCH VB",
-      "subtitle": "Volleyball",
-      "orgKey": "welch vb",
-      "rawRoomsCount": 4
-    },
-    {
-      "roomId": "1A",
-      "startMin": 1080,
-      "endMin": 1170,
-      "title": "WELCH VB",
-      "subtitle": "Volleyball",
-      "orgKey": "welch vb",
-      "rawRoomsCount": 4
-    },
-    {
-      "roomId": "1A",
+      "roomId": "10B",
       "startMin": 1140,
       "endMin": 1260,
-      "title": "Extreme Volleyball, Extreme Volleyball",
-      "subtitle": "Volleyball",
-      "orgKey": "extreme volleyball, extreme volleyball",
-      "rawRoomsCount": 4
+      "title": "Catch Corner (Internal Holds",
+      "subtitle": "CatchCorner (Illinois Lady Elite #438329 Basketball)"
     },
     {
       "roomId": "1A",
       "startMin": 1260,
       "endMin": 1380,
-      "title": "Chicago Sport and Social Club, Chicago Sport and Social Club",
-      "subtitle": "Volleyball (Grab A Game)",
-      "orgKey": "chicago sport and social club, chicago sport and social club",
-      "rawRoomsCount": 1
-    },
-    {
-      "roomId": "1B",
-      "startMin": 1080,
-      "endMin": 1170,
-      "title": "WELCH VB",
-      "subtitle": "Volleyball",
-      "orgKey": "welch vb",
-      "rawRoomsCount": 4
-    },
-    {
-      "roomId": "1B",
-      "startMin": 1080,
-      "endMin": 1170,
-      "title": "WELCH VB",
-      "subtitle": "Volleyball",
-      "orgKey": "welch vb",
-      "rawRoomsCount": 4
-    },
-    {
-      "roomId": "1B",
-      "startMin": 1140,
-      "endMin": 1260,
-      "title": "Extreme Volleyball, Extreme Volleyball",
-      "subtitle": "Volleyball",
-      "orgKey": "extreme volleyball, extreme volleyball",
-      "rawRoomsCount": 4
+      "title": "Chicago Sport and Social Club",
+      "subtitle": "Volleyball (Grab A Game)"
     },
     {
       "roomId": "1B",
       "startMin": 1260,
       "endMin": 1380,
-      "title": "Chicago Sport and Social Club, Chicago Sport and Social Club",
-      "subtitle": "Volleyball (Grab A Game)",
-      "orgKey": "chicago sport and social club, chicago sport and social club",
-      "rawRoomsCount": 1
-    },
-    {
-      "roomId": "2A",
-      "startMin": 1080,
-      "endMin": 1170,
-      "title": "WELCH VB",
-      "subtitle": "Volleyball",
-      "orgKey": "welch vb",
-      "rawRoomsCount": 1
-    },
-    {
-      "roomId": "2A",
-      "startMin": 1140,
-      "endMin": 1260,
-      "title": "Extreme Volleyball, Extreme Volleyball",
-      "subtitle": "Volleyball",
-      "orgKey": "extreme volleyball, extreme volleyball",
-      "rawRoomsCount": 2
-    },
-    {
-      "roomId": "2A",
-      "startMin": 1140,
-      "endMin": 1260,
-      "title": "Extreme Volleyball, Extreme Volleyball",
-      "subtitle": "Volleyball",
-      "orgKey": "extreme volleyball, extreme volleyball",
-      "rawRoomsCount": 4
+      "title": "Chicago Sport and Social Club",
+      "subtitle": "Volleyball (Grab A Game)"
     },
     {
       "roomId": "2A",
       "startMin": 1260,
       "endMin": 1380,
-      "title": "Chicago Sport and Social Club, Chicago Sport and Social Club",
-      "subtitle": "Volleyball (Grab A Game)",
-      "orgKey": "chicago sport and social club, chicago sport and social club",
-      "rawRoomsCount": 1
-    },
-    {
-      "roomId": "2B",
-      "startMin": 1080,
-      "endMin": 1170,
-      "title": "WELCH VB",
-      "subtitle": "Volleyball",
-      "orgKey": "welch vb",
-      "rawRoomsCount": 4
-    },
-    {
-      "roomId": "2B",
-      "startMin": 1080,
-      "endMin": 1170,
-      "title": "WELCH VB",
-      "subtitle": "Volleyball",
-      "orgKey": "welch vb",
-      "rawRoomsCount": 2
-    },
-    {
-      "roomId": "2B",
-      "startMin": 1080,
-      "endMin": 1170,
-      "title": "WELCH VB",
-      "subtitle": "Volleyball",
-      "orgKey": "welch vb",
-      "rawRoomsCount": 4
-    },
-    {
-      "roomId": "2B",
-      "startMin": 1140,
-      "endMin": 1260,
-      "title": "Extreme Volleyball, Extreme Volleyball",
-      "subtitle": "Volleyball",
-      "orgKey": "extreme volleyball, extreme volleyball",
-      "rawRoomsCount": 1
+      "title": "Chicago Sport and Social Club",
+      "subtitle": "Volleyball (Grab A Game)"
     },
     {
       "roomId": "2B",
       "startMin": 1260,
       "endMin": 1380,
-      "title": "Chicago Sport and Social Club, Chicago Sport and Social Club",
-      "subtitle": "Volleyball (Grab A Game)",
-      "orgKey": "chicago sport and social club, chicago sport and social club",
-      "rawRoomsCount": 1
-    },
-    {
-      "roomId": "3",
-      "startMin": 540,
-      "endMin": 1380,
-      "title": "RAEC Front Desk, Rentals - On Hold",
-      "subtitle": "Turf Season per NM",
-      "orgKey": "raec front desk, rentals - on hold",
-      "rawRoomsCount": 1
-    },
-    {
-      "roomId": "4",
-      "startMin": 540,
-      "endMin": 1380,
-      "title": "RAEC Front Desk, Rentals - On Hold",
-      "subtitle": "Turf Season per NM",
-      "orgKey": "raec front desk, rentals - on hold",
-      "rawRoomsCount": 1
-    },
-    {
-      "roomId": "5",
-      "startMin": 540,
-      "endMin": 1380,
-      "title": "RAEC Front Desk, Rentals - On Hold",
-      "subtitle": "Turf Season per NM",
-      "orgKey": "raec front desk, rentals - on hold",
-      "rawRoomsCount": 1
-    },
-    {
-      "roomId": "6",
-      "startMin": 540,
-      "endMin": 1380,
-      "title": "RAEC Front Desk, Rentals - On Hold",
-      "subtitle": "Turf Season per NM",
-      "orgKey": "raec front desk, rentals - on hold",
-      "rawRoomsCount": 1
-    },
-    {
-      "roomId": "7",
-      "startMin": 540,
-      "endMin": 1380,
-      "title": "RAEC Front Desk, Rentals - On Hold",
-      "subtitle": "Turf Season per NM",
-      "orgKey": "raec front desk, rentals - on hold",
-      "rawRoomsCount": 1
-    },
-    {
-      "roomId": "8",
-      "startMin": 540,
-      "endMin": 1380,
-      "title": "RAEC Front Desk, Rentals - On Hold",
-      "subtitle": "Turf Season per NM",
-      "orgKey": "raec front desk, rentals - on hold",
-      "rawRoomsCount": 1
+      "title": "Chicago Sport and Social Club",
+      "subtitle": "Volleyball (Grab A Game)"
     },
     {
       "roomId": "9A",
       "startMin": 1080,
+      "endMin": 1140,
+      "title": "Catch Corner (Internal Holds",
+      "subtitle": "Catch Corner (Prolific Basketball Booking #440512)"
+    },
+    {
+      "roomId": "9A",
+      "startMin": 1080,
+      "endMin": 1140,
+      "title": "Sam Franklin Training",
+      "subtitle": "2025 Q4 Pattern"
+    },
+    {
+      "roomId": "9A",
+      "startMin": 1140,
       "endMin": 1260,
-      "title": "D1 Training (Stay 22uned, Inc.), D1 Training (Stay 22uned, Inc.)",
-      "subtitle": "Basketball",
-      "orgKey": "d1 training (stay 22uned, inc.), d1 training (stay 22uned, inc.)",
-      "rawRoomsCount": 1
+      "title": "Catch Corner (Internal Holds",
+      "subtitle": "CatchCorner (Illinois Lady Elite #438329 Basketball)"
     },
     {
       "roomId": "9B",
       "startMin": 1080,
+      "endMin": 1140,
+      "title": "Catch Corner (Internal Holds",
+      "subtitle": "Catch Corner (Prolific Basketball Booking #440512)"
+    },
+    {
+      "roomId": "9B",
+      "startMin": 1080,
+      "endMin": 1140,
+      "title": "Sam Franklin Training",
+      "subtitle": "2025 Q4 Pattern"
+    },
+    {
+      "roomId": "9B",
+      "startMin": 1140,
       "endMin": 1260,
-      "title": "D1 Training (Stay 22uned, Inc.), D1 Training (Stay 22uned, Inc.)",
-      "subtitle": "Basketball",
-      "orgKey": "d1 training (stay 22uned, inc.), d1 training (stay 22uned, inc.)",
-      "rawRoomsCount": 1
+      "title": "Extreme Volleyball",
+      "subtitle": "Volleyball"
+    },
+    {
+      "roomId": "9B",
+      "startMin": 1140,
+      "endMin": 1260,
+      "title": "Catch Corner (Internal Holds",
+      "subtitle": "CatchCorner (Illinois Lady Elite #438329 Basketball)"
     }
   ]
 }
