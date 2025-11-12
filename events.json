@@ -1,5 +1,4 @@
 {
-  "fieldhouseMode": "courts",
   "dayStartMin": 360,
   "dayEndMin": 1380,
   "rooms": [
@@ -22,26 +21,6 @@
       "id": "2B",
       "label": "2B",
       "group": "south"
-    },
-    {
-      "id": "9A",
-      "label": "9A",
-      "group": "north"
-    },
-    {
-      "id": "9B",
-      "label": "9B",
-      "group": "north"
-    },
-    {
-      "id": "10A",
-      "label": "10A",
-      "group": "north"
-    },
-    {
-      "id": "10B",
-      "label": "10B",
-      "group": "north"
     },
     {
       "id": "3",
@@ -72,71 +51,27 @@
       "id": "8",
       "label": "8",
       "group": "fieldhouse"
+    },
+    {
+      "id": "9A",
+      "label": "9A",
+      "group": "north"
+    },
+    {
+      "id": "9B",
+      "label": "9B",
+      "group": "north"
+    },
+    {
+      "id": "10A",
+      "label": "10A",
+      "group": "north"
+    },
+    {
+      "id": "10B",
+      "label": "10B",
+      "group": "north"
     }
   ],
-  "slots": [
-    {
-      "roomId": "10A",
-      "startMin": 1140,
-      "endMin": 1260,
-      "title": "Catch Corner (Internal Holds",
-      "subtitle": "CatchCorner (Illinois Lady Elite #438329 Basketball)"
-    },
-    {
-      "roomId": "10B",
-      "startMin": 1140,
-      "endMin": 1260,
-      "title": "Catch Corner (Internal Holds",
-      "subtitle": "CatchCorner (Illinois Lady Elite #438329 Basketball)"
-    },
-    {
-      "roomId": "1A",
-      "startMin": 1260,
-      "endMin": 1380,
-      "title": "Chicago Sport and Social Club",
-      "subtitle": "Volleyball (Grab A Game)"
-    },
-    {
-      "roomId": "1B",
-      "startMin": 1260,
-      "endMin": 1380,
-      "title": "Chicago Sport and Social Club",
-      "subtitle": "Volleyball (Grab A Game)"
-    },
-    {
-      "roomId": "2A",
-      "startMin": 1260,
-      "endMin": 1380,
-      "title": "Chicago Sport and Social Club",
-      "subtitle": "Volleyball (Grab A Game)"
-    },
-    {
-      "roomId": "2B",
-      "startMin": 1260,
-      "endMin": 1380,
-      "title": "Chicago Sport and Social Club",
-      "subtitle": "Volleyball (Grab A Game)"
-    },
-    {
-      "roomId": "9A",
-      "startMin": 1140,
-      "endMin": 1260,
-      "title": "Catch Corner (Internal Holds",
-      "subtitle": "CatchCorner (Illinois Lady Elite #438329 Basketball)"
-    },
-    {
-      "roomId": "9B",
-      "startMin": 1140,
-      "endMin": 1260,
-      "title": "Extreme Volleyball",
-      "subtitle": "Volleyball"
-    },
-    {
-      "roomId": "9B",
-      "startMin": 1140,
-      "endMin": 1260,
-      "title": "Catch Corner (Internal Holds",
-      "subtitle": "CatchCorner (Illinois Lady Elite #438329 Basketball)"
-    }
-  ]
+  "slots": []
 }
