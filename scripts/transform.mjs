@@ -1,65 +1,181 @@
 #!/usr/bin/env node
-// scripts/transform.mjs — build events.json from latest CSV
+// scripts/transform.mjs
+// RAEC: TSV -> events.json with south/north + fieldhouse/turf logic
 
 import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
-import { parse } from 'csv-parse/sync';
 
+/* -------------------- Setup -------------------- */
 const __filename = fileURLToPath(import.meta.url);
 const __dirname  = path.dirname(__filename);
 
 const INPUT_CSV   = process.env.IN_CSV   || path.join(__dirname, '..', 'data', 'inbox', 'latest.csv');
 const OUTPUT_JSON = process.env.OUT_JSON || path.join(__dirname, '..', 'events.json');
 
-// ---------- tiny utils ----------
-const clean = s => String(s ?? '').replace(/\s+/g, ' ').trim();
+// Board day window (06:00–23:00)
+const DAY_START_MIN = 6 * 60;
+const DAY_END_MIN   = 23 * 60;
 
-function parseRangeToMinutes(text) {
-  if (!text) return null;
-  const m = String(text).match(/(\d{1,2}:\d{2}\s*[ap]m)\s*-\s*(\d{1,2}:\d{2}\s*[ap]m)/i);
-  if (!m) return null;
-  return { startMin: toMin(m[1]), endMin: toMin(m[2]) };
+/* -------------------- Utils -------------------- */
+const clean = (s) => String(s ?? '').replace(/\s+/g, ' ').trim();
+
+function parseTSV(text) {
+  // Your reports are tab-separated; split safely on \t
+  const lines = text.split(/\r?\n/).filter(l => l.trim().length > 0);
+  if (!lines.length) return { header: [], rows: [] };
+  const header = lines[0].split('\t').map(h => h.trim());
+  const idx = Object.fromEntries(header.map((h,i) => [h, i]));
+  const rows = [];
+
+  for (let i = 1; i < lines.length; i++) {
+    const cols = lines[i].split('\t');
+    const obj  = {};
+    header.forEach((h, j) => { obj[h] = (cols[j] ?? '').trim(); });
+    rows.push(obj);
+  }
+  return { header, rows, idx };
 }
-function toMin(hhmmampm) {
-  const s = String(hhmmampm).trim().toLowerCase();
+
+function toMinutes(hmm) {
+  // "7:30pm" / " 7:30pm" / "7:30 pm" (we'll be lenient)
+  const s = clean(hmm).toLowerCase();
   const m = s.match(/^(\d{1,2}):(\d{2})\s*([ap])m$/);
   if (!m) return null;
-  let h  = parseInt(m[1], 10);
-  const mm = parseInt(m[2], 10);
+  let h = parseInt(m[1], 10), min = parseInt(m[2], 10);
   const mer = m[3];
   if (h === 12) h = 0;
   if (mer === 'p') h += 12;
-  return h * 60 + mm;
+  return h * 60 + min;
 }
 
-function nowMinutes() {
+function parseRangeToMinutes(range) {
+  // " 6:30pm -  7:30pm" (spaces irregular)
+  const m = String(range || '').match(/(\d{1,2}:\d{2}\s*[ap]m)\s*-\s*(\d{1,2}:\d{2}\s*[ap]m)/i);
+  if (!m) return null;
+  const startMin = toMinutes(m[1]);
+  const endMin   = toMinutes(m[2]);
+  if (startMin == null || endMin == null) return null;
+  return { startMin, endMin };
+}
+
+function isToday(date) {
+  // CSV is "Daily" so we assume rows are for today; keep function for safety
+  return true;
+}
+
+function nowMinutesLocal() {
   const d = new Date();
-  return d.getHours()*60 + d.getMinutes();
+  return d.getHours() * 60 + d.getMinutes();
 }
 
-// ---------- normalize reservee & titles ----------
-function normalizePerson(lastCommaFirst) {
-  const s = clean(lastCommaFirst);
-  const parts = s.split(',').map(p => p.trim()).filter(Boolean);
+function normalizePerson(reserveeRaw) {
+  // "Last, First" -> "First Last"; otherwise return as-is
+  const s = clean(reserveeRaw);
+  const parts = s.split(',').map(p => p.trim());
   if (parts.length >= 2 && /^[A-Za-z'.-]+$/.test(parts[0])) {
-    // "Last, First ..." → "First Last"
-    return `${parts.slice(1).join(' ')} ${parts[0]}`.replace(/\s+/g,' ').trim();
+    // looks like "Last, First [more]"
+    const first = parts.slice(1).join(', ');
+    return clean(`${first} ${parts[0]}`);
   }
   return s;
 }
 
-function extractWelch(purpose) {
-  const s = clean(purpose);
-  // e.g., "Volleyball - Hold per NM for WELCH VB"
-  const m = s.match(/hold\s+per\s+nm\s+for\s+(.+?)(?:\s*vb)?\s*$/i);
+function extractWelch(purposeRaw) {
+  // "Volleyball - Hold per NM for WELCH VB" => "Welch VB"
+  const s = clean(purposeRaw);
+  const m = s.match(/for\s+(.+?\bVB)\b/i);
   if (m) {
-    const who = clean(m[1]).replace(/\s+vb$/i,'');
-    return `${who} VB`;
+    const name = clean(m[1]).replace(/\s+/g, ' ');
+    return name.split(' ').map(w => w.charAt(0).toUpperCase() + w.slice(1).toLowerCase()).join(' ');
   }
   return null;
 }
 
+/* -------------------- Season detector -------------------- */
+function detectSeason(rows) {
+  // Turf season if we see "AC Fieldhouse - Full Turf" with purpose "Turf Install per NM"
+  const hitsTurf = rows.some(r =>
+    /AC Fieldhouse\s*-\s*Full\s*Turf/i.test(r['Facility'] || '') &&
+    /Turf Install per NM/i.test(r['Reservation Purpose'] || '')
+  );
+  if (hitsTurf) return 'turf';
+
+  // Court season if "Full Turf" with "Fieldhouse Installed per NM"
+  const hitsCourt = rows.some(r =>
+    /AC Fieldhouse\s*-\s*Full\s*Turf/i.test(r['Facility'] || '') &&
+    /Fieldhouse Installed per NM/i.test(r['Reservation Purpose'] || '')
+  );
+  if (hitsCourt) return 'courts';
+
+  // Fallback: default courts
+  return 'courts';
+}
+
+/* -------------------- Room maps -------------------- */
+// South (1/2)
+const southHalfMap = {
+  'AC Gym - Half Court 1A': ['1A'],
+  'AC Gym - Half Court 1B': ['1B'],
+  'AC Gym - Court 1-AB':    ['1A','1B'],
+  'AC Gym - Half Court 2A': ['2A'],
+  'AC Gym - Half Court 2B': ['2B'],
+  'AC Gym - Court 2-AB':    ['2A','2B'],
+  'AC Gym - Championship Court': ['1A','1B','2A','2B'],
+  'AC Gym - Full Gym 1AB & 2AB': ['1A','1B','2A','2B']
+};
+
+// North (9/10)
+const northHalfMap = {
+  'AC Gym - Half Court 9A': ['9A'],
+  'AC Gym - Half Court 9B': ['9B'],
+  'AC Gym - Court 9-AB':    ['9A','9B'],
+  'AC Gym - Half Court 10A': ['10A'],
+  'AC Gym - Half Court 10B': ['10B'],
+  'AC Gym - Court 10-AB':    ['10A','10B'],
+  'AC Gym - Full Gym 9 & 10': ['9A','9B','10A','10B']
+};
+
+// Fieldhouse (court season)
+const fhCourtMap = {
+  'AC Fieldhouse - Court 3': ['3'],
+  'AC Fieldhouse - Court 4': ['4'],
+  'AC Fieldhouse - Court 5': ['5'],
+  'AC Fieldhouse - Court 6': ['6'],
+  'AC Fieldhouse - Court 7': ['7'],
+  'AC Fieldhouse - Court 8': ['8'],
+  'AC Fieldhouse - Court 3-8': ['3','4','5','6','7','8']
+};
+// Fieldhouse (turf season)
+const fhTurfMap = {
+  'AC Fieldhouse - Quarter Turf NA': ['TNA'],
+  'AC Fieldhouse - Quarter Turf NB': ['TNB'],
+  'AC Fieldhouse - Quarter Turf SA': ['TSA'],
+  'AC Fieldhouse - Quarter Turf SB': ['TSB'],
+  'AC Fieldhouse - Half Turf North': ['TNA','TNB'],
+  'AC Fieldhouse - Half Turf South': ['TSA','TSB'],
+  'AC Fieldhouse - Full Turf':       ['TNA','TNB','TSA','TSB']
+};
+
+function fieldhouseRoomsForSeason(season) {
+  return season === 'turf'
+    ? [
+        { id: 'TNA', label: 'Quarter Turf NA', group: 'fieldhouse' },
+        { id: 'TNB', label: 'Quarter Turf NB', group: 'fieldhouse' },
+        { id: 'TSA', label: 'Quarter Turf SA', group: 'fieldhouse' },
+        { id: 'TSB', label: 'Quarter Turf SB', group: 'fieldhouse' }
+      ]
+    : [
+        { id: '3', label: '3', group: 'fieldhouse' },
+        { id: '4', label: '4', group: 'fieldhouse' },
+        { id: '5', label: '5', group: 'fieldhouse' },
+        { id: '6', label: '6', group: 'fieldhouse' },
+        { id: '7', label: '7', group: 'fieldhouse' },
+        { id: '8', label: '8', group: 'fieldhouse' }
+      ];
+}
+
+/* -------------------- Title / Subtitle -------------------- */
 function makeTitleSubtitle(row) {
   const reservee = clean(row['Reservee'] || '');
   const purpose  = clean(row['Reservation Purpose'] || '');
@@ -69,349 +185,239 @@ function makeTitleSubtitle(row) {
     return { title: 'Open Pickleball', subtitle: '' };
   }
 
-  // Extract "Welch VB" from Holds
-  const possibleWelch = extractWelch(purpose);
-  if (possibleWelch) {
-    return { title: possibleWelch, subtitle: 'Volleyball' };
-  }
+  // Welch VB exception (from Front Desk holds)
+  const w = extractWelch(purpose);
+  if (w) return { title: w, subtitle: 'Volleyball' };
 
-  // RAEC Front Desk *holds* (we hide them later, but title just in case)
+  // RAEC Front Desk -> we'll likely filter later, but keep graceful label
   if (/^raec\s*front\s*desk/i.test(reservee)) {
     return { title: 'Internal Hold', subtitle: '' };
   }
 
-  // Org + contact: "D1 Training (Stay 22uned, Inc.), John Doe"
-  // We’ll strip trailing unmatched "(" artifacts and keep left part as "org"
-  const orgPerson = reservee.split(',').map(s => s.trim());
-  let org = clean(orgPerson[0] || '');
-  org = org.replace(/\($/, ''); // trim stray '(' if present
-
-  // If looks like "Last, First", prefer person
-  if (orgPerson.length >= 2 && /^[A-Za-z'.-]+$/.test(orgPerson[0])) {
-    const person = normalizePerson(reservee);
-    return { title: person, subtitle: clean(purpose) };
+  // Prefer "First Last" if looks like "Last, First"
+  const asPerson = normalizePerson(reservee);
+  if (asPerson !== reservee) {
+    return { title: asPerson, subtitle: purpose };
   }
 
-  // Otherwise show org, then purpose
-  return { title: org || reservee || 'Reservation', subtitle: clean(purpose) };
+  // Otherwise keep org/name as-is; fix a rare dangling '(' only if it ends with it.
+  let org = reservee;
+  if (/\($/.test(org)) org = org.slice(0, -1);
+  return { title: org || 'Reservation', subtitle: purpose };
 }
 
-// ---------- facility → rooms mapping ----------
-const SOUTH_HALF = {
-  'AC GYM - HALF COURT 1A': ['1A'],
-  'AC GYM - HALF COURT 1B': ['1B'],
-  'AC GYM - COURT 1-AB':    ['1A','1B'],
-  'AC GYM - HALF COURT 2A': ['2A'],
-  'AC GYM - HALF COURT 2B': ['2B'],
-  'AC GYM - COURT 2-AB':    ['2A','2B'],
-  'AC GYM - FULL GYM 1AB & 2AB': ['1A','1B','2A','2B'],
-  'AC GYM - CHAMPIONSHIP COURT': ['1A','1B','2A','2B'], // treat as full south
-};
-
-const NORTH_HALF = {
-  'AC GYM - HALF COURT 9A': ['9A'],
-  'AC GYM - HALF COURT 9B': ['9B'],
-  'AC GYM - COURT 9-AB':    ['9A','9B'],
-  'AC GYM - HALF COURT 10A':['10A'],
-  'AC GYM - HALF COURT 10B':['10B'],
-  'AC GYM - COURT 10-AB':   ['10A','10B'],
-  'AC GYM - FULL GYM 9 & 10':['9A','9B','10A','10B'],
-};
-
-function isSouth(fac) {
-  const F = clean(fac).toUpperCase();
-  return /(COURT\s*1|COURT\s*2|HALF COURT\s*1|HALF COURT\s*2|FULL GYM 1AB)/.test(F) || /CHAMPIONSHIP COURT/.test(F);
-}
-function isNorth(fac) {
-  const F = clean(fac).toUpperCase();
-  return /(COURT\s*9|COURT\s*10|HALF COURT\s*9|HALF COURT\s*10|FULL GYM 9\s*&\s*10)/.test(F);
-}
-
-function mapSouthFacility(fac) {
-  const F = clean(fac).toUpperCase();
-  // exact keys first
-  for (const k of Object.keys(SOUTH_HALF)) {
-    if (F === k) return SOUTH_HALF[k];
-  }
-  // loosen
-  if (/HALF COURT 1A/i.test(F)) return ['1A'];
-  if (/HALF COURT 1B/i.test(F)) return ['1B'];
-  if (/COURT 1-AB/i.test(F))    return ['1A','1B'];
-  if (/HALF COURT 2A/i.test(F)) return ['2A'];
-  if (/HALF COURT 2B/i.test(F)) return ['2B'];
-  if (/COURT 2-AB/i.test(F))    return ['2A','2B'];
-  if (/FULL GYM 1AB\s*&\s*2AB/i.test(F)) return ['1A','1B','2A','2B'];
-  if (/CHAMPIONSHIP COURT/i.test(F))     return ['1A','1B','2A','2B'];
-  return [];
-}
-
-function mapNorthFacility(fac) {
-  const F = clean(fac).toUpperCase();
-  for (const k of Object.keys(NORTH_HALF)) {
-    if (F === k) return NORTH_HALF[k];
-  }
-  if (/HALF COURT 9A/i.test(F)) return ['9A'];
-  if (/HALF COURT 9B/i.test(F)) return ['9B'];
-  if (/COURT 9-AB/i.test(F))    return ['9A','9B'];
-  if (/HALF COURT 10A/i.test(F))return ['10A'];
-  if (/HALF COURT 10B/i.test(F))return ['10B'];
-  if (/COURT 10-AB/i.test(F))   return ['10A','10B'];
-  if (/FULL GYM 9\s*&\s*10/i.test(F)) return ['9A','9B','10A','10B'];
-  return [];
-}
-
-function mapFieldhouseCourtMode(fac) {
-  const F = clean(fac).toUpperCase();
-  // Courts 3..8
-  const m = F.match(/AC\s*FIELDHOUSE\s*-\s*COURT\s*([3-8])$/i);
-  if (m) return [m[1]];
-  if (/COURT\s*3-8/i.test(F))  return ['3','4','5','6','7','8'];
-  return [];
-}
-
-function mapFieldhouseTurfMode(fac) {
-  const F = clean(fac).toUpperCase();
-  if (/QUARTER TURF\s*NA/i.test(F)) return ['QT-NA'];
-  if (/QUARTER TURF\s*NB/i.test(F)) return ['QT-NB'];
-  if (/QUARTER TURF\s*SA/i.test(F)) return ['QT-SA'];
-  if (/QUARTER TURF\s*SB/i.test(F)) return ['QT-SB'];
-  if (/HALF TURF\s*NORTH/i.test(F)) return ['QT-NA','QT-NB'];
-  if (/HALF TURF\s*SOUTH/i.test(F)) return ['QT-SA','QT-SB'];
-  if (/FULL TURF/i.test(F))         return ['QT-NA','QT-NB','QT-SA','QT-SB'];
-  return [];
-}
-
-// ---------- specificity selection for South/North ----------
-// We group by (block=South|North, personOrOrg, startMin, endMin) and then:
-//  Half Court beats Court AB beats Full Gym beats Championship
-function groupKeySouthNorth(block, who, startMin, endMin) {
-  return `${block}__${who}__${startMin}-${endMin}`;
-}
-function specificityScore(fac) {
-  const F = clean(fac).toUpperCase();
-  if (/HALF COURT/.test(F)) return 4;
-  if (/COURT\s*\d+-AB/.test(F)) return 3;
-  if (/FULL GYM/.test(F)) return 2;
-  if (/CHAMPIONSHIP COURT/.test(F)) return 1;
+/* -------------------- South/North specificity -------------------- */
+function specificityScoreSouthNorth(facility) {
+  // Higher = more specific
+  if (/Half Court 1A|Half Court 1B|Half Court 2A|Half Court 2B|Half Court 9A|Half Court 9B|Half Court 10A|Half Court 10B/i.test(facility)) return 3;
+  if (/Court 1-AB|Court 2-AB|Court 9-AB|Court 10-AB/i.test(facility)) return 2;
+  if (/Championship Court|Full Gym 1AB & 2AB|Full Gym 9 & 10/i.test(facility)) return 1;
   return 0;
 }
 
-// ---------- main ----------
+/* Grouping key for south/north: reservee + time window */
+function groupKeySouthNorth(row, range) {
+  const who = clean(row['Reservee'] || '');
+  return `${who}__${range.startMin}__${range.endMin}`;
+}
+
+/* After collecting a set of facilities for a group, decide final rooms */
+function pickRoomsSouthNorth(facilities) {
+  // If any half-courts exist, ONLY use those rooms (ignore broader rows)
+  const halves = [];
+  facilities.forEach(f => {
+    if (southHalfMap[f]) halves.push(...southHalfMap[f]);
+    if (northHalfMap[f]) halves.push(...northHalfMap[f]);
+  });
+  if (halves.length) return Array.from(new Set(halves));
+
+  // Else courts (1-AB/2-AB/9-AB/10-AB)
+  const mids = [];
+  facilities.forEach(f => {
+    if (/Court 1-AB/i.test(f)) mids.push(...southHalfMap['AC Gym - Court 1-AB']);
+    if (/Court 2-AB/i.test(f)) mids.push(...southHalfMap['AC Gym - Court 2-AB']);
+    if (/Court 9-AB/i.test(f)) mids.push(...northHalfMap['AC Gym - Court 9-AB']);
+    if (/Court 10-AB/i.test(f)) mids.push(...northHalfMap['AC Gym - Court 10-AB']);
+  });
+  if (mids.length) return Array.from(new Set(mids));
+
+  // Else full gym / championship
+  const wides = [];
+  facilities.forEach(f => {
+    if (/Championship Court/i.test(f))  wides.push(...southHalfMap['AC Gym - Championship Court']);
+    if (/Full Gym 1AB & 2AB/i.test(f))  wides.push(...southHalfMap['AC Gym - Full Gym 1AB & 2AB']);
+    if (/Full Gym 9 & 10/i.test(f))     wides.push(...northHalfMap['AC Gym - Full Gym 9 & 10']);
+  });
+  if (wides.length) return Array.from(new Set(wides));
+
+  return [];
+}
+
+/* -------------------- Fieldhouse mapper -------------------- */
+function mapFieldhouseRooms(season, facility) {
+  if (season === 'turf') {
+    for (const key of Object.keys(fhTurfMap)) {
+      if (new RegExp('^' + key.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '$', 'i').test(facility)) {
+        return fhTurfMap[key];
+      }
+    }
+  } else {
+    for (const key of Object.keys(fhCourtMap)) {
+      if (new RegExp('^' + key.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '$', 'i').test(facility)) {
+        return fhCourtMap[key];
+      }
+    }
+  }
+  return [];
+}
+
+/* -------------------- Pipeline -------------------- */
+function rowIsSouthNorth(fac) {
+  return /AC Gym - (Half Court|Court|Full Gym|Championship Court)/i.test(fac);
+}
+function rowIsFieldhouse(fac) {
+  return /AC Fieldhouse/i.test(fac);
+}
+function isFrontDesk(res) {
+  return /^RAEC\s*Front\s*Desk/i.test(res);
+}
+
+function shouldHideRow(row) {
+  const reservee = clean(row['Reservee'] || '');
+  const purpose  = clean(row['Reservation Purpose'] || '');
+
+  // Hide Front Desk routine holds/install messages (unless Welch VB)
+  if (isFrontDesk(reservee) && !extractWelch(purpose)) return true;
+
+  // Hide explicit install per NM noise
+  if (/Install per NM/i.test(purpose)) return true;
+
+  return false;
+}
+
+function makeSlot(roomId, startMin, endMin, title, subtitle, org = '', contact = '') {
+  return { roomId, startMin, endMin, title, subtitle, org, contact };
+}
+
+/* -------------------- Main -------------------- */
 async function main() {
-  if (!fs.existsSync(INPUT_CSV) || fs.statSync(INPUT_CSV).size === 0) {
-    // write empty scaffold
-    const scaffold = {
-      fieldhouseMode: 'courts',
-      dayStartMin: 360,
-      dayEndMin: 1380,
-      rooms: baseRooms('courts'),
-      slots: []
-    };
-    fs.writeFileSync(OUTPUT_JSON, JSON.stringify(scaffold, null, 2));
-    console.log(`Wrote ${OUTPUT_JSON} • slots=0`);
+  if (!fs.existsSync(INPUT_CSV)) {
+    // Write empty scaffold
+    const json = { dayStartMin: DAY_START_MIN, dayEndMin: DAY_END_MIN, rooms: [], slots: [] };
+    fs.writeFileSync(OUTPUT_JSON, JSON.stringify(json, null, 2));
     return;
   }
 
   const raw = fs.readFileSync(INPUT_CSV, 'utf8');
-  const rows = parse(raw, {
-    columns: true,
-    skip_empty_lines: true
-  });
+  const { rows } = parseTSV(raw);
 
-  // detect season
-  let fieldhouseMode = 'courts';
-  for (const r of rows) {
-    const fac = clean(r['Facility']);
-    const pur = clean(r['Reservation Purpose']);
-    if (/AC FIELDHOUSE - FULL TURF/i.test(fac) && /TURF INSTALL PER NM/i.test(pur)) {
-      fieldhouseMode = 'turf';
-      break;
-    }
-    if (/AC FIELDHOUSE - COURT\s*[3-8]/i.test(fac) && /FIELDHOUSE INSTALLED PER NM/i.test(pur)) {
-      fieldhouseMode = 'courts';
+  // Quick prefilter: RAEC only
+  const onlyRAEC = rows.filter(r => /Athletic\s*&\s*Event\s*Center/i.test(r['Location:'] || ''));
+  const season   = detectSeason(onlyRAEC);
+
+  // Build rooms list by season
+  const rooms = [
+    { id: '1A',  label: '1A',  group: 'south' },
+    { id: '1B',  label: '1B',  group: 'south' },
+    { id: '2A',  label: '2A',  group: 'south' },
+    { id: '2B',  label: '2B',  group: 'south' },
+    ...fieldhouseRoomsForSeason(season),
+    { id: '9A',  label: '9A',  group: 'north' },
+    { id: '9B',  label: '9B',  group: 'north' },
+    { id: '10A', label: '10A', group: 'north' },
+    { id: '10B', label: '10B', group: 'north' }
+  ];
+
+  const nowMin = nowMinutesLocal();
+  const slots = [];
+
+  // 1) SOUTH/NORTH — group by reservee+time, gather facilities, then decide room specificity
+  const groups = new Map(); // key -> { range, facilities:Set<string>, sampleRow }
+  for (const r of onlyRAEC) {
+    if (shouldHideRow(r)) continue;
+
+    const facility = clean(r['Facility'] || '');
+    if (!rowIsSouthNorth(facility)) continue;
+
+    const range = parseRangeToMinutes(r['Reserved Time']);
+    if (!range) continue;
+    if (!isToday(new Date())) continue;
+
+    // Keep ongoing+future today; drop fully past
+    if (range.endMin <= nowMin) continue;
+
+    const key = groupKeySouthNorth(r, range);
+    const g = groups.get(key) || { range, facilities: new Set(), sampleRow: r };
+    g.facilities.add(facility);
+    groups.set(key, g);
+  }
+
+  for (const [, g] of groups) {
+    const facilities = Array.from(g.facilities).sort((a,b) =>
+      specificityScoreSouthNorth(b) - specificityScoreSouthNorth(a)
+    );
+    const roomsPicked = pickRoomsSouthNorth(facilities);
+    if (!roomsPicked.length) continue;
+
+    const { title, subtitle } = makeTitleSubtitle(g.sampleRow);
+    const org = clean(g.sampleRow['Reservee'] || '');
+
+    for (const roomId of roomsPicked) {
+      slots.push(makeSlot(roomId, g.range.startMin, g.range.endMin, title, subtitle, org, ''));
     }
   }
 
-  const nowMin = nowMinutes();
+  // 2) FIELDHOUSE — per-row mapping (season aware)
+  for (const r of onlyRAEC) {
+    if (shouldHideRow(r)) continue;
 
-  // Build preliminary items with specificity
-  const prelim = [];
-  for (const r of rows) {
-    const location = clean(r['Location:'] || r['Location'] || '');
-    if (location && !/athletic\s*&\s*event\s*center/i.test(location)) continue;
+    const facility = clean(r['Facility'] || '');
+    if (!rowIsFieldhouse(facility)) continue;
 
-    const fac = clean(r['Facility']);
-    const timeText = clean(r['Reserved Time']);
-    const reservee = clean(r['Reservee']);
-    const purpose  = clean(r['Reservation Purpose']);
-
-    // skip internal holds from display (but used for season detection already)
-    if (/^raec\s*front\s*desk/i.test(reservee)) {
-      // Skip from display
-      continue;
-    }
-
-    const range = parseRangeToMinutes(timeText);
+    const range = parseRangeToMinutes(r['Reserved Time']);
     if (!range) continue;
-    if (range.endMin <= nowMin) continue; // hide past
+    if (range.endMin <= nowMin) continue;
+
+    const targetRooms = mapFieldhouseRooms(season, facility);
+    if (!targetRooms.length) continue;
 
     const { title, subtitle } = makeTitleSubtitle(r);
+    const org = clean(r['Reservee'] || '');
 
-    // SOUTH / NORTH groups with specificity
-    if (isSouth(fac)) {
-      prelim.push({
-        block: 'SOUTH',
-        fac,
-        rooms: mapSouthFacility(fac),
-        score: specificityScore(fac),
-        startMin: range.startMin,
-        endMin: range.endMin,
-        whoKey: title.toLowerCase(),
-        title,
-        subtitle
-      });
-      continue;
-    }
-    if (isNorth(fac)) {
-      prelim.push({
-        block: 'NORTH',
-        fac,
-        rooms: mapNorthFacility(fac),
-        score: specificityScore(fac),
-        startMin: range.startMin,
-        endMin: range.endMin,
-        whoKey: title.toLowerCase(),
-        title,
-        subtitle
-      });
-      continue;
-    }
-
-    // Fieldhouse
-    if (fieldhouseMode === 'turf') {
-      const rooms = mapFieldhouseTurfMode(fac);
-      if (rooms.length) {
-        prelim.push({
-          block: 'FIELDHOUSE',
-          fac,
-          rooms,
-          score: 5, // not competing with south/north logic
-          startMin: range.startMin,
-          endMin: range.endMin,
-          whoKey: title.toLowerCase(),
-          title,
-          subtitle
-        });
-      }
-    } else {
-      const rooms = mapFieldhouseCourtMode(fac);
-      if (rooms.length) {
-        prelim.push({
-          block: 'FIELDHOUSE',
-          fac,
-          rooms,
-          score: 5,
-          startMin: range.startMin,
-          endMin: range.endMin,
-          whoKey: title.toLowerCase(),
-          title,
-          subtitle
-        });
-      }
+    for (const roomId of targetRooms) {
+      slots.push(makeSlot(roomId, range.startMin, range.endMin, title, subtitle, org, ''));
     }
   }
 
-  // Resolve south/north overlaps by specificity
-  const chosen = [];
-
-  // Group SOUTH
-  const southGroups = new Map();
-  for (const it of prelim.filter(p => p.block === 'SOUTH')) {
-    const key = groupKeySouthNorth('S', it.whoKey, it.startMin, it.endMin);
-    if (!southGroups.has(key)) southGroups.set(key, []);
-    southGroups.get(key).push(it);
-  }
-  for (const arr of southGroups.values()) {
-    // if we have any HALF COURT rows → keep only those; else if COURT AB → keep those; else FULL/CHAMPIONSHIP
-    const maxScore = Math.max(...arr.map(a => a.score));
-    const best = arr.filter(a => a.score === maxScore);
-    best.forEach(b => chosen.push(b));
+  // 3) De-dup identical room/time/title (safety)
+  const seen = new Set();
+  const uniq = [];
+  for (const s of slots) {
+    const k = `${s.roomId}__${s.startMin}__${s.endMin}__${s.title}__${s.subtitle}`;
+    if (seen.has(k)) continue;
+    seen.add(k);
+    uniq.push(s);
   }
 
-  // Group NORTH
-  const northGroups = new Map();
-  for (const it of prelim.filter(p => p.block === 'NORTH')) {
-    const key = groupKeySouthNorth('N', it.whoKey, it.startMin, it.endMin);
-    if (!northGroups.has(key)) northGroups.set(key, []);
-    northGroups.get(key).push(it);
-  }
-  for (const arr of northGroups.values()) {
-    const maxScore = Math.max(...arr.map(a => a.score));
-    const best = arr.filter(a => a.score === maxScore);
-    best.forEach(b => chosen.push(b));
-  }
+  // 4) Sort by room then start time
+  uniq.sort((a,b) => {
+    if (a.roomId === b.roomId) return a.startMin - b.startMin;
+    return a.roomId.localeCompare(b.roomId, undefined, { numeric:true });
+  });
 
-  // Fieldhouse entries go straight through
-  prelim.filter(p => p.block === 'FIELDHOUSE').forEach(p => chosen.push(p));
-
-  // Expand to room slots
-  const slots = [];
-  for (const it of chosen) {
-    for (const r of it.rooms) {
-      slots.push({
-        roomId: r,
-        startMin: it.startMin,
-        endMin: it.endMin,
-        title: it.title,
-        subtitle: it.subtitle
-      });
-    }
-  }
-
-  // Sort slots by start/end
-  slots.sort((a,b) => a.roomId.localeCompare(b.roomId) || a.startMin - b.startMin || a.endMin - b.endMin);
-
-  // Build rooms array per mode
-  const rooms = baseRooms(fieldhouseMode);
-
-  const out = {
-    fieldhouseMode,
-    dayStartMin: 360,
-    dayEndMin: 1380,
+  // 5) Emit
+  const json = {
+    dayStartMin: DAY_START_MIN,
+    dayEndMin: DAY_END_MIN,
     rooms,
-    slots
+    slots: uniq
   };
+  fs.writeFileSync(OUTPUT_JSON, JSON.stringify(json, null, 2));
 
-  fs.writeFileSync(OUTPUT_JSON, JSON.stringify(out, null, 2));
-  console.log(`transform: season=${fieldhouseMode} • slots=${slots.length}`);
-}
-
-function baseRooms(mode) {
-  const fixed = [
-    { id:'1A', label:'1A', group:'south' },
-    { id:'1B', label:'1B', group:'south' },
-    { id:'2A', label:'2A', group:'south' },
-    { id:'2B', label:'2B', group:'south' },
-    { id:'9A', label:'9A', group:'north' },
-    { id:'9B', label:'9B', group:'north' },
-    { id:'10A',label:'10A',group:'north' },
-    { id:'10B',label:'10B',group:'north' },
-  ];
-  const middleCourts = [
-    { id:'3', label:'3', group:'fieldhouse' },
-    { id:'4', label:'4', group:'fieldhouse' },
-    { id:'5', label:'5', group:'fieldhouse' },
-    { id:'6', label:'6', group:'fieldhouse' },
-    { id:'7', label:'7', group:'fieldhouse' },
-    { id:'8', label:'8', group:'fieldhouse' },
-  ];
-  const middleTurf = [
-    { id:'QT-NA', label:'NA', group:'fieldhouse' },
-    { id:'QT-NB', label:'NB', group:'fieldhouse' },
-    { id:'QT-SA', label:'SA', group:'fieldhouse' },
-    { id:'QT-SB', label:'SB', group:'fieldhouse' },
-  ];
-  return mode === 'turf' ? [...fixed, ...middleTurf] : [...fixed, ...middleCourts];
+  // Summary
+  const byRoom = {};
+  for (const s of uniq) byRoom[s.roomId] = (byRoom[s.roomId] || 0) + 1;
+  console.log(`transform: season=${season} • slots=${uniq.length} • byRoom=${JSON.stringify(byRoom)}`);
 }
 
 main().catch(err => {
