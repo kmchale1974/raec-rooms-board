@@ -1,7 +1,7 @@
 {
+  "season": "courts",
   "dayStartMin": 360,
   "dayEndMin": 1380,
-  "season": "turf",
   "rooms": [
     {
       "id": "1A",
@@ -24,26 +24,6 @@
       "group": "south"
     },
     {
-      "id": "TNA",
-      "label": "Quarter Turf NA",
-      "group": "fieldhouse"
-    },
-    {
-      "id": "TNB",
-      "label": "Quarter Turf NB",
-      "group": "fieldhouse"
-    },
-    {
-      "id": "TSA",
-      "label": "Quarter Turf SA",
-      "group": "fieldhouse"
-    },
-    {
-      "id": "TSB",
-      "label": "Quarter Turf SB",
-      "group": "fieldhouse"
-    },
-    {
       "id": "9A",
       "label": "9A",
       "group": "north"
@@ -62,176 +42,37 @@
       "id": "10B",
       "label": "10B",
       "group": "north"
+    },
+    {
+      "id": "3",
+      "label": "3",
+      "group": "fieldhouse"
+    },
+    {
+      "id": "4",
+      "label": "4",
+      "group": "fieldhouse"
+    },
+    {
+      "id": "5",
+      "label": "5",
+      "group": "fieldhouse"
+    },
+    {
+      "id": "6",
+      "label": "6",
+      "group": "fieldhouse"
+    },
+    {
+      "id": "7",
+      "label": "7",
+      "group": "fieldhouse"
+    },
+    {
+      "id": "8",
+      "label": "8",
+      "group": "fieldhouse"
     }
   ],
-  "slots": [
-    {
-      "roomId": "10A",
-      "startMin": 570,
-      "endMin": 750,
-      "title": "Open Pickleball",
-      "subtitle": ""
-    },
-    {
-      "roomId": "10B",
-      "startMin": 570,
-      "endMin": 750,
-      "title": "Open Pickleball",
-      "subtitle": ""
-    },
-    {
-      "roomId": "9A",
-      "startMin": 570,
-      "endMin": 750,
-      "title": "Open Pickleball",
-      "subtitle": ""
-    },
-    {
-      "roomId": "9B",
-      "startMin": 570,
-      "endMin": 750,
-      "title": "Open Pickleball",
-      "subtitle": ""
-    },
-    {
-      "roomId": "10A",
-      "startMin": 1080,
-      "endMin": 1140,
-      "title": "Sam Franklin Training",
-      "subtitle": "2025 Q4 Pattern"
-    },
-    {
-      "roomId": "10B",
-      "startMin": 1080,
-      "endMin": 1140,
-      "title": "Sam Franklin Training",
-      "subtitle": "2025 Q4 Pattern"
-    },
-    {
-      "roomId": "9A",
-      "startMin": 1080,
-      "endMin": 1140,
-      "title": "Sam Franklin Training",
-      "subtitle": "2025 Q4 Pattern"
-    },
-    {
-      "roomId": "9B",
-      "startMin": 1080,
-      "endMin": 1140,
-      "title": "Sam Franklin Training",
-      "subtitle": "2025 Q4 Pattern"
-    },
-    {
-      "roomId": "9A",
-      "startMin": 1080,
-      "endMin": 1140,
-      "title": "Catch Corner (Internal Holds",
-      "subtitle": "Catch Corner (Prolific Basketball Booking #440512"
-    },
-    {
-      "roomId": "9B",
-      "startMin": 1080,
-      "endMin": 1140,
-      "title": "Catch Corner (Internal Holds",
-      "subtitle": "Catch Corner (Prolific Basketball Booking #440512"
-    },
-    {
-      "roomId": "10A",
-      "startMin": 1080,
-      "endMin": 1140,
-      "title": "Catch Corner (Internal Holds",
-      "subtitle": "Catch Corner (Prolific Basketball Booking #440512"
-    },
-    {
-      "roomId": "10B",
-      "startMin": 1080,
-      "endMin": 1140,
-      "title": "Catch Corner (Internal Holds",
-      "subtitle": "Catch Corner (Prolific Basketball Booking #440512"
-    },
-    {
-      "roomId": "10A",
-      "startMin": 1140,
-      "endMin": 1260,
-      "title": "Catch Corner (Internal Holds",
-      "subtitle": "CatchCorner (Illinois Lady Elite #438329 Basketball"
-    },
-    {
-      "roomId": "10B",
-      "startMin": 1140,
-      "endMin": 1260,
-      "title": "Catch Corner (Internal Holds",
-      "subtitle": "CatchCorner (Illinois Lady Elite #438329 Basketball"
-    },
-    {
-      "roomId": "9A",
-      "startMin": 1140,
-      "endMin": 1260,
-      "title": "Catch Corner (Internal Holds",
-      "subtitle": "CatchCorner (Illinois Lady Elite #438329 Basketball"
-    },
-    {
-      "roomId": "9B",
-      "startMin": 1140,
-      "endMin": 1260,
-      "title": "Catch Corner (Internal Holds",
-      "subtitle": "CatchCorner (Illinois Lady Elite #438329 Basketball"
-    },
-    {
-      "roomId": "9A",
-      "startMin": 1140,
-      "endMin": 1260,
-      "title": "Extreme Volleyball",
-      "subtitle": "Volleyball"
-    },
-    {
-      "roomId": "9B",
-      "startMin": 1140,
-      "endMin": 1260,
-      "title": "Extreme Volleyball",
-      "subtitle": "Volleyball"
-    },
-    {
-      "roomId": "10A",
-      "startMin": 1140,
-      "endMin": 1260,
-      "title": "Extreme Volleyball",
-      "subtitle": "Volleyball"
-    },
-    {
-      "roomId": "10B",
-      "startMin": 1140,
-      "endMin": 1260,
-      "title": "Extreme Volleyball",
-      "subtitle": "Volleyball"
-    },
-    {
-      "roomId": "1A",
-      "startMin": 1260,
-      "endMin": 1380,
-      "title": "Chicago Sport and Social Club",
-      "subtitle": "Volleyball (Grab A Game"
-    },
-    {
-      "roomId": "1B",
-      "startMin": 1260,
-      "endMin": 1380,
-      "title": "Chicago Sport and Social Club",
-      "subtitle": "Volleyball (Grab A Game"
-    },
-    {
-      "roomId": "2A",
-      "startMin": 1260,
-      "endMin": 1380,
-      "title": "Chicago Sport and Social Club",
-      "subtitle": "Volleyball (Grab A Game"
-    },
-    {
-      "roomId": "2B",
-      "startMin": 1260,
-      "endMin": 1380,
-      "title": "Chicago Sport and Social Club",
-      "subtitle": "Volleyball (Grab A Game"
-    }
-  ]
+  "slots": []
 }
