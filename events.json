@@ -77,24 +77,10 @@
   "slots": [
     {
       "roomId": "10A",
-      "startMin": 1080,
-      "endMin": 1140,
-      "title": "Sam Franklin Training",
-      "subtitle": "2025 Q4 Pattern"
-    },
-    {
-      "roomId": "10A",
       "startMin": 1140,
       "endMin": 1260,
       "title": "Catch Corner (Internal Holds",
       "subtitle": "CatchCorner (Illinois Lady Elite #438329 Basketball)"
-    },
-    {
-      "roomId": "10B",
-      "startMin": 1080,
-      "endMin": 1140,
-      "title": "Sam Franklin Training",
-      "subtitle": "2025 Q4 Pattern"
     },
     {
       "roomId": "10B",
@@ -133,38 +119,10 @@
     },
     {
       "roomId": "9A",
-      "startMin": 1080,
-      "endMin": 1140,
-      "title": "Catch Corner (Internal Holds",
-      "subtitle": "Catch Corner (Prolific Basketball Booking #440512)"
-    },
-    {
-      "roomId": "9A",
-      "startMin": 1080,
-      "endMin": 1140,
-      "title": "Sam Franklin Training",
-      "subtitle": "2025 Q4 Pattern"
-    },
-    {
-      "roomId": "9A",
       "startMin": 1140,
       "endMin": 1260,
       "title": "Catch Corner (Internal Holds",
       "subtitle": "CatchCorner (Illinois Lady Elite #438329 Basketball)"
-    },
-    {
-      "roomId": "9B",
-      "startMin": 1080,
-      "endMin": 1140,
-      "title": "Catch Corner (Internal Holds",
-      "subtitle": "Catch Corner (Prolific Basketball Booking #440512)"
-    },
-    {
-      "roomId": "9B",
-      "startMin": 1080,
-      "endMin": 1140,
-      "title": "Sam Franklin Training",
-      "subtitle": "2025 Q4 Pattern"
     },
     {
       "roomId": "9B",
