@@ -143,3 +143,13 @@ html,body{
 /* No scrollbars */
 *::-webkit-scrollbar{ display:none; }
 *{ scrollbar-width:none; }
+
+/* Override any old rotor slide classes */
+.room .events .event {
+  transform: none !important;
+}
+.event.is-enter,
+.event.is-exit,
+.event.is-exit-active {
+  transform: none !important;
+}
