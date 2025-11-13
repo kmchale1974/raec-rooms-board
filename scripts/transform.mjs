@@ -91,20 +91,17 @@ function idx(header, name){
   return -1;
 }
 
-// ---------- season detection ----------
-function detectSeason(purposes){
-  // From CSV narrative:
-  // - "Turf Install per NM" or "Turf Season per NM" => TURF (2x2 quarters)
-  // - "Fieldhouse Installed per NM" => COURTS (3..8)
-  const any = (re) => purposes.some(p => re.test(p));
-  if (any(/turf\s*(install|season)\s*per\s*nm/i)) return 'turf';
-  if (any(/fieldhouse\s*installed\s*per\s*nm/i)) return 'courts';
+// Decide season ONLY from CSV column E (Reservation Purpose)
+function detectSeason(purposes) {
+  // purposes = array of Reservation Purpose strings
+  const isTurf = purposes.some(p =>
+    clean(p).toLowerCase() === 'turf season per nm'
+  );
 
-  // fallback: calendar-based (Mar..Nov = courts)
-  const d = new Date();
-  const m = d.getMonth(); // 0..11
-  return (m>=2 && m<=10) ? 'courts' : 'turf';
+  // 'courts' here is your "basketball season"
+  return isTurf ? 'turf' : 'courts';
 }
+
 
 function baseRooms(){
   return [
