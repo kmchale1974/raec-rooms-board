@@ -169,3 +169,216 @@ function buildFieldhouseContainer(mode) {
         <div class="events"></div>
       `;
       holder.appendChild(room);
+    }
+  }
+}
+
+// ---------- Data prep ----------
+
+function groupByRoom(slots) {
+  const map = new Map();
+  for (const s of slots) {
+    if (!map.has(s.roomId)) map.set(s.roomId, []);
+    map.get(s.roomId).push(s);
+  }
+  for (const [, arr] of map) {
+    arr.sort(
+      (a, b) => a.startMin - b.startMin || a.title.localeCompare(b.title)
+    );
+  }
+  return map;
+}
+
+/**
+ * Filter slots for display based on current time:
+ *  - only today
+ *  - hide past events (endMin <= now)
+ *  - hide Open Pickleball after 12:30pm
+ */
+function filterForDisplay(slots) {
+  const nowMin = minutesNowLocal();
+
+  let filtered = slots.filter(
+    (s) => isTodaySlot(s) && s.endMin > nowMin // current or future
+  );
+
+  const cutoff = 12 * 60 + 30;
+  if (nowMin > cutoff) {
+    filtered = filtered.filter((s) => !isPickleball(s));
+  }
+
+  return filtered;
+}
+
+/**
+ * For a room’s filtered slots, find current & next,
+ * plus which index each is in the filtered list.
+ */
+function getCurrentNextAndIndex(slots, nowMin) {
+  const total = slots.length;
+  let current = null;
+  let next = null;
+  let currentIndex = 0; // 1-based
+  let nextIndex = 0;
+
+  for (let i = 0; i < slots.length; i++) {
+    const s = slots[i];
+    if (s.startMin <= nowMin && s.endMin > nowMin) {
+      // Latest one that spans now wins as current
+      if (!current || s.startMin > current.startMin) {
+        current = s;
+        currentIndex = i + 1;
+      }
+    } else if (s.startMin > nowMin) {
+      if (!next || s.startMin < next.startMin) {
+        next = s;
+        nextIndex = i + 1;
+      }
+    }
+  }
+
+  return { current, next, currentIndex, nextIndex, total };
+}
+
+// ---------- Rendering: NOW + NEXT per room ----------
+
+function renderRoomEvents(container, current, next) {
+  container.innerHTML = "";
+
+  const makeChip = (kind, slot) => {
+    const chip = el("div", "event");
+    chip.classList.add(kind);
+
+    if (!slot) {
+      if (kind === "current") {
+        chip.innerHTML = `
+          <div class="who">No current reservation</div>
+          <div class="when"></div>
+        `;
+      } else {
+        chip.innerHTML = `
+          <div class="who">No upcoming reservation</div>
+          <div class="when"></div>
+        `;
+      }
+      return chip;
+    }
+
+    const title = slot.title || "Reserved";
+    const subtitle = slot.subtitle || "";
+    const when = formatRange(slot.startMin, slot.endMin);
+
+    chip.innerHTML = `
+      <div class="who">${title}</div>
+      ${
+        subtitle
+          ? `<div class="what">${subtitle}</div>`
+          : ""
+      }
+      <div class="when">${when}</div>
+    `;
+    return chip;
+  };
+
+  container.appendChild(makeChip("current", current));
+  container.appendChild(makeChip("next", next));
+}
+
+/**
+ * Update a single room card:
+ *  - set “X of Y reservations”
+ *  - render NOW + NEXT chips
+ */
+function updateRoomCard(roomDomId, roomSlots, nowMin) {
+  const card = document.getElementById(`room-${roomDomId}`);
+  if (!card) return;
+
+  const countEl = qs(".roomHeader .count", card);
+  const eventsEl = qs(".events", card);
+  if (!eventsEl || !countEl) return;
+
+  const { current, next, currentIndex, nextIndex, total } =
+    getCurrentNextAndIndex(roomSlots, nowMin);
+
+  let label;
+  if (total === 0) {
+    label = "0 of 0 reservations";
+  } else if (current) {
+    label = `${currentIndex} of ${total} reservations`;
+  } else if (next) {
+    label = `${nextIndex} of ${total} reservations`;
+  } else {
+    // No current or next after filtering (should be rare)
+    label = `0 of ${total} reservations`;
+  }
+
+  countEl.textContent = label;
+  renderRoomEvents(eventsEl, current, next);
+}
+
+// ---------- Global state + main loop ----------
+
+let ALL_SLOTS = [];
+let FIELDHOUSE_MODE = "courts"; // "turf" or "courts"
+
+function refreshBoard() {
+  if (!ALL_SLOTS.length) return;
+
+  const nowMin = minutesNowLocal();
+  const displaySlots = filterForDisplay(ALL_SLOTS);
+  const grouped = groupByRoom(displaySlots);
+
+  // South/North fixed rooms (already in HTML)
+  for (const id of FIXED_ROOMS) {
+    const roomSlots = grouped.get(id) || [];
+    updateRoomCard(id, roomSlots, nowMin);
+  }
+
+  // Fieldhouse rooms depending on mode
+  if (FIELDHOUSE_MODE === "turf") {
+    for (const room of TURF_ROOMS) {
+      const roomSlots = grouped.get(room.id) || [];
+      updateRoomCard(room.domId, roomSlots, nowMin);
+    }
+  } else {
+    for (const id of COURT_ROOMS) {
+      const roomSlots = grouped.get(id) || [];
+      updateRoomCard(id, roomSlots, nowMin);
+    }
+  }
+}
+
+// ---------- Boot ----------
+
+async function boot() {
+  startHeaderClock();
+
+  const res = await fetch(`./events.json?cb=${Date.now()}`, {
+    cache: "no-store",
+  });
+  const data = await res.json();
+
+  ALL_SLOTS = Array.isArray(data?.slots) ? data.slots : [];
+
+  const mode = getFieldhouseMode(data, ALL_SLOTS);
+  FIELDHOUSE_MODE = mode;
+
+  console.log("events.json loaded:", {
+    season: data.season,
+    mode: FIELDHOUSE_MODE,
+    totalSlots: ALL_SLOTS.length,
+  });
+
+  // Build fieldhouse DOM once based on season
+  buildFieldhouseContainer(FIELDHOUSE_MODE);
+
+  // Initial render
+  refreshBoard();
+
+  // Recompute NOW/NEXT & counts once per minute
+  setInterval(refreshBoard, 60_000);
+}
+
+boot().catch((err) => {
+  console.error("app init failed:", err);
+});
