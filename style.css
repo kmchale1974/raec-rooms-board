@@ -1,5 +1,5 @@
 /* =========================
-   RAEC Rooms Board – Full CSS
+   RAEC Rooms Board – Full CSS (drop-in)
    ========================= */
 
 :root{
@@ -21,7 +21,13 @@ html,body{
   -webkit-font-smoothing:antialiased; -moz-osx-font-smoothing:grayscale;
   cursor: none; /* kiosk */
 }
-.viewport{ position:fixed; inset:0; display:flex; align-items:flex-start; justify-content:center; padding:16px; box-sizing:border-box; }
+
+.viewport{
+  position:fixed; inset:0;
+  display:flex; align-items:flex-start; justify-content:center;
+  padding:16px; box-sizing:border-box;
+}
+
 .stage{
   width:1920px; height:1080px;
   padding:36px; box-sizing:border-box;
@@ -29,20 +35,30 @@ html,body{
 }
 
 /* Header */
-.header{ display:grid; grid-template-columns: 360px 1fr 360px; align-items:center; gap:24px; }
+.header{
+  display:grid; grid-template-columns: 360px 1fr 360px; align-items:center; gap:24px;
+}
 .brand{ display:flex; align-items:center; gap:16px; }
 .brand img{ height:80px; width:auto; object-fit:contain; }
 .dateclock{ justify-self:center; text-align:center; }
 #headerDate{ font-size:44px; font-weight:800; letter-spacing:.02em; }
 #headerClock{ font-size:28px; color:var(--muted); margin-top:6px; font-weight:600; }
-.wifi{ justify-self:end; background:var(--panel); border:1px solid var(--grid); border-radius:14px; padding:14px 16px; min-width:340px; }
-.wifi .title{ font-size:16px; color:var(--muted); letter-spacing:.08em; text-transform:uppercase; }
+
+.wifi{
+  justify-self:end; background:var(--panel); border:1px solid var(--grid); border-radius:14px;
+  padding:14px 16px; min-width:340px;
+}
+.wifi .title{
+  font-size:16px; color:var(--muted); letter-spacing:.08em; text-transform:uppercase;
+}
 .wifi .row{ display:flex; justify-content:space-between; gap:12px; margin-top:6px; }
 .wifi .row span:first-child{ color:var(--muted); }
 .wifi .row span:last-child{ font-weight:700; }
 
 /* Three-column layout */
-.grid{ display:grid; grid-template-columns: 1fr 1.5fr 1fr; gap:24px; height:100%; }
+.grid{
+  display:grid; grid-template-columns: 1fr 1.5fr 1fr; gap:24px; height:100%;
+}
 
 /* Panels */
 .group{
@@ -55,13 +71,28 @@ html,body{
 }
 
 /* South/North stacks & row */
-.rooms-stack{ display:grid; grid-template-rows: 1fr 1fr; gap:12px; min-height:0; }
-.row-2cols{ display:grid; grid-template-columns: 1fr 1fr; gap:12px; min-height:0; }
+.rooms-stack{
+  display:grid; grid-template-rows: 1fr 1fr; gap:12px; min-height:0;
+}
+.row-2cols{
+  display:grid; grid-template-columns: 1fr 1fr; gap:12px; min-height:0;
+}
 
-/* Fieldhouse grid */
+/* Fieldhouse grid — default class is set by JS */
 .rooms-fieldhouse{
-  display:grid; grid-template-columns: repeat(3, 1fr); grid-template-rows: 1fr 1fr;
-  gap:12px; min-height:0;
+  display:grid; gap:12px; min-height:0;
+}
+
+/* Courts season (3×2: courts 3..8) */
+.rooms-fieldhouse.courts-3x2{
+  grid-template-columns: repeat(3, 1fr);
+  grid-template-rows: 1fr 1fr;
+}
+
+/* Turf season (2×2: NA | NB / SA | SB) */
+.rooms-fieldhouse.turf-2x2{
+  grid-template-columns: 1fr 1fr;
+  grid-template-rows: 1fr 1fr;
 }
 
 /* Room */
@@ -70,34 +101,44 @@ html,body{
   display:flex; flex-direction:column; gap:10px; min-height:0; overflow:hidden;
   background:linear-gradient(180deg, rgba(255,255,255,0.02), rgba(0,0,0,0));
 }
-.roomHeader{ display:flex; align-items:center; justify-content:space-between; gap:12px; border-bottom:1px dashed var(--grid); padding-bottom:8px; }
+.roomHeader{
+  display:flex; align-items:center; justify-content:space-between; gap:12px;
+  border-bottom:1px dashed var(--grid); padding-bottom:8px;
+}
 .roomHeader .id{ font-size:30px; font-weight:800; letter-spacing:.04em; }
 .roomHeader .count{ font-size:13px; color:var(--muted); }
 
-/* Pager */
-.events{ position:relative; flex:1 1 auto; min-height:0; overflow:hidden; }
-.eventsPager{ position:relative; height:100%; min-height:0; overflow:hidden; }
-.page{
-  position:absolute; inset:0; display:flex; flex-direction:column; gap:10px;
-  padding-bottom:10px;
+/* Events area (per-room) */
+.events{
+  position:relative; flex:1 1 auto; min-height:0; overflow:hidden;
 }
 
 /* Event chip */
 .event{
   background:var(--chip); border:1px solid var(--grid); border-radius:12px;
   padding:12px 14px; display:flex; flex-direction:column; gap:6px;
+  /* Smooth slide/fade controlled by JS class toggles */
+  transition: transform 420ms ease, opacity 420ms ease;
+  transform: translateX(0); opacity:1;
 }
 .event .who{ font-size:20px; font-weight:800; line-height:1.15; }
 .event .what{ font-size:16px; color:var(--muted); line-height:1.2; }
 .event .when{ font-size:15px; color:#b7c0cf; font-weight:600; }
 .who,.what{ word-wrap:break-word; overflow-wrap:anywhere; }
 
-/* Slide-left animations */
-.page { transform:translateX(100%); opacity:0; }
-.page.slide-in   { animation: slideInLeft 420ms ease-out forwards; }
-.page.slide-out  { animation: slideOutLeft 420ms ease-in forwards; }
-@keyframes slideInLeft { from{transform:translateX(100%); opacity:.92;} to{transform:translateX(0); opacity:1;} }
-@keyframes slideOutLeft{ from{transform:translateX(0); opacity:1;}     to{transform:translateX(-100%); opacity:.92;} }
+/* Rotor animation states (match app.js) */
+.event.is-enter{
+  transform: translateX(60px);
+  opacity: 0;
+}
+.event.is-exit{
+  transform: translateX(0);
+  opacity: 1;
+}
+.event.is-exit-active{
+  transform: translateX(-60px);
+  opacity: 0;
+}
 
 /* No scrollbars */
 *::-webkit-scrollbar{ display:none; }
