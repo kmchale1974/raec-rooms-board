@@ -1,4 +1,4 @@
-// app.js — NOW + NEXT per room, "X of Y reservations", no 'No current reservation' text
+// app.js — One event per room, global 8s slide, CSV-driven season
 
 const STAGE_WIDTH = 1920;
 const STAGE_HEIGHT = 1080;
@@ -97,7 +97,7 @@ function startHeaderClock() {
 
 // ---------- Room sets / season ----------
 
-// South/North fixed rooms (in your HTML)
+// South/North fixed rooms (already in HTML)
 const FIXED_ROOMS = ["1A", "1B", "2A", "2B", "9A", "9B", "10A", "10B"];
 
 // Turf rooms as emitted by events.json (group: "fieldhouse")
@@ -210,147 +210,175 @@ function filterForDisplay(slots) {
   return filtered;
 }
 
-/**
- * Decide which 1–2 slots to show for a room, and which index
- * should drive the "X of Y reservations" label.
- *
- * Rules:
- *  - If there is a current event: show [current, nextFuture?]
- *  - If no current: show [first, second?] from the list
- */
-function pickVisibleSlots(roomSlots, nowMin) {
-  const total = roomSlots.length;
-  if (total === 0) {
-    return { visible: [], labelIndex: 0, total };
+// ---------- Rendering helpers ----------
+
+// Build a single event chip for display
+function buildEventChip(slot) {
+  const chip = el("div", "event");
+  const title = slot.title || "Reserved";
+  const subtitle = slot.subtitle || "";
+  const when = formatRange(slot.startMin, slot.endMin);
+
+  chip.innerHTML = `
+    <div class="who">${title}</div>
+    ${subtitle ? `<div class="what">${subtitle}</div>` : ""}
+    <div class="when">${when}</div>
+  `;
+  return chip;
+}
+
+// Smooth slide animation: old chip left, new chip in from right
+function animateChipSwap(eventsEl, oldChip, newChip) {
+  // Ensure container is ready
+  eventsEl.style.position = eventsEl.style.position || "relative";
+  newChip.style.position = "relative";
+
+  if (!oldChip) {
+    // First render: no animation
+    eventsEl.innerHTML = "";
+    newChip.style.opacity = "1";
+    newChip.style.transform = "translateX(0)";
+    eventsEl.appendChild(newChip);
+    return newChip;
   }
 
-  // Find the current event index (if any)
-  let currentIdx = -1;
-  for (let i = 0; i < roomSlots.length; i++) {
-    const s = roomSlots[i];
-    if (s.startMin <= nowMin && s.endMin > nowMin) {
-      if (
-        currentIdx === -1 ||
-        s.startMin > roomSlots[currentIdx].startMin
-      ) {
-        currentIdx = i;
+  // Prepare new chip off-screen right
+  newChip.style.opacity = "0";
+  newChip.style.transform = "translateX(100%)";
+  newChip.style.transition = "none";
+  eventsEl.appendChild(newChip);
+
+  // Trigger layout, then animate
+  newChip.offsetWidth; // force reflow
+
+  const duration = 600; // ms
+
+  oldChip.style.transition = `transform ${duration}ms ease, opacity ${duration}ms ease`;
+  newChip.style.transition = `transform ${duration}ms ease, opacity ${duration}ms ease`;
+
+  oldChip.style.transform = "translateX(-100%)";
+  oldChip.style.opacity = "0";
+
+  newChip.style.transform = "translateX(0)";
+  newChip.style.opacity = "1";
+
+  oldChip.addEventListener(
+    "transitionend",
+    () => {
+      if (oldChip.parentNode === eventsEl) {
+        eventsEl.removeChild(oldChip);
       }
-    }
-  }
+    },
+    { once: true }
+  );
 
-  const visible = [];
-  let labelIndex = 1; // 1-based
-
-  if (currentIdx >= 0) {
-    // We have a current event
-    const current = roomSlots[currentIdx];
-    visible.push(current);
-    labelIndex = currentIdx + 1;
-
-    // Find the next future event (anywhere after now)
-    let nextIdx = -1;
-    for (let i = 0; i < roomSlots.length; i++) {
-      const s = roomSlots[i];
-      if (s.startMin > nowMin) {
-        if (nextIdx === -1 || s.startMin < roomSlots[nextIdx].startMin) {
-          nextIdx = i;
-        }
-      }
-    }
-    if (nextIdx >= 0 && nextIdx !== currentIdx) {
-      visible.push(roomSlots[nextIdx]);
-    }
-  } else {
-    // No current event: show first one or two upcoming
-    visible.push(roomSlots[0]);
-    labelIndex = 1;
-    if (roomSlots.length > 1) {
-      visible.push(roomSlots[1]);
-    }
-  }
-
-  return { visible, labelIndex, total };
+  return newChip;
 }
 
-// ---------- Rendering: up to 2 real events per room ----------
-
-function renderRoomEvents(container, slots) {
-  container.innerHTML = "";
-
-  slots.forEach((slot, idx) => {
-    const kind = idx === 0 ? "current" : "next";
-    const chip = el("div", "event");
-    chip.classList.add(kind);
-
-    const title = slot.title || "Reserved";
-    const subtitle = slot.subtitle || "";
-    const when = formatRange(slot.startMin, slot.endMin);
-
-    chip.innerHTML = `
-      <div class="who">${title}</div>
-      ${subtitle ? `<div class="what">${subtitle}</div>` : ""}
-      <div class="when">${when}</div>
-    `;
-
-    container.appendChild(chip);
-  });
-}
-
-/**
- * Update a single room card:
- *  - set “X of Y reservations”
- *  - render up to 2 real event chips
- */
-function updateRoomCard(roomDomId, roomSlots, nowMin) {
-  const card = document.getElementById(`room-${roomDomId}`);
-  if (!card) return;
-
-  const countEl = qs(".roomHeader .count", card);
-  const eventsEl = qs(".events", card);
-  if (!eventsEl || !countEl) return;
-
-  const { visible, labelIndex, total } = pickVisibleSlots(roomSlots, nowMin);
-
-  let label;
-  if (total === 0) {
-    label = "0 of 0 reservations";
-  } else {
-    label = `${labelIndex} of ${total} reservations`;
-  }
-
-  countEl.textContent = label;
-  renderRoomEvents(eventsEl, visible);
-}
-
-// ---------- Global state + main loop ----------
+// ---------- Global state + synchronized rotor ----------
 
 let ALL_SLOTS = [];
 let FIELDHOUSE_MODE = "courts"; // "turf" or "courts"
 
-function refreshBoard() {
-  if (!ALL_SLOTS.length) return;
+// Rooms we rotate through, with JSON->DOM mapping
+let ACTIVE_ROOMS = []; // { jsonId, domId }
+
+const ROOM_STATE = new Map(); // roomDomId -> { chip: HTMLElement | null }
+
+let GLOBAL_TICK = 0; // increments every 8s
+
+function buildActiveRooms() {
+  ACTIVE_ROOMS = [];
+  // Fixed rooms: jsonId == domId
+  for (const id of FIXED_ROOMS) {
+    ACTIVE_ROOMS.push({ jsonId: id, domId: id });
+  }
+
+  if (FIELDHOUSE_MODE === "turf") {
+    for (const room of TURF_ROOMS) {
+      ACTIVE_ROOMS.push({ jsonId: room.id, domId: room.domId });
+    }
+  } else {
+    for (const id of COURT_ROOMS) {
+      ACTIVE_ROOMS.push({ jsonId: id, domId: id });
+    }
+  }
+}
+
+/**
+ * One global tick every 8 seconds:
+ * - recompute filtered slots
+ * - for each room, pick which event index to show
+ * - animate chip swap
+ */
+function globalRotorTick() {
+  if (!ALL_SLOTS.length || !ACTIVE_ROOMS.length) return;
 
   const nowMin = minutesNowLocal();
   const displaySlots = filterForDisplay(ALL_SLOTS);
   const grouped = groupByRoom(displaySlots);
 
-  // South/North fixed rooms
-  for (const id of FIXED_ROOMS) {
-    const roomSlots = grouped.get(id) || [];
-    updateRoomCard(id, roomSlots, nowMin);
+  for (const room of ACTIVE_ROOMS) {
+    const jsonId = room.jsonId;
+    const domId = room.domId;
+
+    const card = document.getElementById(`room-${domId}`);
+    if (!card) continue;
+
+    const countEl = qs(".roomHeader .count", card);
+    const eventsEl = qs(".events", card);
+    if (!eventsEl || !countEl) continue;
+
+    const slots = grouped.get(jsonId) || [];
+    const total = slots.length;
+
+    if (total === 0) {
+      // No events: clear chip & label
+      countEl.textContent = "0 of 0 reservations";
+      eventsEl.innerHTML = "";
+      ROOM_STATE.delete(domId);
+      continue;
+    }
+
+    // Use the same GLOBAL_TICK for every room.
+    // Each room shows slot at (tick % total), so if
+    // the same event is at the same index in each room,
+    // it appears at the same time across rooms.
+    const index = GLOBAL_TICK % total;
+    const slot = slots[index];
+
+    const label = `${index + 1} of ${total} reservations`;
+    countEl.textContent = label;
+
+    const prevState = ROOM_STATE.get(domId) || { chip: null };
+    const oldChip = prevState.chip;
+    const newChip = buildEventChip(slot);
+
+    const finalChip = animateChipSwap(eventsEl, oldChip, newChip);
+    ROOM_STATE.set(domId, { chip: finalChip });
   }
 
-  // Fieldhouse rooms depending on mode
-  if (FIELDHOUSE_MODE === "turf") {
-    for (const room of TURF_ROOMS) {
-      const roomSlots = grouped.get(room.id) || [];
-      updateRoomCard(room.domId, roomSlots, nowMin);
-    }
-  } else {
-    for (const id of COURT_ROOMS) {
-      const roomSlots = grouped.get(id) || [];
-      updateRoomCard(id, roomSlots, nowMin);
-    }
+  GLOBAL_TICK++;
+}
+
+// ---------- Events.json refresh ----------
+
+async function refreshEventsJson() {
+  try {
+    const res = await fetch(`./events.json?cb=${Date.now()}`, {
+      cache: "no-store",
+    });
+    const data = await res.json();
+    ALL_SLOTS = Array.isArray(data?.slots) ? data.slots : [];
+
+    // If season changes, we could rebuild mode/rooms,
+    // but for now assume season is stable for the day.
+    console.log("events.json refreshed:", {
+      season: data.season,
+      totalSlots: ALL_SLOTS.length,
+    });
+  } catch (err) {
+    console.error("Failed to refresh events.json:", err);
   }
 }
 
@@ -365,7 +393,6 @@ async function boot() {
   const data = await res.json();
 
   ALL_SLOTS = Array.isArray(data?.slots) ? data.slots : [];
-
   FIELDHOUSE_MODE = getFieldhouseMode(data, ALL_SLOTS);
 
   console.log("events.json loaded:", {
@@ -377,11 +404,17 @@ async function boot() {
   // Build fieldhouse DOM once based on season
   buildFieldhouseContainer(FIELDHOUSE_MODE);
 
-  // Initial render
-  refreshBoard();
+  // Build active room list (fixed + fieldhouse)
+  buildActiveRooms();
 
-  // Recompute visible events & counts once per minute
-  setInterval(refreshBoard, 60_000);
+  // Initial tick so the board isn't empty
+  globalRotorTick();
+
+  // Rotate globally every 8 seconds
+  setInterval(globalRotorTick, 8000);
+
+  // Refresh events.json every minute so new bookings appear
+  setInterval(refreshEventsJson, 60_000);
 }
 
 boot().catch((err) => {
