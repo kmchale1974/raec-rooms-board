@@ -153,3 +153,18 @@ html,body{
 .event.is-exit-active {
   transform: none !important;
 }
+
+/* Hard-disable any old rotor animation styles */
+.room .events .event {
+  transform: none !important;
+  opacity: 1 !important;
+  transition: none !important;
+}
+
+.event.is-enter,
+.event.is-exit,
+.event.is-exit-active {
+  transform: none !important;
+  opacity: 1 !important;
+  transition: none !important;
+}
