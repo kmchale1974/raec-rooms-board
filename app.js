@@ -1,4 +1,4 @@
-// app.js — NOW + NEXT per room, X of Y reservations, CSV-driven season
+// app.js — NOW + NEXT per room, "X of Y reservations", no 'No current reservation' text
 
 const STAGE_WIDTH = 1920;
 const STAGE_HEIGHT = 1080;
@@ -14,7 +14,7 @@ function minutesNowLocal() {
   return d.getHours() * 60 + d.getMinutes();
 }
 
-// startMin/endMin are already minutes-from-midnight from transform.mjs
+// startMin/endMin are minutes-from-midnight from transform.mjs
 function formatRange(startMin, endMin) {
   const fmt = (m) => {
     const h24 = Math.floor(m / 60);
@@ -26,7 +26,7 @@ function formatRange(startMin, endMin) {
   return `${fmt(startMin)}–${fmt(endMin)}`;
 }
 
-// All slots are “today” in this board
+// All slots are “today” for this board
 function isTodaySlot(_slot) {
   return true;
 }
@@ -211,58 +211,76 @@ function filterForDisplay(slots) {
 }
 
 /**
- * For a room’s filtered slots, find current & next,
- * plus which index each is in the filtered list.
+ * Decide which 1–2 slots to show for a room, and which index
+ * should drive the "X of Y reservations" label.
+ *
+ * Rules:
+ *  - If there is a current event: show [current, nextFuture?]
+ *  - If no current: show [first, second?] from the list
  */
-function getCurrentNextAndIndex(slots, nowMin) {
-  const total = slots.length;
-  let current = null;
-  let next = null;
-  let currentIndex = 0; // 1-based
-  let nextIndex = 0;
+function pickVisibleSlots(roomSlots, nowMin) {
+  const total = roomSlots.length;
+  if (total === 0) {
+    return { visible: [], labelIndex: 0, total };
+  }
 
-  for (let i = 0; i < slots.length; i++) {
-    const s = slots[i];
+  // Find the current event index (if any)
+  let currentIdx = -1;
+  for (let i = 0; i < roomSlots.length; i++) {
+    const s = roomSlots[i];
     if (s.startMin <= nowMin && s.endMin > nowMin) {
-      // Latest one that spans now wins as current
-      if (!current || s.startMin > current.startMin) {
-        current = s;
-        currentIndex = i + 1;
-      }
-    } else if (s.startMin > nowMin) {
-      if (!next || s.startMin < next.startMin) {
-        next = s;
-        nextIndex = i + 1;
+      if (
+        currentIdx === -1 ||
+        s.startMin > roomSlots[currentIdx].startMin
+      ) {
+        currentIdx = i;
       }
     }
   }
 
-  return { current, next, currentIndex, nextIndex, total };
+  const visible = [];
+  let labelIndex = 1; // 1-based
+
+  if (currentIdx >= 0) {
+    // We have a current event
+    const current = roomSlots[currentIdx];
+    visible.push(current);
+    labelIndex = currentIdx + 1;
+
+    // Find the next future event (anywhere after now)
+    let nextIdx = -1;
+    for (let i = 0; i < roomSlots.length; i++) {
+      const s = roomSlots[i];
+      if (s.startMin > nowMin) {
+        if (nextIdx === -1 || s.startMin < roomSlots[nextIdx].startMin) {
+          nextIdx = i;
+        }
+      }
+    }
+    if (nextIdx >= 0 && nextIdx !== currentIdx) {
+      visible.push(roomSlots[nextIdx]);
+    }
+  } else {
+    // No current event: show first one or two upcoming
+    visible.push(roomSlots[0]);
+    labelIndex = 1;
+    if (roomSlots.length > 1) {
+      visible.push(roomSlots[1]);
+    }
+  }
+
+  return { visible, labelIndex, total };
 }
 
-// ---------- Rendering: NOW + NEXT per room ----------
+// ---------- Rendering: up to 2 real events per room ----------
 
-function renderRoomEvents(container, current, next) {
+function renderRoomEvents(container, slots) {
   container.innerHTML = "";
 
-  const makeChip = (kind, slot) => {
+  slots.forEach((slot, idx) => {
+    const kind = idx === 0 ? "current" : "next";
     const chip = el("div", "event");
     chip.classList.add(kind);
-
-    if (!slot) {
-      if (kind === "current") {
-        chip.innerHTML = `
-          <div class="who">No current reservation</div>
-          <div class="when"></div>
-        `;
-      } else {
-        chip.innerHTML = `
-          <div class="who">No upcoming reservation</div>
-          <div class="when"></div>
-        `;
-      }
-      return chip;
-    }
 
     const title = slot.title || "Reserved";
     const subtitle = slot.subtitle || "";
@@ -270,24 +288,18 @@ function renderRoomEvents(container, current, next) {
 
     chip.innerHTML = `
       <div class="who">${title}</div>
-      ${
-        subtitle
-          ? `<div class="what">${subtitle}</div>`
-          : ""
-      }
+      ${subtitle ? `<div class="what">${subtitle}</div>` : ""}
       <div class="when">${when}</div>
     `;
-    return chip;
-  };
 
-  container.appendChild(makeChip("current", current));
-  container.appendChild(makeChip("next", next));
+    container.appendChild(chip);
+  });
 }
 
 /**
  * Update a single room card:
  *  - set “X of Y reservations”
- *  - render NOW + NEXT chips
+ *  - render up to 2 real event chips
  */
 function updateRoomCard(roomDomId, roomSlots, nowMin) {
   const card = document.getElementById(`room-${roomDomId}`);
@@ -297,23 +309,17 @@ function updateRoomCard(roomDomId, roomSlots, nowMin) {
   const eventsEl = qs(".events", card);
   if (!eventsEl || !countEl) return;
 
-  const { current, next, currentIndex, nextIndex, total } =
-    getCurrentNextAndIndex(roomSlots, nowMin);
+  const { visible, labelIndex, total } = pickVisibleSlots(roomSlots, nowMin);
 
   let label;
   if (total === 0) {
     label = "0 of 0 reservations";
-  } else if (current) {
-    label = `${currentIndex} of ${total} reservations`;
-  } else if (next) {
-    label = `${nextIndex} of ${total} reservations`;
   } else {
-    // No current or next after filtering (should be rare)
-    label = `0 of ${total} reservations`;
+    label = `${labelIndex} of ${total} reservations`;
   }
 
   countEl.textContent = label;
-  renderRoomEvents(eventsEl, current, next);
+  renderRoomEvents(eventsEl, visible);
 }
 
 // ---------- Global state + main loop ----------
@@ -328,7 +334,7 @@ function refreshBoard() {
   const displaySlots = filterForDisplay(ALL_SLOTS);
   const grouped = groupByRoom(displaySlots);
 
-  // South/North fixed rooms (already in HTML)
+  // South/North fixed rooms
   for (const id of FIXED_ROOMS) {
     const roomSlots = grouped.get(id) || [];
     updateRoomCard(id, roomSlots, nowMin);
@@ -360,8 +366,7 @@ async function boot() {
 
   ALL_SLOTS = Array.isArray(data?.slots) ? data.slots : [];
 
-  const mode = getFieldhouseMode(data, ALL_SLOTS);
-  FIELDHOUSE_MODE = mode;
+  FIELDHOUSE_MODE = getFieldhouseMode(data, ALL_SLOTS);
 
   console.log("events.json loaded:", {
     season: data.season,
@@ -375,7 +380,7 @@ async function boot() {
   // Initial render
   refreshBoard();
 
-  // Recompute NOW/NEXT & counts once per minute
+  // Recompute visible events & counts once per minute
   setInterval(refreshBoard, 60_000);
 }
 
