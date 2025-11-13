@@ -1,4 +1,4 @@
-// app.js — One event per room, global 8s slide, CSV-driven season
+// app.js — One event per room, global 8s slide, batched animation
 
 const STAGE_WIDTH = 1920;
 const STAGE_HEIGHT = 1080;
@@ -227,14 +227,17 @@ function buildEventChip(slot) {
   return chip;
 }
 
-// Smooth slide animation: old chip left, new chip in from right
-function animateChipSwap(eventsEl, oldChip, newChip) {
-  // Ensure container is ready
-  eventsEl.style.position = eventsEl.style.position || "relative";
-  newChip.style.position = "relative";
+// ----- BATCHED ANIMATION -----
 
+let pendingAnimations = []; // { eventsEl, oldChip, newChip }
+
+/**
+ * Queue a chip swap for this room; actual animation
+ * for all rooms will start together in runPendingAnimations().
+ */
+function queueChipSwap(eventsEl, oldChip, newChip) {
+  // First time for this room: just drop the chip in (no animation)
   if (!oldChip) {
-    // First render: no animation
     eventsEl.innerHTML = "";
     newChip.style.opacity = "1";
     newChip.style.transform = "translateX(0)";
@@ -242,37 +245,56 @@ function animateChipSwap(eventsEl, oldChip, newChip) {
     return newChip;
   }
 
-  // Prepare new chip off-screen right
+  // Prepare new chip off-screen right, no transition yet
   newChip.style.opacity = "0";
   newChip.style.transform = "translateX(100%)";
   newChip.style.transition = "none";
   eventsEl.appendChild(newChip);
 
-  // Trigger layout, then animate
-  newChip.offsetWidth; // force reflow
+  pendingAnimations.push({ eventsEl, oldChip, newChip });
+  return newChip;
+}
+
+/**
+ * Run all queued animations in one go, so every room
+ * starts sliding on the same animation frame.
+ */
+function runPendingAnimations() {
+  if (!pendingAnimations.length) return;
+  const animations = pendingAnimations;
+  pendingAnimations = [];
 
   const duration = 600; // ms
 
-  oldChip.style.transition = `transform ${duration}ms ease, opacity ${duration}ms ease`;
-  newChip.style.transition = `transform ${duration}ms ease, opacity ${duration}ms ease`;
+  // Force layout so initial transforms are applied
+  animations.forEach(({ newChip }) => {
+    void newChip.offsetWidth; // reflow
+  });
 
-  oldChip.style.transform = "translateX(-100%)";
-  oldChip.style.opacity = "0";
+  // Trigger animations together
+  requestAnimationFrame(() => {
+    animations.forEach(({ eventsEl, oldChip, newChip }) => {
+      // Old chip slides left & fades
+      oldChip.style.transition = `transform ${duration}ms ease, opacity ${duration}ms ease`;
+      oldChip.style.transform = "translateX(-100%)";
+      oldChip.style.opacity = "0";
 
-  newChip.style.transform = "translateX(0)";
-  newChip.style.opacity = "1";
+      oldChip.addEventListener(
+        "transitionend",
+        () => {
+          if (oldChip.parentNode === eventsEl) {
+            eventsEl.removeChild(oldChip);
+          }
+        },
+        { once: true }
+      );
 
-  oldChip.addEventListener(
-    "transitionend",
-    () => {
-      if (oldChip.parentNode === eventsEl) {
-        eventsEl.removeChild(oldChip);
-      }
-    },
-    { once: true }
-  );
-
-  return newChip;
+      // New chip slides in from right
+      newChip.style.transition = `transform ${duration}ms ease, opacity ${duration}ms ease`;
+      newChip.style.transform = "translateX(0)";
+      newChip.style.opacity = "1";
+    });
+  });
 }
 
 // ---------- Global state + synchronized rotor ----------
@@ -309,7 +331,8 @@ function buildActiveRooms() {
  * One global tick every 8 seconds:
  * - recompute filtered slots
  * - for each room, pick which event index to show
- * - animate chip swap
+ * - queue chip swap
+ * - then animate all queued swaps together
  */
 function globalRotorTick() {
   if (!ALL_SLOTS.length || !ACTIVE_ROOMS.length) return;
@@ -340,7 +363,7 @@ function globalRotorTick() {
       continue;
     }
 
-    // Use the same GLOBAL_TICK for every room.
+    // Same GLOBAL_TICK for every room.
     // Each room shows slot at (tick % total), so if
     // the same event is at the same index in each room,
     // it appears at the same time across rooms.
@@ -354,14 +377,17 @@ function globalRotorTick() {
     const oldChip = prevState.chip;
     const newChip = buildEventChip(slot);
 
-    const finalChip = animateChipSwap(eventsEl, oldChip, newChip);
+    const finalChip = queueChipSwap(eventsEl, oldChip, newChip);
     ROOM_STATE.set(domId, { chip: finalChip });
   }
+
+  // After all rooms are queued, animate in sync
+  runPendingAnimations();
 
   GLOBAL_TICK++;
 }
 
-// ---------- Events.json refresh ----------
+// ---------- events.json refresh ----------
 
 async function refreshEventsJson() {
   try {
@@ -371,8 +397,6 @@ async function refreshEventsJson() {
     const data = await res.json();
     ALL_SLOTS = Array.isArray(data?.slots) ? data.slots : [];
 
-    // If season changes, we could rebuild mode/rooms,
-    // but for now assume season is stable for the day.
     console.log("events.json refreshed:", {
       season: data.season,
       totalSlots: ALL_SLOTS.length,
