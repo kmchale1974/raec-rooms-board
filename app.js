@@ -153,16 +153,27 @@ function startRotor(container, slots, periodMs=8000) {
 // ---------- Build UI ----------
 const FIXED_ROOMS = ['1A','1B','2A','2B','9A','9B','10A','10B'];
 
-// Decide if middle should be turf (2x2) or courts (3x2)
-function detectTurfMode(allSlots) {
-  // turf uses NA/NB/SA/SB ids; courts use '3'..'8'
-  const ids = new Set(allSlots.map(s => s.roomId));
-  const hasTurf = ['NA','NB','SA','SB'].some(id => ids.has(id));
-  if (hasTurf) return true;
+// Decide Turf vs Courts (basketball) for fieldhouse
+function getFieldhouseMode(data, slots) {
+  // 1) Trust the backend: events.json has season from CSV
+  if (data && data.season === 'turf') return 'turf';
+  if (data && (data.season === 'courts' || data.season === 'basketball')) return 'courts';
+
+  // 2) Fallback heuristic (in case season is missing):
+  const ids = new Set(slots.map(s => s.roomId));
+  // Turf quarters as emitted by transform.mjs
+  const hasQuarterTurf = [
+    'Quarter Turf NA', 'Quarter Turf NB',
+    'Quarter Turf SA', 'Quarter Turf SB'
+  ].some(id => ids.has(id));
+
+  if (hasQuarterTurf) return 'turf';
+
   const hasCourts = ['3','4','5','6','7','8'].some(id => ids.has(id));
-  if (hasCourts) return false;
-  // default: leave as-is (assume courts)
-  return false;
+  if (hasCourts) return 'courts';
+
+  // Default: assume courts
+  return 'courts';
 }
 
 function buildFieldhouseContainer(isTurf) {
