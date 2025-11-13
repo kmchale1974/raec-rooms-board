@@ -1,4 +1,4 @@
-// app.js — One event per room, global 8s tick, synced crossfade, CSV-driven season
+// app.js — One event per room, global 8s tick, no per-room animation, CSV-driven season
 
 const STAGE_WIDTH = 1920;
 const STAGE_HEIGHT = 1080;
@@ -224,85 +224,16 @@ function buildEventChip(slot) {
     ${subtitle ? `<div class="what">${subtitle}</div>` : ""}
     <div class="when">${when}</div>
   `;
-  // baseline styles (in case CSS doesn't define them)
-  chip.style.opacity = "0";
-  chip.style.transition = "opacity 400ms ease";
   return chip;
 }
 
-// ----- BATCHED CROSSFADE -----
-
-let pendingFades = []; // { eventsEl, oldChip, newChip }
-
-/**
- * Queue a chip fade for this room; actual opacity transition
- * for all rooms will start together in runPendingFades().
- */
-function queueChipFade(eventsEl, oldChip, newChip) {
-  if (!oldChip) {
-    // First render: just show it, no fade
-    eventsEl.innerHTML = "";
-    newChip.style.opacity = "1";
-    eventsEl.appendChild(newChip);
-    return newChip;
-  }
-
-  // Position both chips in the same spot; let CSS handle layout
-  newChip.style.opacity = "0";
-  newChip.style.position = "relative";
-  oldChip.style.position = "relative";
-
-  eventsEl.appendChild(newChip);
-  pendingFades.push({ eventsEl, oldChip, newChip });
-  return newChip;
-}
-
-/**
- * Run all queued fades in one go, so every room
- * starts fading on the same animation frame.
- */
-function runPendingFades() {
-  if (!pendingFades.length) return;
-  const fades = pendingFades;
-  pendingFades = [];
-
-  // Force layout so initial opacity is applied
-  fades.forEach(({ newChip }) => {
-    void newChip.offsetWidth;
-  });
-
-  requestAnimationFrame(() => {
-    fades.forEach(({ eventsEl, oldChip, newChip }) => {
-      // Fade old out
-      oldChip.style.transition = "opacity 400ms ease";
-      oldChip.style.opacity = "0";
-
-      oldChip.addEventListener(
-        "transitionend",
-        () => {
-          if (oldChip.parentNode === eventsEl) {
-            eventsEl.removeChild(oldChip);
-          }
-        },
-        { once: true }
-      );
-
-      // Fade new in
-      newChip.style.transition = "opacity 400ms ease";
-      newChip.style.opacity = "1";
-    });
-  });
-}
-
-// ---------- Global state + synchronized rotor ----------
+// ---------- Global state + synchronized index ----------
 
 let ALL_SLOTS = [];
 let FIELDHOUSE_MODE = "courts"; // "turf" or "courts"
 
 // Rooms we rotate through, with JSON->DOM mapping
 let ACTIVE_ROOMS = []; // { jsonId, domId }
-
-const ROOM_STATE = new Map(); // roomDomId -> { chip: HTMLElement | null }
 
 let GLOBAL_TICK = 0; // increments every 8s
 
@@ -328,8 +259,7 @@ function buildActiveRooms() {
  * One global tick every 8 seconds:
  * - recompute filtered slots
  * - for each room, pick which event index to show
- * - queue chip fade
- * - then fade all queued swaps together
+ * - swap the chip instantly (no animation)
  */
 function globalRotorTick() {
   if (!ALL_SLOTS.length || !ACTIVE_ROOMS.length) return;
@@ -355,7 +285,6 @@ function globalRotorTick() {
     if (total === 0) {
       countEl.textContent = "0 of 0 reservations";
       eventsEl.innerHTML = "";
-      ROOM_STATE.delete(domId);
       continue;
     }
 
@@ -369,16 +298,10 @@ function globalRotorTick() {
     const label = `${index + 1} of ${total} reservations`;
     countEl.textContent = label;
 
-    const prevState = ROOM_STATE.get(domId) || { chip: null };
-    const oldChip = prevState.chip;
-    const newChip = buildEventChip(slot);
-
-    const finalChip = queueChipFade(eventsEl, oldChip, newChip);
-    ROOM_STATE.set(domId, { chip: finalChip });
+    const chip = buildEventChip(slot);
+    eventsEl.innerHTML = "";
+    eventsEl.appendChild(chip);
   }
-
-  // After all rooms are queued, animate in sync
-  runPendingFades();
 
   GLOBAL_TICK++;
 }
