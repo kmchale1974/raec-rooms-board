@@ -120,9 +120,12 @@ function loadSlotsFromCsv(csvPath) {
 // ---------- Main ----------
 
 async function run() {
-  // adjust this path to however you're passing today's CSV into the action
-  const inputCsv = "./data/input.csv";      // or wherever your GitHub Action saves it
-  const outputJson = "./events.json";       // if you want events.json in repo root
+  // Use env vars if provided (from build.yml), otherwise fall back for local dev
+  const inputCsv = process.env.IN_CSV || "./data/input.csv";
+  const outputJson = process.env.OUT_JSON || "./events.json";
+
+  console.log(`Using input CSV:  ${inputCsv}`);
+  console.log(`Writing events to: ${outputJson}`);
 
   const { slots, unknownFacilities, records } = loadSlotsFromCsv(inputCsv);
   const season = detectSeason(records);
@@ -133,6 +136,20 @@ async function run() {
   };
 
   fs.writeFileSync(outputJson, JSON.stringify(data, null, 2));
+
+  if (unknownFacilities.size > 0) {
+    console.warn("Unknown facilities found in CSV (not in FACILITY_TO_ROOMS):");
+    for (const f of unknownFacilities) {
+      console.warn("  -", f);
+    }
+  } else {
+    console.log("All facilities in CSV matched FACILITY_TO_ROOMS.");
+  }
+
+  console.log(
+    `Wrote ${slots.length} slots to ${outputJson} with season="${season}".`
+  );
+}
 
   // Log unknown facilities so you can add them to facility-map.mjs later
   if (unknownFacilities.size > 0) {
