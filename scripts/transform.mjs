@@ -8,11 +8,12 @@ import { parse } from "csv-parse/sync";
 import { FACILITY_TO_ROOMS } from "../facility-map.mjs";
 
 // Adjust these indices if your CSV column order is different:
-const COL_FACILITY = 1;  // Facility
-const COL_TIMERANGE = 2; // Time (e.g., "7:30pm - 9:30pm")
-const COL_RESERVEE = 3;  // Name (e.g., "Tendean, Audrey Felicite")
-const COL_PURPOSE = 4;   // Program / Description
-const COL_SEASON = 4;    // Column used for "Turf Season per NM" (season control)
+// A = 0, B = 1, C = 2, ...
+const COL_FACILITY = 1;  // Facility name (e.g. "AC Gym - Half Court 10A")
+const COL_TIMERANGE = 2; // Time range (e.g. "7:30pm - 9:30pm")
+const COL_RESERVEE = 3;  // Reservee / reservation name
+const COL_PURPOSE  = 4;  // Reservation purpose / description (col E)
+const COL_SEASON   = 4;  // Same column used for "Turf Season per NM"
 
 // ---------- Helpers ----------
 
@@ -28,12 +29,15 @@ function parseTimeRange(rangeStr) {
   const toMin = (s) => {
     const m = s.match(/^(\d{1,2}):(\d{2})(am|pm)$/i);
     if (!m) return null;
+
     let [, hh, mm, ampm] = m;
     let h = parseInt(hh, 10);
     const minutes = parseInt(mm, 10);
     ampm = ampm.toLowerCase();
+
     if (ampm === "pm" && h !== 12) h += 12;
     if (ampm === "am" && h === 12) h = 0;
+
     return h * 60 + minutes;
   };
 
@@ -41,7 +45,7 @@ function parseTimeRange(rangeStr) {
 }
 
 // Season is entirely driven by column E text:
-// If ANY row has "Turf Season per NM" exactly, it's turf, otherwise basketball/courts.
+// If ANY row has "Turf Season per NM" exactly, it's turf, otherwise courts.
 function detectSeason(records) {
   for (const row of records) {
     const text = String(row[COL_SEASON] || "").trim();
@@ -72,10 +76,11 @@ function loadSlotsFromCsv(csvPath) {
     const facility = String(row[COL_FACILITY] || "").trim();
     const timeRange = String(row[COL_TIMERANGE] || "").trim();
     const reservee = String(row[COL_RESERVEE] || "").trim();
-    const purpose = String(row[COL_PURPOSE] || "").trim();
+    const purpose  = String(row[COL_PURPOSE]  || "").trim();
 
     if (!facility || !timeRange || !reservee) {
-      continue; // skip incomplete rows
+      // skip incomplete rows
+      continue;
     }
 
     const roomIds = FACILITY_TO_ROOMS[facility];
@@ -96,6 +101,9 @@ function loadSlotsFromCsv(csvPath) {
       continue;
     }
 
+    // Naming rules:
+    //  - title: reservee (often already "Program, Person")
+    //  - subtitle: purpose (program description)
     const title = reservee || "Reserved";
     const subtitle = purpose || "";
 
@@ -120,8 +128,8 @@ function loadSlotsFromCsv(csvPath) {
 // ---------- Main ----------
 
 async function run() {
-  // Use env vars if provided (from build.yml), otherwise fall back for local dev
-  const inputCsv = process.env.IN_CSV || "./data/input.csv";
+  // Use env vars from build.yml if provided, otherwise fall back for local dev
+  const inputCsv  = process.env.IN_CSV   || "./data/input.csv";
   const outputJson = process.env.OUT_JSON || "./events.json";
 
   console.log(`Using input CSV:  ${inputCsv}`);
