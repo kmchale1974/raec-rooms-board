@@ -162,17 +162,29 @@ function normalizeReservee(rawReservee) {
   let r = (rawReservee || "").trim();
   if (!r) return "";
 
-  // Heuristic: "Last, First" -> "First Last"
-  // Only if left part has no spaces and right part has no comma.
   const parts = r.split(",");
+
   if (parts.length === 2) {
     const left = parts[0].trim();
     const right = parts[1].trim();
+
+    // 1) Collapse exact duplicates like "Chicago Sport and Social Club, Chicago Sport and Social Club"
+    //    or "Illinois Express Basketball, Illinois Express Basketball"
+    if (
+      left &&
+      right &&
+      left.toLowerCase() === right.toLowerCase()
+    ) {
+      return left; // just keep one copy
+    }
+
+    // 2) "Last, First" -> "First Last" (only when it really looks like a person name)
     const leftHasSpace = left.includes(" ");
     const rightHasComma = right.includes(",");
     if (!leftHasSpace && !rightHasComma && left && right) {
       // e.g. "Smith, John" -> "John Smith"
       r = `${right} ${left}`;
+      return r;
     }
   }
 
