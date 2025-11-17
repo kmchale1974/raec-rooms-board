@@ -121,8 +121,8 @@ function loadSlotsFromCsv(csvPath) {
 
 async function run() {
   // adjust this path to however you're passing today's CSV into the action
-  const inputCsv = "./input.csv";
-  const outputJson = "./events.json";
+  const inputCsv = "./data/input.csv";      // or wherever your GitHub Action saves it
+  const outputJson = "./events.json";       // if you want events.json in repo root
 
   const { slots, unknownFacilities, records } = loadSlotsFromCsv(inputCsv);
   const season = detectSeason(records);
