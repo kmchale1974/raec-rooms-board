@@ -86,20 +86,6 @@
       "subtitle": "CatchCorner (Martin Uscila #459258 Basketball)"
     },
     {
-      "roomId": "9A",
-      "startMin": 1020,
-      "endMin": 1080,
-      "title": "Catch Corner (Internal Holds, Catch Corner (Internal Holds)",
-      "subtitle": "CatchCorner (Martin Uscila #459258 Basketball)"
-    },
-    {
-      "roomId": "9B",
-      "startMin": 1020,
-      "endMin": 1080,
-      "title": "Catch Corner (Internal Holds, Catch Corner (Internal Holds)",
-      "subtitle": "CatchCorner (Martin Uscila #459258 Basketball)"
-    },
-    {
       "roomId": "1A",
       "startMin": 1080,
       "endMin": 1260,
@@ -149,35 +135,7 @@
       "subtitle": "Volleyball"
     },
     {
-      "roomId": "9B",
-      "startMin": 1170,
-      "endMin": 1290,
-      "title": "Tendean, Audrey Felicite",
-      "subtitle": "Volleyball"
-    },
-    {
-      "roomId": "9A",
-      "startMin": 1170,
-      "endMin": 1260,
-      "title": "Illinois Express Basketball, Illinois Express Basketball",
-      "subtitle": "Basketball 2025 Q4 Pattern"
-    },
-    {
-      "roomId": "9B",
-      "startMin": 1170,
-      "endMin": 1260,
-      "title": "Illinois Express Basketball, Illinois Express Basketball",
-      "subtitle": "Basketball 2025 Q4 Pattern"
-    },
-    {
       "roomId": "10A",
-      "startMin": 1170,
-      "endMin": 1290,
-      "title": "Tendean, Audrey Felicite",
-      "subtitle": "Volleyball"
-    },
-    {
-      "roomId": "10B",
       "startMin": 1170,
       "endMin": 1290,
       "title": "Tendean, Audrey Felicite",
