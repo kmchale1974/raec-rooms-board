@@ -1,19 +1,159 @@
 // transform.mjs
-// Read today's RecTrac CSV, map Facility -> roomId using facility-map.mjs,
-// detect season from column E, and output events.json in the format
-// the board expects.
+// New logic:
+//  - Group CSV rows by (reservee, purpose, timeRange)
+//  - For each group, only create a room slot if ALL required facilities
+//    for that room are present in that group's set of facilities.
+//  - Season is driven solely by "Turf Season per NM" in column E.
 
 import fs from "fs";
 import { parse } from "csv-parse/sync";
-import { FACILITY_TO_ROOMS } from "../facility-map.mjs";
 
-// Adjust these indices if your CSV column order is different:
-// A = 0, B = 1, C = 2, ...
-const COL_FACILITY = 1;  // Facility name (e.g. "AC Gym - Half Court 10A")
-const COL_TIMERANGE = 2; // Time range (e.g. "7:30pm - 9:30pm")
-const COL_RESERVEE = 3;  // Reservee / reservation name
-const COL_PURPOSE  = 4;  // Reservation purpose / description (col E)
-const COL_SEASON   = 4;  // Same column used for "Turf Season per NM"
+// Column indices: A=0, B=1, C=2, ...
+const COL_FACILITY = 1;  // "Facility"
+const COL_TIMERANGE = 2; // "Time" (e.g. "7:30pm - 9:30pm")
+const COL_RESERVEE = 3;  // "Reservee"
+const COL_PURPOSE  = 4;  // "Reservation Purpose" (also used for season flag)
+const COL_SEASON   = 4;
+
+// ---------- Room rules: required facilities per room ----------
+// For each roomId, ALL of the listed facilities must be present
+// (same reservee, same purpose, same timeRange) for the reservation
+// to count as being in that room.
+
+const ROOM_RULES = [
+  // Front cluster: 1A, 1B, 2A, 2B
+  {
+    roomId: "1A",
+    facilities: [
+      "AC Gym - Championship Court",
+      "AC Gym - Full Gym 1AB & 2AB",
+      "AC Gym - Court 1-AB",
+      "AC Gym - Half Court 1A",
+    ],
+  },
+  {
+    roomId: "1B",
+    facilities: [
+      "AC Gym - Championship Court",
+      "AC Gym - Full Gym 1AB & 2AB",
+      "AC Gym - Court 1-AB",
+      "AC Gym - Half Court 1B",
+    ],
+  },
+  {
+    roomId: "2A",
+    facilities: [
+      "AC Gym - Championship Court",
+      "AC Gym - Full Gym 1AB & 2AB",
+      "AC Gym - Court 2-AB",
+      "AC Gym - Half Court 2A",
+    ],
+  },
+  {
+    roomId: "2B",
+    facilities: [
+      "AC Gym - Championship Court",
+      "AC Gym - Full Gym 1AB & 2AB",
+      "AC Gym - Court 2-AB",
+      "AC Gym - Half Court 2B",
+    ],
+  },
+
+  // Fieldhouse courts: 3–8
+  {
+    roomId: "3",
+    facilities: ["AC Fieldhouse Court 3-8", "AC Fieldhouse - Court 3"],
+  },
+  {
+    roomId: "4",
+    facilities: ["AC Fieldhouse Court 3-8", "AC Fieldhouse - Court 4"],
+  },
+  {
+    roomId: "5",
+    facilities: ["AC Fieldhouse Court 3-8", "AC Fieldhouse - Court 5"],
+  },
+  {
+    roomId: "6",
+    facilities: ["AC Fieldhouse Court 3-8", "AC Fieldhouse - Court 6"],
+  },
+  {
+    roomId: "7",
+    facilities: ["AC Fieldhouse Court 3-8", "AC Fieldhouse - Court 7"],
+  },
+  {
+    roomId: "8",
+    facilities: ["AC Fieldhouse Court 3-8", "AC Fieldhouse - Court 8"],
+  },
+
+  // Turf: NA / NB / SA / SB
+  // Use whatever roomIds your front-end expects ("Quarter Turf NA", etc.)
+  {
+    roomId: "Quarter Turf NA",
+    facilities: [
+      "AC Fieldhouse - Full Turf",
+      "AC Fieldhouse - Half Turf North",
+      "AC Fieldhouse - Quarter Turf NA",
+    ],
+  },
+  {
+    roomId: "Quarter Turf NB",
+    facilities: [
+      "AC Fieldhouse - Full Turf",
+      "AC Fieldhouse - Half Turf North",
+      "AC Fieldhouse - Quarter Turf NB",
+    ],
+  },
+  {
+    roomId: "Quarter Turf SA",
+    facilities: [
+      "AC Fieldhouse - Full Turf",
+      "AC Fieldhouse - Half Turf South",
+      "AC Fieldhouse - Quarter Turf SA",
+    ],
+  },
+  {
+    roomId: "Quarter Turf SB",
+    facilities: [
+      "AC Fieldhouse - Full Turf",
+      "AC Fieldhouse - Half Turf South",
+      "AC Fieldhouse - Quarter Turf SB",
+    ],
+  },
+
+  // Back cluster: 9A, 9B, 10A, 10B
+  {
+    roomId: "9A",
+    facilities: [
+      "AC Gym - Full Gym 9 & 10",
+      "AC Gym - Court 9-AB",
+      "AC Gym - Half Court 9A",
+    ],
+  },
+  {
+    roomId: "9B",
+    facilities: [
+      "AC Gym - Full Gym 9 & 10",
+      "AC Gym - Court 9-AB",
+      "AC Gym - Half Court 9B",
+    ],
+  },
+  {
+    roomId: "10A",
+    facilities: [
+      "AC Gym - Full Gym 9 & 10",
+      "AC Gym - Court 10-AB",
+      "AC Gym - Half Court 10A",
+    ],
+  },
+  {
+    roomId: "10B",
+    facilities: [
+      "AC Gym - Full Gym 9 & 10",
+      "AC Gym - Court 10-AB",
+      "AC Gym - Half Court 10B",
+    ],
+  },
+];
 
 // ---------- Helpers ----------
 
@@ -44,33 +184,31 @@ function parseTimeRange(rangeStr) {
   return [toMin(startRaw), toMin(endRaw)];
 }
 
-// Season is entirely driven by column E text:
-// If ANY row has "Turf Season per NM" exactly, it's turf, otherwise courts.
-function detectSeason(records) {
-  for (const row of records) {
+// Season: if ANY row in column E is "Turf Season per NM" → turf, else courts
+function detectSeason(rows) {
+  for (const row of rows) {
     const text = String(row[COL_SEASON] || "").trim();
     if (text === "Turf Season per NM") {
       return "turf";
     }
   }
-  // default if not present anywhere
   return "courts";
 }
+
+// ---------- Core CSV → slots logic using group + AND rules ----------
 
 function loadSlotsFromCsv(csvPath) {
   const csvText = fs.readFileSync(csvPath, "utf8");
 
-  // csv-parse will give array-of-arrays
   const records = parse(csvText, {
     skip_empty_lines: true,
   });
 
-  // If there's a header row, drop it (assumes first row is header)
   const [header, ...rows] = records;
 
-  const slots = [];
-  const seen = new Set(); // de-dupe: roomId|start|end|title
-  const unknownFacilities = new Set();
+  // Group rows into logical reservations by (reservee, purpose, timeRange)
+  const groups = new Map();
+  const allFacilities = new Set(); // for debugging/new facility detection
 
   for (const row of rows) {
     const facility = String(row[COL_FACILITY] || "").trim();
@@ -78,42 +216,48 @@ function loadSlotsFromCsv(csvPath) {
     const reservee = String(row[COL_RESERVEE] || "").trim();
     const purpose  = String(row[COL_PURPOSE]  || "").trim();
 
-    if (!facility || !timeRange || !reservee) {
-      // skip incomplete rows
-      continue;
+    if (!facility || !timeRange || !reservee) continue;
+
+    allFacilities.add(facility);
+
+    const key = `${reservee}||${purpose}||${timeRange}`;
+    let g = groups.get(key);
+    if (!g) {
+      g = {
+        reservee,
+        purpose,
+        timeRange,
+        facilities: new Set(),
+      };
+      groups.set(key, g);
     }
+    g.facilities.add(facility);
+  }
 
-    const roomIds = FACILITY_TO_ROOMS[facility];
+  const slots = [];
+  const seenSlots = new Set();
 
-    if (roomIds === undefined) {
-      // We haven't mapped this facility yet → track it for logging
-      unknownFacilities.add(facility);
-      continue;
-    }
+  for (const group of groups.values()) {
+    const [startMin, endMin] = parseTimeRange(group.timeRange);
+    if (startMin == null || endMin == null) continue;
 
-    if (roomIds.length === 0) {
-      // Facility that we *deliberately* ignore for the rooms board
-      continue;
-    }
+    const facilitiesSet = group.facilities;
+    const title = group.reservee || "Reserved";
+    const subtitle = group.purpose || "";
 
-    const [startMin, endMin] = parseTimeRange(timeRange);
-    if (startMin == null || endMin == null) {
-      continue;
-    }
+    for (const rule of ROOM_RULES) {
+      // Check if ALL required facilities are present for this room
+      const ok = rule.facilities.every((needed) =>
+        facilitiesSet.has(needed)
+      );
+      if (!ok) continue;
 
-    // Naming rules:
-    //  - title: reservee (often already "Program, Person")
-    //  - subtitle: purpose (program description)
-    const title = reservee || "Reserved";
-    const subtitle = purpose || "";
-
-    for (const roomId of roomIds) {
-      const key = `${roomId}|${startMin}|${endMin}|${title}`;
-      if (seen.has(key)) continue; // prevents duplicates for combined facilities
-      seen.add(key);
+      const key = `${rule.roomId}|${startMin}|${endMin}|${title}`;
+      if (seenSlots.has(key)) continue;
+      seenSlots.add(key);
 
       slots.push({
-        roomId,
+        roomId: rule.roomId,
         startMin,
         endMin,
         title,
@@ -122,21 +266,21 @@ function loadSlotsFromCsv(csvPath) {
     }
   }
 
-  return { slots, unknownFacilities, records: rows };
+  return { slots, rows, allFacilities };
 }
 
 // ---------- Main ----------
 
 async function run() {
   // Use env vars from build.yml if provided, otherwise fall back for local dev
-  const inputCsv  = process.env.IN_CSV   || "./data/input.csv";
+  const inputCsv   = process.env.IN_CSV   || "./data/input.csv";
   const outputJson = process.env.OUT_JSON || "./events.json";
 
   console.log(`Using input CSV:  ${inputCsv}`);
   console.log(`Writing events to: ${outputJson}`);
 
-  const { slots, unknownFacilities, records } = loadSlotsFromCsv(inputCsv);
-  const season = detectSeason(records);
+  const { slots, rows, allFacilities } = loadSlotsFromCsv(inputCsv);
+  const season = detectSeason(rows);
 
   const data = {
     season, // "turf" or "courts"
@@ -145,14 +289,9 @@ async function run() {
 
   fs.writeFileSync(outputJson, JSON.stringify(data, null, 2));
 
-  // Log unknown facilities so you can add them to facility-map.mjs later
-  if (unknownFacilities.size > 0) {
-    console.warn("Unknown facilities found in CSV (not in FACILITY_TO_ROOMS):");
-    for (const f of unknownFacilities) {
-      console.warn("  -", f);
-    }
-  } else {
-    console.log("All facilities in CSV matched FACILITY_TO_ROOMS.");
+  console.log("Facilities seen in CSV (for debugging/mapping):");
+  for (const f of Array.from(allFacilities).sort()) {
+    console.log("  -", f);
   }
 
   console.log(
