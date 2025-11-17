@@ -1,9 +1,10 @@
 // transform.mjs
-// New logic:
+// Logic:
 //  - Group CSV rows by (reservee, purpose, timeRange)
 //  - For each group, only create a room slot if ALL required facilities
-//    for that room are present in that group's set of facilities.
-//  - Season is driven solely by "Turf Season per NM" in column E.
+//    for that room are present in that group's set of facilities
+//  - Apply naming rules to produce title/subtitle
+//  - Season is driven solely by "Turf Season per NM" in column E
 
 import fs from "fs";
 import { parse } from "csv-parse/sync";
@@ -86,7 +87,7 @@ const ROOM_RULES = [
   },
 
   // Turf: NA / NB / SA / SB
-  // Use whatever roomIds your front-end expects ("Quarter Turf NA", etc.)
+  // Use whatever roomIds your front-end expects here.
   {
     roomId: "Quarter Turf NA",
     facilities: [
@@ -155,6 +156,69 @@ const ROOM_RULES = [
   },
 ];
 
+// ---------- Naming rules ----------
+
+function normalizeReservee(rawReservee) {
+  let r = (rawReservee || "").trim();
+  if (!r) return "";
+
+  // Heuristic: "Last, First" -> "First Last"
+  // Only if left part has no spaces and right part has no comma.
+  const parts = r.split(",");
+  if (parts.length === 2) {
+    const left = parts[0].trim();
+    const right = parts[1].trim();
+    const leftHasSpace = left.includes(" ");
+    const rightHasComma = right.includes(",");
+    if (!leftHasSpace && !rightHasComma && left && right) {
+      // e.g. "Smith, John" -> "John Smith"
+      r = `${right} ${left}`;
+    }
+  }
+
+  return r;
+}
+
+function makeTitleSubtitle(reserveeRaw, purposeRaw) {
+  const reservee = normalizeReservee(reserveeRaw);
+  const purpose = (purposeRaw || "").trim();
+
+  const lowerR = reservee.toLowerCase();
+  const lowerP = purpose.toLowerCase();
+
+  // Open Pickleball / Open Gym style
+  if (lowerR.includes("open pickleball") || lowerP.includes("open pickleball")) {
+    return { title: "Open Pickleball", subtitle: "" };
+  }
+  if (lowerR.includes("open gym") || lowerP.includes("open gym")) {
+    return { title: "Open Gym", subtitle: "" };
+  }
+
+  // Catch Corner: keep "Catch Corner" prominent, move booking detail to subtitle
+  if (lowerR.includes("catch corner") || lowerP.includes("catch corner")) {
+    const title = "Catch Corner";
+    const subtitle = purpose || reservee;
+    return { title, subtitle };
+  }
+
+  // If no reservee but we have purpose, show purpose as title
+  if (!reservee && purpose) {
+    return { title: purpose, subtitle: "" };
+  }
+
+  // Default: reservee as title, purpose as subtitle
+  if (reservee && purpose) {
+    return { title: reservee, subtitle: purpose };
+  }
+
+  if (reservee && !purpose) {
+    return { title: reservee, subtitle: "" };
+  }
+
+  // Fallback
+  return { title: "Reserved", subtitle: "" };
+}
+
 // ---------- Helpers ----------
 
 // "7:30pm -  9:30pm" -> [startMin, endMin]
@@ -208,7 +272,7 @@ function loadSlotsFromCsv(csvPath) {
 
   // Group rows into logical reservations by (reservee, purpose, timeRange)
   const groups = new Map();
-  const allFacilities = new Set(); // for debugging/new facility detection
+  const allFacilities = new Set(); // for debugging
 
   for (const row of rows) {
     const facility = String(row[COL_FACILITY] || "").trim();
@@ -242,8 +306,10 @@ function loadSlotsFromCsv(csvPath) {
     if (startMin == null || endMin == null) continue;
 
     const facilitiesSet = group.facilities;
-    const title = group.reservee || "Reserved";
-    const subtitle = group.purpose || "";
+    const { title, subtitle } = makeTitleSubtitle(
+      group.reservee,
+      group.purpose
+    );
 
     for (const rule of ROOM_RULES) {
       // Check if ALL required facilities are present for this room
@@ -289,7 +355,7 @@ async function run() {
 
   fs.writeFileSync(outputJson, JSON.stringify(data, null, 2));
 
-  console.log("Facilities seen in CSV (for debugging/mapping):");
+  console.log("Facilities seen in CSV (for debugging):");
   for (const f of Array.from(allFacilities).sort()) {
     console.log("  -", f);
   }
