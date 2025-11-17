@@ -97,12 +97,14 @@ function startHeaderClock() {
 
 // ---------- Room sets / season ----------
 
-// Turf rooms as emitted by events.json (group: "fieldhouse")
+// Turf rooms (JSON IDs) in desired 2×2 layout order:
+// Top row: SA (top-left), NA (top-right)
+// Bottom row: SB (bottom-left), NB (bottom-right)
 const TURF_ROOMS = [
-  { jsonId: "Quarter Turf NA", domId: "NA", label: "Turf NA" },
-  { jsonId: "Quarter Turf NB", domId: "NB", label: "Turf NB" },
-  { jsonId: "Quarter Turf SA", domId: "SA", label: "Turf SA" },
-  { jsonId: "Quarter Turf SB", domId: "SB", label: "Turf SB" },
+  { jsonId: "Quarter Turf SA", domId: "SA", label: "Turf SA" }, // top-left
+  { jsonId: "Quarter Turf NA", domId: "NA", label: "Turf NA" }, // top-right
+  { jsonId: "Quarter Turf SB", domId: "SB", label: "Turf SB" }, // bottom-left
+  { jsonId: "Quarter Turf NB", domId: "NB", label: "Turf NB" }, // bottom-right
 ];
 
 // Courts (basketball) rooms in fieldhouse
@@ -142,6 +144,7 @@ function buildFieldhouseContainer(mode) {
   holder.innerHTML = "";
 
   if (isTurf) {
+    // DOM order: SA, NA, SB, NB (for 2×2 layout)
     for (const room of TURF_ROOMS) {
       const div = el("div", "room");
       div.id = `room-${room.domId}`;
@@ -245,7 +248,7 @@ function getClusters() {
     ],
   });
 
-  // Cluster 2: Turf (NA/NB/SA/SB) or Courts 3–8 in fieldhouse
+  // Cluster 2: Turf (SA/SB/NA/NB) or Courts 3–8 in fieldhouse
   if (FIELDHOUSE_MODE === "turf") {
     clusters.push({
       name: "cluster-turf",
@@ -321,9 +324,8 @@ function buildTimeBlocksForCluster(cluster, grouped) {
  *      - Room with a slot in that block shows it
  *      - Room without → blank
  *  - Header label per room:
- *      - If showing a slot: "<localIndex> of <roomTotal> reservations"
- *      - If blank but has reservations: "0 of <roomTotal> reservations"
- *      - If no reservations at all: "0 of 0 reservations"
+ *      - **Cluster-based**: "<blockIndex+1> of <blocks.length> reservations"
+ *        so labels are consistent & monotonic across the cluster.
  */
 function advanceCluster(cluster, grouped) {
   const blocks = buildTimeBlocksForCluster(cluster, grouped);
@@ -343,6 +345,9 @@ function advanceCluster(cluster, grouped) {
 
   const blockIndex = GLOBAL_TICK % blocks.length;
   const block = blocks[blockIndex];
+  const blockLabelIndex = blockIndex + 1;
+  const blockTotal = blocks.length;
+  const clusterLabel = `${blockLabelIndex} of ${blockTotal} reservations`;
 
   for (const room of cluster.rooms) {
     const card = document.getElementById(`room-${room.domId}`);
@@ -353,29 +358,24 @@ function advanceCluster(cluster, grouped) {
     if (!eventsEl || !countEl) continue;
 
     const roomSlots = grouped.get(room.jsonId) || [];
-    const total = roomSlots.length;
+    const slot = block.byRoom.get(room.jsonId) || null;
 
-    if (total === 0) {
+    if (!roomSlots.length) {
+      // This room has no events at all today (in filtered set)
       countEl.textContent = "0 of 0 reservations";
       eventsEl.innerHTML = "";
       continue;
     }
 
-    const slot = block.byRoom.get(room.jsonId) || null;
-
     if (slot) {
-      // Find local index of this slot within that room’s own sorted list
-      const idx = roomSlots.indexOf(slot);
-      const label = `${idx + 1} of ${total} reservations`;
-      countEl.textContent = label;
-
+      // Room has a reservation in this time block
+      countEl.textContent = clusterLabel;
       const chip = buildEventChip(slot);
       eventsEl.innerHTML = "";
       eventsEl.appendChild(chip);
     } else {
-      // Room has no event in this time block → blank
-      const label = `0 of ${total} reservations`;
-      countEl.textContent = label;
+      // Room has no reservation in this time block → blank but keep cluster label
+      countEl.textContent = clusterLabel;
       eventsEl.innerHTML = "";
     }
   }
