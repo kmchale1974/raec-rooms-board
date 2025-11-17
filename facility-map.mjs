@@ -65,15 +65,19 @@ export const FACILITY_TO_ROOMS = {
 
   // ---------- Back cluster: 9A, 9B, 10A, 10B ----------
 
-  // Appears for all 9A, 9B, 10A, 10B:
-  "AC Gym - Full Gym 9 & 10": ["9A", "9B", "10A", "10B"],
+  // North (9/10) examples inside FACILITY_TO_ROOMS:
+"AC Gym - Half Court 9A": ["9A"],
+"AC Gym - Half Court 9B": ["9B"],
 
-  "AC Gym - Court 9-AB": ["9A", "9B"],
-  "AC Gym - Court 10-AB": ["10A", "10B"],
+// Anchor 9-AB to 9A only
+"AC Gym - Court 9-AB": ["9A"],
 
-  // Half courts (1:1)
-  "AC Gym - Half Court 9A": ["9A"],
-  "AC Gym - Half Court 9B": ["9B"],
-  "AC Gym - Half Court 10A": ["10A"],
-  "AC Gym - Half Court 10B": ["10B"],
+"AC Gym - Half Court 10A": ["10A"],
+"AC Gym - Half Court 10B": ["10B"],
+
+// Anchor 10-AB to 10A only
+"AC Gym - Court 10-AB": ["10A"],
+
+// Full Gym 9 & 10 anchored to 10A only
+"AC Gym - Full Gym 9 & 10": ["10A"],
 };
