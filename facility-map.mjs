@@ -37,31 +37,31 @@ export const FACILITY_TO_ROOMS = {
 
   // ---------- Turf quarters: NA / NB / SA / SB ----------
 
-  // Full turf = all four quarters
-  "AC Fieldhouse - Full Turf": [
-    "Quarter Turf NA",
-    "Quarter Turf NB",
-    "Quarter Turf SA",
-    "Quarter Turf SB",
-  ],
+// Full turf = all four quarters
+"AC Fieldhouse - Full Turf": [
+  "Turf NA",
+  "Turf NB",
+  "Turf SA",
+  "Turf SB",
+],
 
-  // Half north = NA + NB
-  "AC Fieldhouse - Half Turf North": [
-    "Quarter Turf NA",
-    "Quarter Turf NB",
-  ],
+// Half north = NA + NB
+"AC Fieldhouse - Half Turf North": [
+  "Turf NA",
+  "Turf NB",
+],
 
-  // Half south = SA + SB
-  "AC Fieldhouse - Half Turf South": [
-    "Quarter Turf SA",
-    "Quarter Turf SB",
-  ],
+// Half south = SA + SB
+"AC Fieldhouse - Half Turf South": [
+  "Turf SA",
+  "Turf SB",
+],
 
-  // Quarter bookings (1:1)
-  "AC Fieldhouse - Quarter Turf NA": ["Quarter Turf NA"],
-  "AC Fieldhouse - Quarter Turf NB": ["Quarter Turf NB"],
-  "AC Fieldhouse - Quarter Turf SA": ["Quarter Turf SA"],
-  "AC Fieldhouse - Quarter Turf SB": ["Quarter Turf SB"],
+// Quarter bookings (1:1)
+"AC Fieldhouse - Quarter Turf NA": ["Turf NA"],
+"AC Fieldhouse - Quarter Turf NB": ["Turf NB"],
+"AC Fieldhouse - Quarter Turf SA": ["Turf SA"],
+"AC Fieldhouse - Quarter Turf SB": ["Turf SB"],
 
   // ---------- Back cluster: 9A, 9B, 10A, 10B ----------
 
