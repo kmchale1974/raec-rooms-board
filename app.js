@@ -1,4 +1,4 @@
-// app.js — Cluster-synced, one event per room, global 8s tick, no animation
+// app.js — Cluster time-block sync, one event per room, global 8s tick, no animation
 
 const STAGE_WIDTH = 1920;
 const STAGE_HEIGHT = 1080;
@@ -245,7 +245,7 @@ function getClusters() {
     ],
   });
 
-  // Cluster 2: Turf or courts in the fieldhouse
+  // Cluster 2: Turf (NA/NB/SA/SB) or Courts 3–8 in fieldhouse
   if (FIELDHOUSE_MODE === "turf") {
     clusters.push({
       name: "cluster-turf",
@@ -279,28 +279,57 @@ function getClusters() {
 }
 
 /**
- * Advance one cluster in sync:
- *  - Determine max number of slots in any room in cluster (clusterMax)
- *  - clusterIndex = GLOBAL_TICK % clusterMax
- *  - For each room:
- *      - if roomSlots.length > clusterIndex → show that slot
- *      - else → blank
+ * Build time blocks for a cluster:
+ *  - Each block represents a unique (startMin, endMin) pair
+ *  - Each block knows which room(s) have a slot in that time window
  */
-function advanceCluster(cluster, grouped) {
-  const nowMin = minutesNowLocal(); // we don't actually need per-slot nowMin here, but keeping for future use
-  let clusterMax = 0;
-
-  const roomSlotsByDom = new Map(); // domId -> { slots, total }
+function buildTimeBlocksForCluster(cluster, grouped) {
+  const blocksMap = new Map(); // key "start-end" -> { startMin, endMin, byRoom: Map(jsonId -> slot) }
 
   for (const room of cluster.rooms) {
-    const slots = grouped.get(room.jsonId) || [];
-    const total = slots.length;
-    roomSlotsByDom.set(room.domId, { slots, total });
-    if (total > clusterMax) clusterMax = total;
+    const roomSlots = grouped.get(room.jsonId) || [];
+    for (const slot of roomSlots) {
+      const key = `${slot.startMin}-${slot.endMin}`;
+      let block = blocksMap.get(key);
+      if (!block) {
+        block = {
+          startMin: slot.startMin,
+          endMin: slot.endMin,
+          byRoom: new Map(),
+        };
+        blocksMap.set(key, block);
+      }
+      // If multiple slots with same start/end in same room, keep the first
+      if (!block.byRoom.has(room.jsonId)) {
+        block.byRoom.set(room.jsonId, slot);
+      }
+    }
   }
 
-  if (clusterMax === 0) {
-    // All empty → clear labels/chips
+  const blocks = Array.from(blocksMap.values());
+  blocks.sort(
+    (a, b) => a.startMin - b.startMin || a.endMin - b.endMin
+  );
+  return blocks;
+}
+
+/**
+ * Advance one cluster in sync by time-block:
+ *  - Build cluster time blocks from all rooms’ slots
+ *  - blockIndex = GLOBAL_TICK % blocks.length
+ *  - For that time block:
+ *      - Room with a slot in that block shows it
+ *      - Room without → blank
+ *  - Header label per room:
+ *      - If showing a slot: "<localIndex> of <roomTotal> reservations"
+ *      - If blank but has reservations: "0 of <roomTotal> reservations"
+ *      - If no reservations at all: "0 of 0 reservations"
+ */
+function advanceCluster(cluster, grouped) {
+  const blocks = buildTimeBlocksForCluster(cluster, grouped);
+
+  if (blocks.length === 0) {
+    // No events at all for this cluster
     for (const room of cluster.rooms) {
       const card = document.getElementById(`room-${room.domId}`);
       if (!card) continue;
@@ -312,19 +341,19 @@ function advanceCluster(cluster, grouped) {
     return;
   }
 
-  const clusterIndex = GLOBAL_TICK % clusterMax;
+  const blockIndex = GLOBAL_TICK % blocks.length;
+  const block = blocks[blockIndex];
 
   for (const room of cluster.rooms) {
     const card = document.getElementById(`room-${room.domId}`);
     if (!card) continue;
+
     const countEl = qs(".roomHeader .count", card);
     const eventsEl = qs(".events", card);
     if (!eventsEl || !countEl) continue;
 
-    const { slots, total } = roomSlotsByDom.get(room.domId) || {
-      slots: [],
-      total: 0,
-    };
+    const roomSlots = grouped.get(room.jsonId) || [];
+    const total = roomSlots.length;
 
     if (total === 0) {
       countEl.textContent = "0 of 0 reservations";
@@ -332,17 +361,19 @@ function advanceCluster(cluster, grouped) {
       continue;
     }
 
-    if (clusterIndex < total) {
-      // This room has a reservation at this cluster index
-      const slot = slots[clusterIndex];
-      const label = `${clusterIndex + 1} of ${total} reservations`;
+    const slot = block.byRoom.get(room.jsonId) || null;
+
+    if (slot) {
+      // Find local index of this slot within that room’s own sorted list
+      const idx = roomSlots.indexOf(slot);
+      const label = `${idx + 1} of ${total} reservations`;
       countEl.textContent = label;
 
       const chip = buildEventChip(slot);
       eventsEl.innerHTML = "";
       eventsEl.appendChild(chip);
     } else {
-      // This room has no reservation for this index → blank
+      // Room has no event in this time block → blank
       const label = `0 of ${total} reservations`;
       countEl.textContent = label;
       eventsEl.innerHTML = "";
@@ -354,7 +385,7 @@ function advanceCluster(cluster, grouped) {
  * One global tick every 8 seconds:
  *  - recompute filtered slots
  *  - group by room
- *  - advance each cluster with shared clusterIndex
+ *  - advance each cluster by time-block
  */
 function globalRotorTick() {
   if (!ALL_SLOTS.length) return;
