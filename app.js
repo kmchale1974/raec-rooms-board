@@ -1,4 +1,4 @@
-// app.js — One event per room, global 8s tick, no per-room animation, CSV-driven season
+// app.js — Cluster-synced, one event per room, global 8s tick, no animation
 
 const STAGE_WIDTH = 1920;
 const STAGE_HEIGHT = 1080;
@@ -97,15 +97,12 @@ function startHeaderClock() {
 
 // ---------- Room sets / season ----------
 
-// South/North fixed rooms (already in HTML)
-const FIXED_ROOMS = ["1A", "1B", "2A", "2B", "9A", "9B", "10A", "10B"];
-
 // Turf rooms as emitted by events.json (group: "fieldhouse")
 const TURF_ROOMS = [
-  { id: "Quarter Turf NA", domId: "NA", label: "Turf NA" },
-  { id: "Quarter Turf NB", domId: "NB", label: "Turf NB" },
-  { id: "Quarter Turf SA", domId: "SA", label: "Turf SA" },
-  { id: "Quarter Turf SB", domId: "SB", label: "Turf SB" },
+  { jsonId: "Quarter Turf NA", domId: "NA", label: "Turf NA" },
+  { jsonId: "Quarter Turf NB", domId: "NB", label: "Turf NB" },
+  { jsonId: "Quarter Turf SA", domId: "SA", label: "Turf SA" },
+  { jsonId: "Quarter Turf SB", domId: "SB", label: "Turf SB" },
 ];
 
 // Courts (basketball) rooms in fieldhouse
@@ -122,7 +119,7 @@ function getFieldhouseMode(data, slots) {
 
   const ids = new Set(slots.map((s) => s.roomId));
 
-  const hasTurf = TURF_ROOMS.some((r) => ids.has(r.id));
+  const hasTurf = TURF_ROOMS.some((r) => ids.has(r.jsonId));
   if (hasTurf) return "turf";
 
   const hasCourts = COURT_ROOMS.some((id) => ids.has(id));
@@ -227,60 +224,107 @@ function buildEventChip(slot) {
   return chip;
 }
 
-// ---------- Global state + synchronized index ----------
+// ---------- Global state ----------
 
 let ALL_SLOTS = [];
 let FIELDHOUSE_MODE = "courts"; // "turf" or "courts"
-
-// Rooms we rotate through, with JSON->DOM mapping
-let ACTIVE_ROOMS = []; // { jsonId, domId }
-
 let GLOBAL_TICK = 0; // increments every 8s
 
-function buildActiveRooms() {
-  ACTIVE_ROOMS = [];
-  // Fixed rooms: jsonId == domId
-  for (const id of FIXED_ROOMS) {
-    ACTIVE_ROOMS.push({ jsonId: id, domId: id });
+// Build cluster definitions dynamically (because turf/courts is seasonal)
+function getClusters() {
+  const clusters = [];
+
+  // Cluster 1: 1A,1B,2A,2B
+  clusters.push({
+    name: "cluster-front",
+    rooms: [
+      { jsonId: "1A", domId: "1A" },
+      { jsonId: "1B", domId: "1B" },
+      { jsonId: "2A", domId: "2A" },
+      { jsonId: "2B", domId: "2B" },
+    ],
+  });
+
+  // Cluster 2: Turf or courts in the fieldhouse
+  if (FIELDHOUSE_MODE === "turf") {
+    clusters.push({
+      name: "cluster-turf",
+      rooms: TURF_ROOMS.map((r) => ({
+        jsonId: r.jsonId,
+        domId: r.domId,
+      })),
+    });
+  } else {
+    clusters.push({
+      name: "cluster-courts",
+      rooms: COURT_ROOMS.map((id) => ({
+        jsonId: id,
+        domId: id,
+      })),
+    });
   }
 
-  if (FIELDHOUSE_MODE === "turf") {
-    for (const room of TURF_ROOMS) {
-      ACTIVE_ROOMS.push({ jsonId: room.id, domId: room.domId });
-    }
-  } else {
-    for (const id of COURT_ROOMS) {
-      ACTIVE_ROOMS.push({ jsonId: id, domId: id });
-    }
-  }
+  // Cluster 3: 9A,9B,10A,10B
+  clusters.push({
+    name: "cluster-back",
+    rooms: [
+      { jsonId: "9A", domId: "9A" },
+      { jsonId: "9B", domId: "9B" },
+      { jsonId: "10A", domId: "10A" },
+      { jsonId: "10B", domId: "10B" },
+    ],
+  });
+
+  return clusters;
 }
 
 /**
- * One global tick every 8 seconds:
- * - recompute filtered slots
- * - for each room, pick which event index to show
- * - swap the chip instantly (no animation)
+ * Advance one cluster in sync:
+ *  - Determine max number of slots in any room in cluster (clusterMax)
+ *  - clusterIndex = GLOBAL_TICK % clusterMax
+ *  - For each room:
+ *      - if roomSlots.length > clusterIndex → show that slot
+ *      - else → blank
  */
-function globalRotorTick() {
-  if (!ALL_SLOTS.length || !ACTIVE_ROOMS.length) return;
+function advanceCluster(cluster, grouped) {
+  const nowMin = minutesNowLocal(); // we don't actually need per-slot nowMin here, but keeping for future use
+  let clusterMax = 0;
 
-  const nowMin = minutesNowLocal();
-  const displaySlots = filterForDisplay(ALL_SLOTS);
-  const grouped = groupByRoom(displaySlots);
+  const roomSlotsByDom = new Map(); // domId -> { slots, total }
 
-  for (const room of ACTIVE_ROOMS) {
-    const jsonId = room.jsonId;
-    const domId = room.domId;
+  for (const room of cluster.rooms) {
+    const slots = grouped.get(room.jsonId) || [];
+    const total = slots.length;
+    roomSlotsByDom.set(room.domId, { slots, total });
+    if (total > clusterMax) clusterMax = total;
+  }
 
-    const card = document.getElementById(`room-${domId}`);
+  if (clusterMax === 0) {
+    // All empty → clear labels/chips
+    for (const room of cluster.rooms) {
+      const card = document.getElementById(`room-${room.domId}`);
+      if (!card) continue;
+      const countEl = qs(".roomHeader .count", card);
+      const eventsEl = qs(".events", card);
+      if (countEl) countEl.textContent = "0 of 0 reservations";
+      if (eventsEl) eventsEl.innerHTML = "";
+    }
+    return;
+  }
+
+  const clusterIndex = GLOBAL_TICK % clusterMax;
+
+  for (const room of cluster.rooms) {
+    const card = document.getElementById(`room-${room.domId}`);
     if (!card) continue;
-
     const countEl = qs(".roomHeader .count", card);
     const eventsEl = qs(".events", card);
     if (!eventsEl || !countEl) continue;
 
-    const slots = grouped.get(jsonId) || [];
-    const total = slots.length;
+    const { slots, total } = roomSlotsByDom.get(room.domId) || {
+      slots: [],
+      total: 0,
+    };
 
     if (total === 0) {
       countEl.textContent = "0 of 0 reservations";
@@ -288,19 +332,39 @@ function globalRotorTick() {
       continue;
     }
 
-    // Same GLOBAL_TICK for every room:
-    // Each room shows slot at (tick % total), so if
-    // the same event is at the same index, it appears
-    // at the same time across rooms.
-    const index = GLOBAL_TICK % total;
-    const slot = slots[index];
+    if (clusterIndex < total) {
+      // This room has a reservation at this cluster index
+      const slot = slots[clusterIndex];
+      const label = `${clusterIndex + 1} of ${total} reservations`;
+      countEl.textContent = label;
 
-    const label = `${index + 1} of ${total} reservations`;
-    countEl.textContent = label;
+      const chip = buildEventChip(slot);
+      eventsEl.innerHTML = "";
+      eventsEl.appendChild(chip);
+    } else {
+      // This room has no reservation for this index → blank
+      const label = `0 of ${total} reservations`;
+      countEl.textContent = label;
+      eventsEl.innerHTML = "";
+    }
+  }
+}
 
-    const chip = buildEventChip(slot);
-    eventsEl.innerHTML = "";
-    eventsEl.appendChild(chip);
+/**
+ * One global tick every 8 seconds:
+ *  - recompute filtered slots
+ *  - group by room
+ *  - advance each cluster with shared clusterIndex
+ */
+function globalRotorTick() {
+  if (!ALL_SLOTS.length) return;
+
+  const displaySlots = filterForDisplay(ALL_SLOTS);
+  const grouped = groupByRoom(displaySlots);
+
+  const clusters = getClusters();
+  for (const cluster of clusters) {
+    advanceCluster(cluster, grouped);
   }
 
   GLOBAL_TICK++;
@@ -346,9 +410,6 @@ async function boot() {
 
   // Build fieldhouse DOM once based on season
   buildFieldhouseContainer(FIELDHOUSE_MODE);
-
-  // Build active room list (fixed + fieldhouse)
-  buildActiveRooms();
 
   // Initial tick so the board isn't empty
   globalRotorTick();
