@@ -67,59 +67,178 @@
   "slots": [
     {
       "roomId": "10A",
-      "startMin": 540,
-      "endMin": 1320,
-      "title": "3 Step Sports, Ray Glassman",
-      "subtitle": "3 STEP SPORTS"
+      "startMin": 570,
+      "endMin": 750,
+      "title": "Open Pickleball",
+      "subtitle": ""
+    },
+    {
+      "roomId": "10A",
+      "startMin": 1020,
+      "endMin": 1080,
+      "title": "Catch Corner",
+      "subtitle": "Martin Uscila #459258 Basketball"
+    },
+    {
+      "roomId": "10A",
+      "startMin": 1170,
+      "endMin": 1290,
+      "title": "Audrey Tendean",
+      "subtitle": "Volleyball"
+    },
+    {
+      "roomId": "10A",
+      "startMin": 1170,
+      "endMin": 1260,
+      "title": "Illinois Express Basketball",
+      "subtitle": "Basketball 2025 Q4 Pattern"
     },
     {
       "roomId": "10B",
-      "startMin": 540,
-      "endMin": 1320,
-      "title": "3 Step Sports, Ray Glassman",
-      "subtitle": "3 STEP SPORTS"
+      "startMin": 570,
+      "endMin": 750,
+      "title": "Open Pickleball",
+      "subtitle": ""
+    },
+    {
+      "roomId": "10B",
+      "startMin": 1020,
+      "endMin": 1080,
+      "title": "Catch Corner",
+      "subtitle": "Martin Uscila #459258 Basketball"
+    },
+    {
+      "roomId": "10B",
+      "startMin": 1170,
+      "endMin": 1290,
+      "title": "Audrey Tendean",
+      "subtitle": "Volleyball"
+    },
+    {
+      "roomId": "10B",
+      "startMin": 1170,
+      "endMin": 1260,
+      "title": "Illinois Express Basketball",
+      "subtitle": "Basketball 2025 Q4 Pattern"
     },
     {
       "roomId": "1A",
-      "startMin": 540,
-      "endMin": 1320,
-      "title": "3 Step Sports, Ray Glassman",
-      "subtitle": "3 STEP SPORTS"
+      "startMin": 1080,
+      "endMin": 1260,
+      "title": "Belusa United Volleyball, Nicole Diamond",
+      "subtitle": "Volleyball"
+    },
+    {
+      "roomId": "1A",
+      "startMin": 1260,
+      "endMin": 1380,
+      "title": "Chicago Sport and Social Club",
+      "subtitle": "Volleyball (Grab A Game)"
     },
     {
       "roomId": "1B",
-      "startMin": 540,
-      "endMin": 1320,
-      "title": "3 Step Sports, Ray Glassman",
-      "subtitle": "3 STEP SPORTS"
+      "startMin": 1080,
+      "endMin": 1260,
+      "title": "Belusa United Volleyball, Nicole Diamond",
+      "subtitle": "Volleyball"
+    },
+    {
+      "roomId": "1B",
+      "startMin": 1260,
+      "endMin": 1380,
+      "title": "Chicago Sport and Social Club",
+      "subtitle": "Volleyball (Grab A Game)"
     },
     {
       "roomId": "2A",
-      "startMin": 540,
-      "endMin": 1320,
-      "title": "3 Step Sports, Ray Glassman",
-      "subtitle": "3 STEP SPORTS"
+      "startMin": 1080,
+      "endMin": 1260,
+      "title": "Belusa United Volleyball, Nicole Diamond",
+      "subtitle": "Volleyball"
+    },
+    {
+      "roomId": "2A",
+      "startMin": 1260,
+      "endMin": 1380,
+      "title": "Chicago Sport and Social Club",
+      "subtitle": "Volleyball (Grab A Game)"
     },
     {
       "roomId": "2B",
-      "startMin": 540,
-      "endMin": 1320,
-      "title": "3 Step Sports, Ray Glassman",
-      "subtitle": "3 STEP SPORTS"
+      "startMin": 1080,
+      "endMin": 1260,
+      "title": "Belusa United Volleyball, Nicole Diamond",
+      "subtitle": "Volleyball"
+    },
+    {
+      "roomId": "2B",
+      "startMin": 1260,
+      "endMin": 1380,
+      "title": "Chicago Sport and Social Club",
+      "subtitle": "Volleyball (Grab A Game)"
     },
     {
       "roomId": "9A",
-      "startMin": 540,
-      "endMin": 1320,
-      "title": "3 Step Sports, Ray Glassman",
-      "subtitle": "3 STEP SPORTS"
+      "startMin": 570,
+      "endMin": 750,
+      "title": "Open Pickleball",
+      "subtitle": ""
+    },
+    {
+      "roomId": "9A",
+      "startMin": 1020,
+      "endMin": 1080,
+      "title": "Catch Corner",
+      "subtitle": "Martin Uscila #459258 Basketball"
+    },
+    {
+      "roomId": "9A",
+      "startMin": 1170,
+      "endMin": 1260,
+      "title": "Illinois Express Basketball",
+      "subtitle": "Basketball 2025 Q4 Pattern"
+    },
+    {
+      "roomId": "9A",
+      "startMin": 1170,
+      "endMin": 1290,
+      "title": "Audrey Tendean",
+      "subtitle": "Volleyball"
     },
     {
       "roomId": "9B",
-      "startMin": 540,
-      "endMin": 1320,
-      "title": "3 Step Sports, Ray Glassman",
-      "subtitle": "3 STEP SPORTS"
+      "startMin": 570,
+      "endMin": 750,
+      "title": "Open Pickleball",
+      "subtitle": ""
+    },
+    {
+      "roomId": "9B",
+      "startMin": 1020,
+      "endMin": 1080,
+      "title": "Catch Corner",
+      "subtitle": "Martin Uscila #459258 Basketball"
+    },
+    {
+      "roomId": "9B",
+      "startMin": 1170,
+      "endMin": 1290,
+      "title": "Audrey Tendean",
+      "subtitle": "Volleyball"
+    },
+    {
+      "roomId": "9B",
+      "startMin": 1170,
+      "endMin": 1260,
+      "title": "Illinois Express Basketball",
+      "subtitle": "Basketball 2025 Q4 Pattern"
+    },
+    {
+      "roomId": "9B",
+      "startMin": 1170,
+      "endMin": 1290,
+      "title": "Audrey Tendean",
+      "subtitle": "Volleyball"
     }
   ]
 }
