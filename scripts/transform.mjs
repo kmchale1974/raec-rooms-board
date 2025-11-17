@@ -186,6 +186,20 @@ function makeTitleSubtitle(reserveeRaw, purposeRaw) {
   const lowerR = reservee.toLowerCase();
   const lowerP = purpose.toLowerCase();
 
+  // Special-case: Chicago Sport and Social Club & Illinois Express Basketball
+  // When RecTrac stores them as both reservee and purpose, avoid duplicate text.
+  if (
+    reservee &&
+    purpose &&
+    reservee === purpose &&
+    (
+      lowerR.includes("chicago sport and social club") ||
+      lowerR.includes("illinois express basketball")
+    )
+  ) {
+    return { title: reservee, subtitle: "" };
+  }
+
   // Open Pickleball / Open Gym style
   if (lowerR.includes("open pickleball") || lowerP.includes("open pickleball")) {
     return { title: "Open Pickleball", subtitle: "" };
