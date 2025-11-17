@@ -12,7 +12,7 @@ const COL_FACILITY = 1;  // Facility
 const COL_TIMERANGE = 2; // Time (e.g., "7:30pm - 9:30pm")
 const COL_RESERVEE = 3;  // Name (e.g., "Tendean, Audrey Felicite")
 const COL_PURPOSE = 4;   // Program / Description
-const COL_SEASON = 4;    // or wherever "Turf Season per NM" appears if different
+const COL_SEASON = 4;    // Column used for "Turf Season per NM" (season control)
 
 // ---------- Helpers ----------
 
@@ -136,20 +136,6 @@ async function run() {
   };
 
   fs.writeFileSync(outputJson, JSON.stringify(data, null, 2));
-
-  if (unknownFacilities.size > 0) {
-    console.warn("Unknown facilities found in CSV (not in FACILITY_TO_ROOMS):");
-    for (const f of unknownFacilities) {
-      console.warn("  -", f);
-    }
-  } else {
-    console.log("All facilities in CSV matched FACILITY_TO_ROOMS.");
-  }
-
-  console.log(
-    `Wrote ${slots.length} slots to ${outputJson} with season="${season}".`
-  );
-}
 
   // Log unknown facilities so you can add them to facility-map.mjs later
   if (unknownFacilities.size > 0) {
