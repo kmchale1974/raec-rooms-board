@@ -5,7 +5,7 @@
 
 import fs from "fs";
 import { parse } from "csv-parse/sync";
-import { FACILITY_TO_ROOMS } from "./facility-map.mjs";
+import { FACILITY_TO_ROOMS } from "../facility-map.mjs";
 
 // Adjust these indices if your CSV column order is different:
 const COL_FACILITY = 1;  // Facility
