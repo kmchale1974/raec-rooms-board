@@ -44,20 +44,6 @@
       "subtitle": "Turf Season per NM"
     },
     {
-      "roomId": "10A",
-      "startMin": 570,
-      "endMin": 750,
-      "title": "RAEC Front Desk, Rentals - On Hold",
-      "subtitle": "Open Pickleball Internal Hold per NM"
-    },
-    {
-      "roomId": "10B",
-      "startMin": 570,
-      "endMin": 750,
-      "title": "RAEC Front Desk, Rentals - On Hold",
-      "subtitle": "Open Pickleball Internal Hold per NM"
-    },
-    {
       "roomId": "9A",
       "startMin": 570,
       "endMin": 750,
@@ -66,6 +52,20 @@
     },
     {
       "roomId": "9B",
+      "startMin": 570,
+      "endMin": 750,
+      "title": "RAEC Front Desk, Rentals - On Hold",
+      "subtitle": "Open Pickleball Internal Hold per NM"
+    },
+    {
+      "roomId": "10A",
+      "startMin": 570,
+      "endMin": 750,
+      "title": "RAEC Front Desk, Rentals - On Hold",
+      "subtitle": "Open Pickleball Internal Hold per NM"
+    },
+    {
+      "roomId": "10B",
       "startMin": 570,
       "endMin": 750,
       "title": "RAEC Front Desk, Rentals - On Hold",
@@ -129,13 +129,6 @@
     },
     {
       "roomId": "9A",
-      "startMin": 1170,
-      "endMin": 1290,
-      "title": "Tendean, Audrey Felicite",
-      "subtitle": "Volleyball"
-    },
-    {
-      "roomId": "10A",
       "startMin": 1170,
       "endMin": 1290,
       "title": "Tendean, Audrey Felicite",
