@@ -4,7 +4,7 @@ on:
   workflow_dispatch:
   schedule:
     # GitHub cron is UTC. 14:03 UTC = 08:03 America/Chicago during CST, 09:03 during CDT.
-    - cron: "3 14 * * *"
+    - cron: "10 14 * * *"
 
 permissions:
   contents: write
