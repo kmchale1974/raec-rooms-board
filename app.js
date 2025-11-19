@@ -425,9 +425,8 @@ async function refreshEventsJson() {
 async function boot() {
   startHeaderClock();
 
-  const res = await fetch(`./events.json?cb=${Date.now()}`, {
-    cache: "no-store",
-  });
+  // Simple: no cache-buster, still ask browser not to cache
+const res = await fetch('./events.json', { cache: 'no-store' });
   const data = await res.json();
 
   ALL_SLOTS = Array.isArray(data?.slots) ? data.slots : [];
