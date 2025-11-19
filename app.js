@@ -37,6 +37,11 @@ function isPickleball(slot) {
   return title.includes("pickleball") || sub.includes("pickleball");
 }
 
+// Once-per-day cache key (YYYY-MM-DD)
+function getTodayCacheKey() {
+  return new Date().toISOString().slice(0, 10);
+}
+
 // ---------- DOM helpers ----------
 
 function qs(sel, root = document) {
@@ -57,9 +62,11 @@ function el(tag, cls, html) {
     const vp = qs(".viewport");
     const stage = qs(".stage");
     if (!vp || !stage) return;
+
     const sx = vp.clientWidth / STAGE_WIDTH;
     const sy = vp.clientHeight / STAGE_HEIGHT;
     const s = Math.min(sx, sy);
+
     stage.style.transform = `scale(${s})`;
     stage.style.transformOrigin = "top left";
     vp.style.minHeight = STAGE_HEIGHT * s + "px";
@@ -87,6 +94,7 @@ function startHeaderClock() {
       hour: "2-digit",
       minute: "2-digit",
     });
+
     if (dEl) dEl.textContent = dateFmt;
     if (cEl) cEl.textContent = timeFmt;
   }
@@ -150,7 +158,7 @@ function buildFieldhouseContainer(mode) {
       div.id = `room-${room.domId}`;
       div.innerHTML = `
         <div class="roomHeader">
-          <div class="id">${room.label}</div>
+          <div class="name">${room.label}</div>
           <div class="count">0 of 0 reservations</div>
         </div>
         <div class="events"></div>
@@ -163,7 +171,7 @@ function buildFieldhouseContainer(mode) {
       room.id = `room-${id}`;
       room.innerHTML = `
         <div class="roomHeader">
-          <div class="id">${id}</div>
+          <div class="name">${id}</div>
           <div class="count">0 of 0 reservations</div>
         </div>
         <div class="events"></div>
@@ -183,7 +191,8 @@ function groupByRoom(slots) {
   }
   for (const [, arr] of map) {
     arr.sort(
-      (a, b) => a.startMin - b.startMin || a.title.localeCompare(b.title)
+      (a, b) =>
+        a.startMin - b.startMin || a.title.localeCompare(b.title)
     );
   }
   return map;
@@ -191,15 +200,16 @@ function groupByRoom(slots) {
 
 /**
  * Filter slots for display based on current time:
- *  - only today
- *  - hide past events (endMin <= now)
- *  - hide Open Pickleball after 12:30pm
+ * - only today
+ * - hide past events (endMin <= now)
+ * - hide Open Pickleball after 12:30pm
  */
 function filterForDisplay(slots) {
   const nowMin = minutesNowLocal();
-
   let filtered = slots.filter(
-    (s) => isTodaySlot(s) && s.endMin > nowMin // current or future
+    (s) =>
+      isTodaySlot(s) &&
+      s.endMin > nowMin // current or future
   );
 
   const cutoff = 12 * 60 + 30;
@@ -220,10 +230,15 @@ function buildEventChip(slot) {
   const when = formatRange(slot.startMin, slot.endMin);
 
   chip.innerHTML = `
-    <div class="who">${title}</div>
-    ${subtitle ? `<div class="what">${subtitle}</div>` : ""}
-    <div class="when">${when}</div>
+    <div class="title">${title}</div>
+    ${
+      subtitle
+        ? `<div class="subtitle">${subtitle}</div>`
+        : ""
+    }
+    <div class="time">${when}</div>
   `;
+
   return chip;
 }
 
@@ -283,8 +298,8 @@ function getClusters() {
 
 /**
  * Build time blocks for a cluster:
- *  - Each block represents a unique (startMin, endMin) pair
- *  - Each block knows which room(s) have a slot in that time window
+ * - Each block represents a unique (startMin, endMin) pair
+ * - Each block knows which room(s) have a slot in that time window
  */
 function buildTimeBlocksForCluster(cluster, grouped) {
   const blocksMap = new Map(); // key "start-end" -> { startMin, endMin, byRoom: Map(jsonId -> slot) }
@@ -311,21 +326,21 @@ function buildTimeBlocksForCluster(cluster, grouped) {
 
   const blocks = Array.from(blocksMap.values());
   blocks.sort(
-    (a, b) => a.startMin - b.startMin || a.endMin - b.endMin
+    (a, b) =>
+      a.startMin - b.startMin || a.endMin - b.endMin
   );
   return blocks;
 }
 
 /**
  * Advance one cluster in sync by time-block:
- *  - Build cluster time blocks from all rooms’ slots
- *  - blockIndex = GLOBAL_TICK % blocks.length
- *  - For that time block:
- *      - Room with a slot in that block shows it
- *      - Room without → blank
- *  - Header label per room:
- *      - **Cluster-based**: "<blockIndex+1> of <blocks.length> reservations"
- *        so labels are consistent & monotonic across the cluster.
+ * - Build cluster time blocks from all rooms’ slots
+ * - blockIndex = GLOBAL_TICK % blocks.length
+ * - For that time block:
+ *   - Room with a slot in that block shows it
+ *   - Room without → blank
+ * - Header label per room:
+ *   - cluster-based "N of M reservations"
  */
 function advanceCluster(cluster, grouped) {
   const blocks = buildTimeBlocksForCluster(cluster, grouped);
@@ -335,8 +350,10 @@ function advanceCluster(cluster, grouped) {
     for (const room of cluster.rooms) {
       const card = document.getElementById(`room-${room.domId}`);
       if (!card) continue;
+
       const countEl = qs(".roomHeader .count", card);
       const eventsEl = qs(".events", card);
+
       if (countEl) countEl.textContent = "0 of 0 reservations";
       if (eventsEl) eventsEl.innerHTML = "";
     }
@@ -383,17 +400,17 @@ function advanceCluster(cluster, grouped) {
 
 /**
  * One global tick every 8 seconds:
- *  - recompute filtered slots
- *  - group by room
- *  - advance each cluster by time-block
+ * - recompute filtered slots
+ * - group by room
+ * - advance each cluster by time-block
  */
 function globalRotorTick() {
   if (!ALL_SLOTS.length) return;
 
   const displaySlots = filterForDisplay(ALL_SLOTS);
   const grouped = groupByRoom(displaySlots);
-
   const clusters = getClusters();
+
   for (const cluster of clusters) {
     advanceCluster(cluster, grouped);
   }
@@ -405,10 +422,12 @@ function globalRotorTick() {
 
 async function refreshEventsJson() {
   try {
-    const res = await fetch(`./events.json?cb=${Date.now()}`, {
+    const cb = getTodayCacheKey();
+    const res = await fetch(`./events.json?cb=${cb}`, {
       cache: "no-store",
     });
     const data = await res.json();
+
     ALL_SLOTS = Array.isArray(data?.slots) ? data.slots : [];
 
     console.log("events.json refreshed:", {
@@ -425,8 +444,10 @@ async function refreshEventsJson() {
 async function boot() {
   startHeaderClock();
 
-  // Simple: no cache-buster, still ask browser not to cache
-const res = await fetch('./events.json', { cache: 'no-store' });
+  const cb = getTodayCacheKey();
+  const res = await fetch(`./events.json?cb=${cb}`, {
+    cache: "no-store",
+  });
   const data = await res.json();
 
   ALL_SLOTS = Array.isArray(data?.slots) ? data.slots : [];
