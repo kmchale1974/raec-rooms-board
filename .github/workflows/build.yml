@@ -3,16 +3,17 @@ name: Build RAEC events json
 on:
   workflow_dispatch:
   schedule:
-    # 08:03 America/Chicago
+    # 08:10 America/Chicago (14:10 UTC)
     - cron: "10 14 * * *"
 
 permissions:
   contents: write
 
+jobs:
   build:
     runs-on: ubuntu-latest
     env:
-      IMAP_USER: ${{ vars.IMAP_USER }}
+      IMAP_USER: ${{ vars.IMAP_USER }}   # or hardcode the email
       OUT_CSV:  data/inbox/latest.csv
       OUT_JSON: events.json
       TZ: America/Chicago
@@ -21,7 +22,9 @@ permissions:
       - name: Debug event type and time
         run: |
           echo "GITHUB_EVENT_NAME=$GITHUB_EVENT_NAME"
+          echo "UTC time:"
           date -u
+          echo "Local time (TZ=$TZ):"
           date
 
       - name: Checkout
