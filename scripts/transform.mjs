@@ -23,10 +23,10 @@ const COL_SEASON   = 4;
 
 const ROOM_RULES = [
   // Front cluster: 1A, 1B, 2A, 2B
-    {
+  {
     roomId: "1A",
     facilities: [
-      // "AC Gym - Championship Court",   // now optional
+      // "AC Gym - Championship Court", // optional now
       "AC Gym - Full Gym 1AB & 2AB",
       "AC Gym - Court 1-AB",
       "AC Gym - Half Court 1A",
@@ -35,7 +35,7 @@ const ROOM_RULES = [
   {
     roomId: "1B",
     facilities: [
-      // "AC Gym - Championship Court",   // now optional
+      // "AC Gym - Championship Court", // optional now
       "AC Gym - Full Gym 1AB & 2AB",
       "AC Gym - Court 1-AB",
       "AC Gym - Half Court 1B",
@@ -44,7 +44,7 @@ const ROOM_RULES = [
   {
     roomId: "2A",
     facilities: [
-      // "AC Gym - Championship Court",   // now optional
+      // "AC Gym - Championship Court", // optional now
       "AC Gym - Full Gym 1AB & 2AB",
       "AC Gym - Court 2-AB",
       "AC Gym - Half Court 2A",
@@ -53,12 +53,15 @@ const ROOM_RULES = [
   {
     roomId: "2B",
     facilities: [
-      // "AC Gym - Championship Court",   // now optional
+      // "AC Gym - Championship Court", // optional now
       "AC Gym - Full Gym 1AB & 2AB",
       "AC Gym - Court 2-AB",
       "AC Gym - Half Court 2B",
     ],
   },
+
+  // Fieldhouse courts, Turf, and 9A/9B/10A/10B stay as they are...
+];
 
   // Fieldhouse courts: 3–8
   {
