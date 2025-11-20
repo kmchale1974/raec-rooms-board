@@ -11,7 +11,7 @@ import { parse } from "csv-parse/sync";
 
 // Column indices: A=0, B=1, C=2, ...
 const COL_FACILITY = 1;  // "Facility"
-const COL_TIMERANGE = 2; // "Time" (e.g. "7:30pm - 9:30pm")
+const COL_TIMERANGE = 2; // "Time" (e.g. "10:00am - 11:00am")
 const COL_RESERVEE = 3;  // "Reservee"
 const COL_PURPOSE  = 4;  // "Reservation Purpose" (also used for season flag)
 const COL_SEASON   = 4;
@@ -23,10 +23,11 @@ const COL_SEASON   = 4;
 
 const ROOM_RULES = [
   // Front cluster: 1A, 1B, 2A, 2B
+  // Championship Court is now OPTIONAL; we only require:
+  // Full Gym 1AB & 2AB + Court 1-AB/2-AB + the half court.
   {
     roomId: "1A",
     facilities: [
-      // "AC Gym - Championship Court", // optional now
       "AC Gym - Full Gym 1AB & 2AB",
       "AC Gym - Court 1-AB",
       "AC Gym - Half Court 1A",
@@ -35,7 +36,6 @@ const ROOM_RULES = [
   {
     roomId: "1B",
     facilities: [
-      // "AC Gym - Championship Court", // optional now
       "AC Gym - Full Gym 1AB & 2AB",
       "AC Gym - Court 1-AB",
       "AC Gym - Half Court 1B",
@@ -44,7 +44,6 @@ const ROOM_RULES = [
   {
     roomId: "2A",
     facilities: [
-      // "AC Gym - Championship Court", // optional now
       "AC Gym - Full Gym 1AB & 2AB",
       "AC Gym - Court 2-AB",
       "AC Gym - Half Court 2A",
@@ -53,15 +52,11 @@ const ROOM_RULES = [
   {
     roomId: "2B",
     facilities: [
-      // "AC Gym - Championship Court", // optional now
       "AC Gym - Full Gym 1AB & 2AB",
       "AC Gym - Court 2-AB",
       "AC Gym - Half Court 2B",
     ],
   },
-
-  // Fieldhouse courts, Turf, and 9A/9B/10A/10B stay as they are...
-];
 
   // Fieldhouse courts: 3–8
   {
@@ -166,28 +161,23 @@ function normalizeReservee(rawReservee) {
   if (!r) return "";
 
   const parts = r.split(",");
-
   if (parts.length === 2) {
     const left = parts[0].trim();
     const right = parts[1].trim();
 
-    // 1) Collapse exact duplicates like "Chicago Sport and Social Club, Chicago Sport and Social Club"
+    // 1) Collapse exact duplicates like
+    //    "Chicago Sport and Social Club, Chicago Sport and Social Club"
     //    or "Illinois Express Basketball, Illinois Express Basketball"
-    if (
-      left &&
-      right &&
-      left.toLowerCase() === right.toLowerCase()
-    ) {
-      return left; // just keep one copy
+    if (left && right && left.toLowerCase() === right.toLowerCase()) {
+      return left;
     }
 
-    // 2) "Last, First" -> "First Last" (only when it really looks like a person name)
+    // 2) "Last, First" -> "First Last" when it looks like a person name
     const leftHasSpace = left.includes(" ");
     const rightHasComma = right.includes(",");
     if (!leftHasSpace && !rightHasComma && left && right) {
       // e.g. "Smith, John" -> "John Smith"
-      r = `${right} ${left}`;
-      return r;
+      return `${right} ${left}`;
     }
   }
 
@@ -201,21 +191,7 @@ function makeTitleSubtitle(reserveeRaw, purposeRaw) {
   const lowerR = reservee.toLowerCase();
   const lowerP = purpose.toLowerCase();
 
-  // Special-case: Chicago Sport and Social Club & Illinois Express Basketball
-  // When RecTrac stores them as both reservee and purpose, avoid duplicate text.
-  if (
-    reservee &&
-    purpose &&
-    reservee === purpose &&
-    (
-      lowerR.includes("chicago sport and social club") ||
-      lowerR.includes("illinois express basketball")
-    )
-  ) {
-    return { title: reservee, subtitle: "" };
-  }
-
-  // Open Pickleball / Open Gym style
+  // Open Pickleball / Open Gym
   if (lowerR.includes("open pickleball") || lowerP.includes("open pickleball")) {
     return { title: "Open Pickleball", subtitle: "" };
   }
@@ -223,14 +199,14 @@ function makeTitleSubtitle(reserveeRaw, purposeRaw) {
     return { title: "Open Gym", subtitle: "" };
   }
 
-  // Catch Corner: keep "Catch Corner" prominent, move booking detail to subtitle
+  // Catch Corner: keep "Catch Corner" in title, booking detail in subtitle
   if (lowerR.includes("catch corner") || lowerP.includes("catch corner")) {
     const title = "Catch Corner";
     const subtitle = purpose || reservee;
     return { title, subtitle };
   }
 
-  // If no reservee but we have purpose, show purpose as title
+  // If no reservee but purpose present → purpose as title
   if (!reservee && purpose) {
     return { title: purpose, subtitle: "" };
   }
@@ -239,7 +215,6 @@ function makeTitleSubtitle(reserveeRaw, purposeRaw) {
   if (reservee && purpose) {
     return { title: reservee, subtitle: purpose };
   }
-
   if (reservee && !purpose) {
     return { title: reservee, subtitle: "" };
   }
