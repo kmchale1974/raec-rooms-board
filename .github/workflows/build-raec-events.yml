@@ -1,10 +1,9 @@
-name: Build RAEC events json
+name: Build RAEC events (legacy)
 
 on:
   workflow_dispatch:
-  schedule:
-    # GitHub cron is UTC. 14:03 UTC = 08:03 America/Chicago during CST, 09:03 during CDT.
-    - cron: "10 14 * * *"
+  # schedule:  # <— REMOVE any schedule lines
+  #   - cron: "3 13 * * *"
 
 permissions:
   contents: write
