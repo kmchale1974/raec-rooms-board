@@ -1,9 +1,9 @@
-name: Update events.json from email
+name: Update events.json from email (legacy)
 
 on:
-  workflow_dispatch:     # manual "Run workflow" button
-  schedule:
-    - cron: "*/30 * * * *"   # every 30 minutes (UTC)
+  workflow_dispatch:
+  # schedule:
+  #   - cron: "..."
   push:
     paths:
       - scripts/**           # if you tweak parser
