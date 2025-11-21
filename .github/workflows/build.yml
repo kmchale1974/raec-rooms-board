@@ -2,7 +2,8 @@ name: Build RAEC events json
 
 on:
   workflow_dispatch:
-    schedule:
+  schedule:
+    # 14:05, 14:10, 14:15 UTC = 8:05, 8:10, 8:15 America/Chicago
     - cron: "5 14 * * *"
     - cron: "10 14 * * *"
     - cron: "15 14 * * *"
