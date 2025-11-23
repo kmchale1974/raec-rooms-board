@@ -100,32 +100,11 @@
       "subtitle": "Turf Season per NM"
     },
     {
-      "roomId": "Quarter Turf NA",
-      "startMin": 540,
-      "endMin": 1320,
-      "title": "BRC Global Canine Pedigrees, Inc., BRC Global Canine Pedigrees, Inc.",
-      "subtitle": "Dog Show"
-    },
-    {
-      "roomId": "Quarter Turf NB",
-      "startMin": 540,
-      "endMin": 1320,
-      "title": "BRC Global Canine Pedigrees, Inc., BRC Global Canine Pedigrees, Inc.",
-      "subtitle": "Dog Show"
-    },
-    {
-      "roomId": "Quarter Turf SA",
-      "startMin": 540,
-      "endMin": 1320,
-      "title": "BRC Global Canine Pedigrees, Inc., BRC Global Canine Pedigrees, Inc.",
-      "subtitle": "Dog Show"
-    },
-    {
-      "roomId": "Quarter Turf SB",
-      "startMin": 540,
-      "endMin": 1320,
-      "title": "BRC Global Canine Pedigrees, Inc., BRC Global Canine Pedigrees, Inc.",
-      "subtitle": "Dog Show"
+      "roomId": "9A",
+      "startMin": 1320,
+      "endMin": 1380,
+      "title": "Sam Franklin",
+      "subtitle": "Basketball"
     }
   ]
 }
