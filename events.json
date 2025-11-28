@@ -6,56 +6,28 @@
       "startMin": 540,
       "endMin": 1320,
       "title": "RAEC Front Desk, Rentals - On Hold",
-      "subtitle": "Building Closed. Thanksgiving Day."
+      "subtitle": "Building Closed"
     },
     {
       "roomId": "1B",
       "startMin": 540,
       "endMin": 1320,
       "title": "RAEC Front Desk, Rentals - On Hold",
-      "subtitle": "Building Closed. Thanksgiving Day."
+      "subtitle": "Building Closed"
     },
     {
       "roomId": "2A",
       "startMin": 540,
       "endMin": 1320,
       "title": "RAEC Front Desk, Rentals - On Hold",
-      "subtitle": "Building Closed. Thanksgiving Day."
+      "subtitle": "Building Closed"
     },
     {
       "roomId": "2B",
       "startMin": 540,
       "endMin": 1320,
       "title": "RAEC Front Desk, Rentals - On Hold",
-      "subtitle": "Building Closed. Thanksgiving Day."
-    },
-    {
-      "roomId": "9A",
-      "startMin": 570,
-      "endMin": 750,
-      "title": "Open Pickleball",
-      "subtitle": ""
-    },
-    {
-      "roomId": "9B",
-      "startMin": 570,
-      "endMin": 750,
-      "title": "Open Pickleball",
-      "subtitle": ""
-    },
-    {
-      "roomId": "10A",
-      "startMin": 570,
-      "endMin": 750,
-      "title": "Open Pickleball",
-      "subtitle": ""
-    },
-    {
-      "roomId": "10B",
-      "startMin": 570,
-      "endMin": 750,
-      "title": "Open Pickleball",
-      "subtitle": ""
+      "subtitle": "Building Closed"
     }
   ]
 }
