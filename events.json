@@ -1,292 +1,159 @@
 {
-  "season": "turf",
+  "season": "courts",
   "slots": [
+    {
+      "roomId": "Quarter Turf NA",
+      "startMin": 480,
+      "endMin": 1320,
+      "title": "Chicagoland Indoor Soccer",
+      "subtitle": "Soccer per Contract"
+    },
+    {
+      "roomId": "Quarter Turf NB",
+      "startMin": 480,
+      "endMin": 1320,
+      "title": "Chicagoland Indoor Soccer",
+      "subtitle": "Soccer per Contract"
+    },
+    {
+      "roomId": "Quarter Turf SA",
+      "startMin": 480,
+      "endMin": 1320,
+      "title": "Chicagoland Indoor Soccer",
+      "subtitle": "Soccer per Contract"
+    },
+    {
+      "roomId": "Quarter Turf SB",
+      "startMin": 480,
+      "endMin": 1320,
+      "title": "Chicagoland Indoor Soccer",
+      "subtitle": "Soccer per Contract"
+    },
+    {
+      "roomId": "1A",
+      "startMin": 540,
+      "endMin": 1320,
+      "title": "3 Step Sports, Ray Glassman",
+      "subtitle": "3 STEP SPORTS"
+    },
+    {
+      "roomId": "1B",
+      "startMin": 540,
+      "endMin": 1320,
+      "title": "3 Step Sports, Ray Glassman",
+      "subtitle": "3 STEP SPORTS"
+    },
+    {
+      "roomId": "2A",
+      "startMin": 540,
+      "endMin": 1320,
+      "title": "3 Step Sports, Ray Glassman",
+      "subtitle": "3 STEP SPORTS"
+    },
+    {
+      "roomId": "2B",
+      "startMin": 540,
+      "endMin": 1320,
+      "title": "3 Step Sports, Ray Glassman",
+      "subtitle": "3 STEP SPORTS"
+    },
     {
       "roomId": "3",
       "startMin": 540,
-      "endMin": 1380,
-      "title": "RAEC Front Desk, Rentals - On Hold",
-      "subtitle": "Turf Season per NM"
+      "endMin": 1320,
+      "title": "3 Step Sports, Ray Glassman",
+      "subtitle": "3 STEP SPORTS"
     },
     {
       "roomId": "4",
       "startMin": 540,
-      "endMin": 1380,
-      "title": "RAEC Front Desk, Rentals - On Hold",
-      "subtitle": "Turf Season per NM"
+      "endMin": 1320,
+      "title": "3 Step Sports, Ray Glassman",
+      "subtitle": "3 STEP SPORTS"
     },
     {
       "roomId": "5",
       "startMin": 540,
-      "endMin": 1380,
-      "title": "RAEC Front Desk, Rentals - On Hold",
-      "subtitle": "Turf Season per NM"
+      "endMin": 1320,
+      "title": "3 Step Sports, Ray Glassman",
+      "subtitle": "3 STEP SPORTS"
     },
     {
       "roomId": "6",
       "startMin": 540,
-      "endMin": 1380,
-      "title": "RAEC Front Desk, Rentals - On Hold",
-      "subtitle": "Turf Season per NM"
+      "endMin": 1320,
+      "title": "3 Step Sports, Ray Glassman",
+      "subtitle": "3 STEP SPORTS"
     },
     {
       "roomId": "7",
       "startMin": 540,
-      "endMin": 1380,
-      "title": "RAEC Front Desk, Rentals - On Hold",
-      "subtitle": "Turf Season per NM"
+      "endMin": 1320,
+      "title": "3 Step Sports, Ray Glassman",
+      "subtitle": "3 STEP SPORTS"
     },
     {
       "roomId": "8",
       "startMin": 540,
-      "endMin": 1380,
-      "title": "RAEC Front Desk, Rentals - On Hold",
-      "subtitle": "Turf Season per NM"
-    },
-    {
-      "roomId": "1B",
-      "startMin": 1020,
-      "endMin": 1080,
-      "title": "Dianna Salgado",
-      "subtitle": "Volleyball"
+      "endMin": 1320,
+      "title": "3 Step Sports, Ray Glassman",
+      "subtitle": "3 STEP SPORTS"
     },
     {
       "roomId": "9A",
-      "startMin": 1035,
-      "endMin": 1305,
-      "title": "Empower Volleyball (Rec), Dean Baxendale",
-      "subtitle": "Volleyball 2025 Q4 Pattern"
+      "startMin": 540,
+      "endMin": 840,
+      "title": "Signature Event Designs",
+      "subtitle": "Craft Show"
     },
     {
       "roomId": "9B",
-      "startMin": 1035,
-      "endMin": 1305,
-      "title": "Empower Volleyball (Rec), Dean Baxendale",
-      "subtitle": "Volleyball 2025 Q4 Pattern"
+      "startMin": 540,
+      "endMin": 840,
+      "title": "Signature Event Designs",
+      "subtitle": "Craft Show"
     },
     {
       "roomId": "10A",
-      "startMin": 1035,
-      "endMin": 1305,
-      "title": "Empower Volleyball (Rec), Dean Baxendale",
-      "subtitle": "Volleyball 2025 Q4 Pattern"
+      "startMin": 540,
+      "endMin": 840,
+      "title": "Signature Event Designs",
+      "subtitle": "Craft Show"
     },
     {
       "roomId": "10B",
-      "startMin": 1035,
-      "endMin": 1305,
-      "title": "Empower Volleyball (Rec), Dean Baxendale",
-      "subtitle": "Volleyball 2025 Q4 Pattern"
+      "startMin": 540,
+      "endMin": 840,
+      "title": "Signature Event Designs",
+      "subtitle": "Craft Show"
     },
     {
-      "roomId": "Quarter Turf NA",
-      "startMin": 1050,
-      "endMin": 1095,
-      "title": "Chicagoland Indoor Soccer",
-      "subtitle": "Soccer"
-    },
-    {
-      "roomId": "Quarter Turf NB",
-      "startMin": 1050,
-      "endMin": 1095,
-      "title": "Chicagoland Indoor Soccer",
-      "subtitle": "Soccer"
-    },
-    {
-      "roomId": "Quarter Turf SA",
-      "startMin": 1050,
-      "endMin": 1095,
-      "title": "Chicagoland Indoor Soccer",
-      "subtitle": "Soccer"
-    },
-    {
-      "roomId": "Quarter Turf SB",
-      "startMin": 1050,
-      "endMin": 1095,
-      "title": "Chicagoland Indoor Soccer",
-      "subtitle": "Soccer"
-    },
-    {
-      "roomId": "1A",
-      "startMin": 1050,
-      "endMin": 1110,
-      "title": "Empower Volleyball (Rec), Dean Baxendale",
-      "subtitle": "Volleyball"
-    },
-    {
-      "roomId": "2A",
-      "startMin": 1080,
-      "endMin": 1260,
-      "title": "D1 Training (Stay 22uned, Inc.), D1 Training (Stay 22uned, Inc.)",
-      "subtitle": "Basketball"
-    },
-    {
-      "roomId": "2B",
-      "startMin": 1080,
-      "endMin": 1260,
-      "title": "D1 Training (Stay 22uned, Inc.), D1 Training (Stay 22uned, Inc.)",
-      "subtitle": "Basketball"
-    },
-    {
-      "roomId": "Quarter Turf NA",
-      "startMin": 1095,
-      "endMin": 1140,
-      "title": "Chicagoland Indoor Soccer",
-      "subtitle": "Soccer"
-    },
-    {
-      "roomId": "Quarter Turf NB",
-      "startMin": 1095,
-      "endMin": 1140,
-      "title": "Chicagoland Indoor Soccer",
-      "subtitle": "Soccer"
-    },
-    {
-      "roomId": "Quarter Turf SA",
-      "startMin": 1095,
-      "endMin": 1140,
-      "title": "Chicagoland Indoor Soccer",
-      "subtitle": "Soccer"
-    },
-    {
-      "roomId": "Quarter Turf SB",
-      "startMin": 1095,
-      "endMin": 1140,
-      "title": "Chicagoland Indoor Soccer",
-      "subtitle": "Soccer"
-    },
-    {
-      "roomId": "1B",
-      "startMin": 1110,
-      "endMin": 1170,
-      "title": "Yenny Daza",
-      "subtitle": "Basketball"
-    },
-    {
-      "roomId": "Quarter Turf NA",
-      "startMin": 1140,
-      "endMin": 1185,
-      "title": "Chicagoland Indoor Soccer",
-      "subtitle": "Soccer"
-    },
-    {
-      "roomId": "Quarter Turf NB",
-      "startMin": 1140,
-      "endMin": 1185,
-      "title": "Chicagoland Indoor Soccer",
-      "subtitle": "Soccer"
-    },
-    {
-      "roomId": "Quarter Turf SA",
-      "startMin": 1140,
-      "endMin": 1185,
-      "title": "Chicagoland Indoor Soccer",
-      "subtitle": "Soccer"
-    },
-    {
-      "roomId": "Quarter Turf SB",
-      "startMin": 1140,
-      "endMin": 1185,
-      "title": "Chicagoland Indoor Soccer",
-      "subtitle": "Soccer"
-    },
-    {
-      "roomId": "1A",
-      "startMin": 1170,
-      "endMin": 1260,
-      "title": "Illinois Express Basketball",
-      "subtitle": "Basketball 2025 Q4 Pattern"
-    },
-    {
-      "roomId": "1B",
-      "startMin": 1170,
-      "endMin": 1260,
-      "title": "Illinois Express Basketball",
-      "subtitle": "Basketball 2025 Q4 Pattern"
-    },
-    {
-      "roomId": "Quarter Turf NA",
-      "startMin": 1185,
-      "endMin": 1230,
-      "title": "Chicagoland Indoor Soccer",
-      "subtitle": "Soccer"
-    },
-    {
-      "roomId": "Quarter Turf NB",
-      "startMin": 1185,
-      "endMin": 1230,
-      "title": "Chicagoland Indoor Soccer",
-      "subtitle": "Soccer"
-    },
-    {
-      "roomId": "Quarter Turf SA",
-      "startMin": 1185,
-      "endMin": 1230,
-      "title": "Chicagoland Indoor Soccer",
-      "subtitle": "Soccer"
-    },
-    {
-      "roomId": "Quarter Turf SB",
-      "startMin": 1185,
-      "endMin": 1230,
-      "title": "Chicagoland Indoor Soccer",
-      "subtitle": "Soccer"
-    },
-    {
-      "roomId": "Quarter Turf NA",
-      "startMin": 1230,
-      "endMin": 1275,
-      "title": "Chicagoland Indoor Soccer",
-      "subtitle": "Soccer"
-    },
-    {
-      "roomId": "Quarter Turf NB",
-      "startMin": 1230,
-      "endMin": 1275,
-      "title": "Chicagoland Indoor Soccer",
-      "subtitle": "Soccer"
-    },
-    {
-      "roomId": "Quarter Turf SA",
-      "startMin": 1230,
-      "endMin": 1275,
-      "title": "Chicagoland Indoor Soccer",
-      "subtitle": "Soccer"
-    },
-    {
-      "roomId": "Quarter Turf SB",
-      "startMin": 1230,
-      "endMin": 1275,
-      "title": "Chicagoland Indoor Soccer",
-      "subtitle": "Soccer"
-    },
-    {
-      "roomId": "Quarter Turf NA",
-      "startMin": 1275,
+      "roomId": "9A",
+      "startMin": 840,
       "endMin": 1320,
-      "title": "Chicagoland Indoor Soccer",
-      "subtitle": "Soccer"
+      "title": "RAEC Front Desk, Rentals - On Hold",
+      "subtitle": "Post craft show cleanup. Blocked per NM"
     },
     {
-      "roomId": "Quarter Turf NB",
-      "startMin": 1275,
+      "roomId": "9B",
+      "startMin": 840,
       "endMin": 1320,
-      "title": "Chicagoland Indoor Soccer",
-      "subtitle": "Soccer"
+      "title": "RAEC Front Desk, Rentals - On Hold",
+      "subtitle": "Post craft show cleanup. Blocked per NM"
     },
     {
-      "roomId": "Quarter Turf SA",
-      "startMin": 1275,
+      "roomId": "10A",
+      "startMin": 840,
       "endMin": 1320,
-      "title": "Chicagoland Indoor Soccer",
-      "subtitle": "Soccer"
+      "title": "RAEC Front Desk, Rentals - On Hold",
+      "subtitle": "Post craft show cleanup. Blocked per NM"
     },
     {
-      "roomId": "Quarter Turf SB",
-      "startMin": 1275,
+      "roomId": "10B",
+      "startMin": 840,
       "endMin": 1320,
-      "title": "Chicagoland Indoor Soccer",
-      "subtitle": "Soccer"
+      "title": "RAEC Front Desk, Rentals - On Hold",
+      "subtitle": "Post craft show cleanup. Blocked per NM"
     }
   ]
 }
