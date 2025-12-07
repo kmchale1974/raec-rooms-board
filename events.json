@@ -1,5 +1,5 @@
 {
-  "season": "courts",
+  "season": "turf",
   "slots": [
     {
       "roomId": "Quarter Turf NA",
@@ -58,102 +58,81 @@
       "subtitle": "3 STEP SPORTS"
     },
     {
-      "roomId": "3",
+      "roomId": "9A",
       "startMin": 540,
       "endMin": 1320,
       "title": "3 Step Sports, Ray Glassman",
       "subtitle": "3 STEP SPORTS"
+    },
+    {
+      "roomId": "9B",
+      "startMin": 540,
+      "endMin": 1320,
+      "title": "3 Step Sports, Ray Glassman",
+      "subtitle": "3 STEP SPORTS"
+    },
+    {
+      "roomId": "10A",
+      "startMin": 540,
+      "endMin": 1320,
+      "title": "3 Step Sports, Ray Glassman",
+      "subtitle": "3 STEP SPORTS"
+    },
+    {
+      "roomId": "10B",
+      "startMin": 540,
+      "endMin": 1320,
+      "title": "3 Step Sports, Ray Glassman",
+      "subtitle": "3 STEP SPORTS"
+    },
+    {
+      "roomId": "3",
+      "startMin": 540,
+      "endMin": 1380,
+      "title": "RAEC Front Desk, Rentals - On Hold",
+      "subtitle": "Turf Season per NM"
     },
     {
       "roomId": "4",
       "startMin": 540,
-      "endMin": 1320,
-      "title": "3 Step Sports, Ray Glassman",
-      "subtitle": "3 STEP SPORTS"
+      "endMin": 1380,
+      "title": "RAEC Front Desk, Rentals - On Hold",
+      "subtitle": "Turf Season per NM"
     },
     {
       "roomId": "5",
       "startMin": 540,
-      "endMin": 1320,
-      "title": "3 Step Sports, Ray Glassman",
-      "subtitle": "3 STEP SPORTS"
+      "endMin": 1380,
+      "title": "RAEC Front Desk, Rentals - On Hold",
+      "subtitle": "Turf Season per NM"
     },
     {
       "roomId": "6",
       "startMin": 540,
-      "endMin": 1320,
-      "title": "3 Step Sports, Ray Glassman",
-      "subtitle": "3 STEP SPORTS"
+      "endMin": 1380,
+      "title": "RAEC Front Desk, Rentals - On Hold",
+      "subtitle": "Turf Season per NM"
     },
     {
       "roomId": "7",
       "startMin": 540,
-      "endMin": 1320,
-      "title": "3 Step Sports, Ray Glassman",
-      "subtitle": "3 STEP SPORTS"
+      "endMin": 1380,
+      "title": "RAEC Front Desk, Rentals - On Hold",
+      "subtitle": "Turf Season per NM"
     },
     {
       "roomId": "8",
       "startMin": 540,
-      "endMin": 1320,
-      "title": "3 Step Sports, Ray Glassman",
-      "subtitle": "3 STEP SPORTS"
-    },
-    {
-      "roomId": "9A",
-      "startMin": 540,
-      "endMin": 840,
-      "title": "Signature Event Designs",
-      "subtitle": "Craft Show"
-    },
-    {
-      "roomId": "9B",
-      "startMin": 540,
-      "endMin": 840,
-      "title": "Signature Event Designs",
-      "subtitle": "Craft Show"
-    },
-    {
-      "roomId": "10A",
-      "startMin": 540,
-      "endMin": 840,
-      "title": "Signature Event Designs",
-      "subtitle": "Craft Show"
-    },
-    {
-      "roomId": "10B",
-      "startMin": 540,
-      "endMin": 840,
-      "title": "Signature Event Designs",
-      "subtitle": "Craft Show"
-    },
-    {
-      "roomId": "9A",
-      "startMin": 840,
-      "endMin": 1320,
+      "endMin": 1380,
       "title": "RAEC Front Desk, Rentals - On Hold",
-      "subtitle": "Post craft show cleanup. Blocked per NM"
+      "subtitle": "Turf Season per NM"
     },
     {
-      "roomId": "9B",
-      "startMin": 840,
-      "endMin": 1320,
-      "title": "RAEC Front Desk, Rentals - On Hold",
-      "subtitle": "Post craft show cleanup. Blocked per NM"
-    },
-    {
-      "roomId": "10A",
-      "startMin": 840,
-      "endMin": 1320,
-      "title": "RAEC Front Desk, Rentals - On Hold",
-      "subtitle": "Post craft show cleanup. Blocked per NM"
-    },
-    {
-      "roomId": "10B",
-      "startMin": 840,
-      "endMin": 1320,
-      "title": "RAEC Front Desk, Rentals - On Hold",
-      "subtitle": "Post craft show cleanup. Blocked per NM"
+      "roomId": "1B",
+      "startMin": 1320,
+      "endMin": 1380,
+      "title": "Sam Franklin Training, Sam Franklin",
+      "subtitle": "Basketball"
     }
   ]
 }
