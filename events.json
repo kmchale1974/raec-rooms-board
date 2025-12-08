@@ -2,90 +2,6 @@
   "season": "turf",
   "slots": [
     {
-      "roomId": "Quarter Turf NA",
-      "startMin": 480,
-      "endMin": 1320,
-      "title": "Chicagoland Indoor Soccer",
-      "subtitle": "Soccer per Contract"
-    },
-    {
-      "roomId": "Quarter Turf NB",
-      "startMin": 480,
-      "endMin": 1320,
-      "title": "Chicagoland Indoor Soccer",
-      "subtitle": "Soccer per Contract"
-    },
-    {
-      "roomId": "Quarter Turf SA",
-      "startMin": 480,
-      "endMin": 1320,
-      "title": "Chicagoland Indoor Soccer",
-      "subtitle": "Soccer per Contract"
-    },
-    {
-      "roomId": "Quarter Turf SB",
-      "startMin": 480,
-      "endMin": 1320,
-      "title": "Chicagoland Indoor Soccer",
-      "subtitle": "Soccer per Contract"
-    },
-    {
-      "roomId": "1A",
-      "startMin": 540,
-      "endMin": 1320,
-      "title": "3 Step Sports, Ray Glassman",
-      "subtitle": "3 STEP SPORTS"
-    },
-    {
-      "roomId": "1B",
-      "startMin": 540,
-      "endMin": 1320,
-      "title": "3 Step Sports, Ray Glassman",
-      "subtitle": "3 STEP SPORTS"
-    },
-    {
-      "roomId": "2A",
-      "startMin": 540,
-      "endMin": 1320,
-      "title": "3 Step Sports, Ray Glassman",
-      "subtitle": "3 STEP SPORTS"
-    },
-    {
-      "roomId": "2B",
-      "startMin": 540,
-      "endMin": 1320,
-      "title": "3 Step Sports, Ray Glassman",
-      "subtitle": "3 STEP SPORTS"
-    },
-    {
-      "roomId": "9A",
-      "startMin": 540,
-      "endMin": 1320,
-      "title": "3 Step Sports, Ray Glassman",
-      "subtitle": "3 STEP SPORTS"
-    },
-    {
-      "roomId": "9B",
-      "startMin": 540,
-      "endMin": 1320,
-      "title": "3 Step Sports, Ray Glassman",
-      "subtitle": "3 STEP SPORTS"
-    },
-    {
-      "roomId": "10A",
-      "startMin": 540,
-      "endMin": 1320,
-      "title": "3 Step Sports, Ray Glassman",
-      "subtitle": "3 STEP SPORTS"
-    },
-    {
-      "roomId": "10B",
-      "startMin": 540,
-      "endMin": 1320,
-      "title": "3 Step Sports, Ray Glassman",
-      "subtitle": "3 STEP SPORTS"
-    },
-    {
       "roomId": "3",
       "startMin": 540,
       "endMin": 1380,
@@ -128,11 +44,179 @@
       "subtitle": "Turf Season per NM"
     },
     {
+      "roomId": "9A",
+      "startMin": 570,
+      "endMin": 750,
+      "title": "Open Pickleball",
+      "subtitle": ""
+    },
+    {
+      "roomId": "9B",
+      "startMin": 570,
+      "endMin": 750,
+      "title": "Open Pickleball",
+      "subtitle": ""
+    },
+    {
+      "roomId": "10A",
+      "startMin": 570,
+      "endMin": 750,
+      "title": "Open Pickleball",
+      "subtitle": ""
+    },
+    {
+      "roomId": "10B",
+      "startMin": 570,
+      "endMin": 750,
+      "title": "Open Pickleball",
+      "subtitle": ""
+    },
+    {
+      "roomId": "Quarter Turf NA",
+      "startMin": 1020,
+      "endMin": 1260,
+      "title": "Plainfield Soccer Club",
+      "subtitle": "2025 Q4 Pattern"
+    },
+    {
+      "roomId": "Quarter Turf NB",
+      "startMin": 1020,
+      "endMin": 1260,
+      "title": "Plainfield Soccer Club",
+      "subtitle": "2025 Q4 Pattern"
+    },
+    {
+      "roomId": "Quarter Turf SA",
+      "startMin": 1020,
+      "endMin": 1260,
+      "title": "Plainfield Soccer Club",
+      "subtitle": "2025 Q4 Pattern"
+    },
+    {
+      "roomId": "Quarter Turf SB",
+      "startMin": 1020,
+      "endMin": 1260,
+      "title": "Plainfield Soccer Club",
+      "subtitle": "2025 Q4 Pattern"
+    },
+    {
+      "roomId": "1A",
+      "startMin": 1080,
+      "endMin": 1260,
+      "title": "Belusa United Volleyball, Nicole Diamond",
+      "subtitle": "Volleyball"
+    },
+    {
       "roomId": "1B",
-      "startMin": 1320,
-      "endMin": 1380,
-      "title": "Sam Franklin Training, Sam Franklin",
+      "startMin": 1080,
+      "endMin": 1260,
+      "title": "Belusa United Volleyball, Nicole Diamond",
+      "subtitle": "Volleyball"
+    },
+    {
+      "roomId": "2A",
+      "startMin": 1080,
+      "endMin": 1260,
+      "title": "Belusa United Volleyball, Nicole Diamond",
+      "subtitle": "Volleyball"
+    },
+    {
+      "roomId": "2B",
+      "startMin": 1080,
+      "endMin": 1260,
+      "title": "Belusa United Volleyball, Nicole Diamond",
+      "subtitle": "Volleyball"
+    },
+    {
+      "roomId": "10B",
+      "startMin": 1080,
+      "endMin": 1170,
+      "title": "Illinois Flight, Brandon Brown",
       "subtitle": "Basketball"
+    },
+    {
+      "roomId": "9A",
+      "startMin": 1080,
+      "endMin": 1260,
+      "title": "Illinois Flight, Brandon Brown",
+      "subtitle": "Basketball"
+    },
+    {
+      "roomId": "9B",
+      "startMin": 1080,
+      "endMin": 1260,
+      "title": "Illinois Flight, Brandon Brown",
+      "subtitle": "Basketball"
+    },
+    {
+      "roomId": "10A",
+      "startMin": 1170,
+      "endMin": 1260,
+      "title": "Illinois Flight, Brandon Brown",
+      "subtitle": "Basketball"
+    },
+    {
+      "roomId": "10B",
+      "startMin": 1170,
+      "endMin": 1260,
+      "title": "Illinois Flight, Brandon Brown",
+      "subtitle": "Basketball"
+    },
+    {
+      "roomId": "1A",
+      "startMin": 1260,
+      "endMin": 1380,
+      "title": "Chicago Sport and Social Club",
+      "subtitle": "Volleyball (Grab A Game)"
+    },
+    {
+      "roomId": "1B",
+      "startMin": 1260,
+      "endMin": 1380,
+      "title": "Chicago Sport and Social Club",
+      "subtitle": "Volleyball (Grab A Game)"
+    },
+    {
+      "roomId": "2A",
+      "startMin": 1260,
+      "endMin": 1380,
+      "title": "Chicago Sport and Social Club",
+      "subtitle": "Volleyball (Grab A Game)"
+    },
+    {
+      "roomId": "2B",
+      "startMin": 1260,
+      "endMin": 1380,
+      "title": "Chicago Sport and Social Club",
+      "subtitle": "Volleyball (Grab A Game)"
+    },
+    {
+      "roomId": "Quarter Turf NA",
+      "startMin": 1260,
+      "endMin": 1335,
+      "title": "Chicago Inter  Soccer",
+      "subtitle": "2025 Q4 Pattern"
+    },
+    {
+      "roomId": "Quarter Turf NB",
+      "startMin": 1260,
+      "endMin": 1335,
+      "title": "Chicago Inter  Soccer",
+      "subtitle": "2025 Q4 Pattern"
+    },
+    {
+      "roomId": "Quarter Turf SA",
+      "startMin": 1260,
+      "endMin": 1335,
+      "title": "Chicago Inter  Soccer",
+      "subtitle": "2025 Q4 Pattern"
+    },
+    {
+      "roomId": "Quarter Turf SB",
+      "startMin": 1260,
+      "endMin": 1335,
+      "title": "Chicago Inter  Soccer",
+      "subtitle": "2025 Q4 Pattern"
     }
   ]
 }
