@@ -3,31 +3,31 @@
   "slots": [
     {
       "roomId": "Quarter Turf NA",
-      "startMin": 480,
+      "startMin": 420,
       "endMin": 1320,
       "title": "Chicagoland Indoor Soccer",
-      "subtitle": "Soccer per Contract"
+      "subtitle": "Soccer"
     },
     {
       "roomId": "Quarter Turf NB",
-      "startMin": 480,
+      "startMin": 420,
       "endMin": 1320,
       "title": "Chicagoland Indoor Soccer",
-      "subtitle": "Soccer per Contract"
+      "subtitle": "Soccer"
     },
     {
       "roomId": "Quarter Turf SA",
-      "startMin": 480,
+      "startMin": 420,
       "endMin": 1320,
       "title": "Chicagoland Indoor Soccer",
-      "subtitle": "Soccer per Contract"
+      "subtitle": "Soccer"
     },
     {
       "roomId": "Quarter Turf SB",
-      "startMin": 480,
+      "startMin": 420,
       "endMin": 1320,
       "title": "Chicagoland Indoor Soccer",
-      "subtitle": "Soccer per Contract"
+      "subtitle": "Soccer"
     },
     {
       "roomId": "1A",
