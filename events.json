@@ -45,59 +45,31 @@
     },
     {
       "roomId": "9A",
-      "startMin": 540,
-      "endMin": 1020,
-      "title": "RAEC Front Desk, Rentals - On Hold",
-      "subtitle": "Village Holiday Luncheon per NM"
+      "startMin": 570,
+      "endMin": 750,
+      "title": "Open Pickleball",
+      "subtitle": ""
     },
     {
       "roomId": "9B",
-      "startMin": 540,
-      "endMin": 1020,
-      "title": "RAEC Front Desk, Rentals - On Hold",
-      "subtitle": "Village Holiday Luncheon per NM"
+      "startMin": 570,
+      "endMin": 750,
+      "title": "Open Pickleball",
+      "subtitle": ""
     },
     {
       "roomId": "10A",
-      "startMin": 540,
-      "endMin": 1020,
-      "title": "RAEC Front Desk, Rentals - On Hold",
-      "subtitle": "Village Holiday Luncheon per NM"
+      "startMin": 570,
+      "endMin": 750,
+      "title": "Open Pickleball",
+      "subtitle": ""
     },
     {
       "roomId": "10B",
-      "startMin": 540,
-      "endMin": 1020,
-      "title": "RAEC Front Desk, Rentals - On Hold",
-      "subtitle": "Village Holiday Luncheon per NM"
-    },
-    {
-      "roomId": "Quarter Turf NA",
-      "startMin": 975,
-      "endMin": 1335,
-      "title": "Chicago Inter  Soccer",
-      "subtitle": "2025 Q4 Pattern"
-    },
-    {
-      "roomId": "Quarter Turf NB",
-      "startMin": 975,
-      "endMin": 1335,
-      "title": "Chicago Inter  Soccer",
-      "subtitle": "2025 Q4 Pattern"
-    },
-    {
-      "roomId": "Quarter Turf SA",
-      "startMin": 975,
-      "endMin": 1335,
-      "title": "Chicago Inter  Soccer",
-      "subtitle": "2025 Q4 Pattern"
-    },
-    {
-      "roomId": "Quarter Turf SB",
-      "startMin": 975,
-      "endMin": 1335,
-      "title": "Chicago Inter  Soccer",
-      "subtitle": "2025 Q4 Pattern"
+      "startMin": 570,
+      "endMin": 750,
+      "title": "Open Pickleball",
+      "subtitle": ""
     },
     {
       "roomId": "1A",
@@ -128,6 +100,20 @@
       "subtitle": "Volleyball"
     },
     {
+      "roomId": "10A",
+      "startMin": 1080,
+      "endMin": 1140,
+      "title": "Sam Franklin Training, Sam Franklin",
+      "subtitle": "2025 Q4 Pattern"
+    },
+    {
+      "roomId": "10B",
+      "startMin": 1080,
+      "endMin": 1170,
+      "title": "Illinois Flight, Brandon Brown",
+      "subtitle": "Basketball"
+    },
+    {
       "roomId": "9A",
       "startMin": 1080,
       "endMin": 1260,
@@ -143,24 +129,45 @@
     },
     {
       "roomId": "10A",
-      "startMin": 1080,
-      "endMin": 1260,
-      "title": "Illinois Flight, Brandon Brown",
-      "subtitle": "Basketball"
+      "startMin": 1185,
+      "endMin": 1305,
+      "title": "Omona Athletics",
+      "subtitle": "Volleyball"
     },
     {
       "roomId": "10B",
-      "startMin": 1080,
-      "endMin": 1260,
-      "title": "Illinois Flight, Brandon Brown",
-      "subtitle": "Basketball"
+      "startMin": 1185,
+      "endMin": 1305,
+      "title": "Omona Athletics",
+      "subtitle": "Volleyball"
     },
     {
-      "roomId": "10A",
+      "roomId": "1A",
       "startMin": 1260,
       "endMin": 1380,
-      "title": "Mugilan Palani",
-      "subtitle": "Volleyball"
+      "title": "Chicago Sport and Social Club",
+      "subtitle": "Volleyball (Grab A Game)"
+    },
+    {
+      "roomId": "1B",
+      "startMin": 1260,
+      "endMin": 1380,
+      "title": "Chicago Sport and Social Club",
+      "subtitle": "Volleyball (Grab A Game)"
+    },
+    {
+      "roomId": "2A",
+      "startMin": 1260,
+      "endMin": 1380,
+      "title": "Chicago Sport and Social Club",
+      "subtitle": "Volleyball (Grab A Game)"
+    },
+    {
+      "roomId": "2B",
+      "startMin": 1260,
+      "endMin": 1380,
+      "title": "Chicago Sport and Social Club",
+      "subtitle": "Volleyball (Grab A Game)"
     }
   ]
 }
