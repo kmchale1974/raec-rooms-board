@@ -2,6 +2,90 @@
   "season": "turf",
   "slots": [
     {
+      "roomId": "Quarter Turf NA",
+      "startMin": 480,
+      "endMin": 1320,
+      "title": "Chicagoland Indoor Soccer",
+      "subtitle": "Soccer per Contract"
+    },
+    {
+      "roomId": "Quarter Turf NB",
+      "startMin": 480,
+      "endMin": 1320,
+      "title": "Chicagoland Indoor Soccer",
+      "subtitle": "Soccer per Contract"
+    },
+    {
+      "roomId": "Quarter Turf SA",
+      "startMin": 480,
+      "endMin": 1320,
+      "title": "Chicagoland Indoor Soccer",
+      "subtitle": "Soccer per Contract"
+    },
+    {
+      "roomId": "Quarter Turf SB",
+      "startMin": 480,
+      "endMin": 1320,
+      "title": "Chicagoland Indoor Soccer",
+      "subtitle": "Soccer per Contract"
+    },
+    {
+      "roomId": "1A",
+      "startMin": 540,
+      "endMin": 1320,
+      "title": "3 Step Sports, Ray Glassman",
+      "subtitle": "3 STEP SPORTS"
+    },
+    {
+      "roomId": "1B",
+      "startMin": 540,
+      "endMin": 1320,
+      "title": "3 Step Sports, Ray Glassman",
+      "subtitle": "3 STEP SPORTS"
+    },
+    {
+      "roomId": "2A",
+      "startMin": 540,
+      "endMin": 1320,
+      "title": "3 Step Sports, Ray Glassman",
+      "subtitle": "3 STEP SPORTS"
+    },
+    {
+      "roomId": "2B",
+      "startMin": 540,
+      "endMin": 1320,
+      "title": "3 Step Sports, Ray Glassman",
+      "subtitle": "3 STEP SPORTS"
+    },
+    {
+      "roomId": "9A",
+      "startMin": 540,
+      "endMin": 1320,
+      "title": "3 Step Sports, Ray Glassman",
+      "subtitle": "3 STEP SPORTS"
+    },
+    {
+      "roomId": "9B",
+      "startMin": 540,
+      "endMin": 1320,
+      "title": "3 Step Sports, Ray Glassman",
+      "subtitle": "3 STEP SPORTS"
+    },
+    {
+      "roomId": "10A",
+      "startMin": 540,
+      "endMin": 1320,
+      "title": "3 Step Sports, Ray Glassman",
+      "subtitle": "3 STEP SPORTS"
+    },
+    {
+      "roomId": "10B",
+      "startMin": 540,
+      "endMin": 1320,
+      "title": "3 Step Sports, Ray Glassman",
+      "subtitle": "3 STEP SPORTS"
+    },
+    {
       "roomId": "3",
       "startMin": 540,
       "endMin": 1380,
@@ -42,83 +126,6 @@
       "endMin": 1380,
       "title": "RAEC Front Desk, Rentals - On Hold",
       "subtitle": "Turf Season per NM"
-    },
-    {
-      "roomId": "1A",
-      "startMin": 540,
-      "endMin": 660,
-      "title": "Sam Franklin Training, Sam Franklin",
-      "subtitle": "Basketball 2025 Q4 Add On"
-    },
-    {
-      "roomId": "Quarter Turf NA",
-      "startMin": 1020,
-      "endMin": 1320,
-      "title": "Chicagoland Indoor Soccer",
-      "subtitle": "Soccer"
-    },
-    {
-      "roomId": "Quarter Turf NB",
-      "startMin": 1020,
-      "endMin": 1320,
-      "title": "Chicagoland Indoor Soccer",
-      "subtitle": "Soccer"
-    },
-    {
-      "roomId": "Quarter Turf SA",
-      "startMin": 1020,
-      "endMin": 1320,
-      "title": "Chicagoland Indoor Soccer",
-      "subtitle": "Soccer"
-    },
-    {
-      "roomId": "Quarter Turf SB",
-      "startMin": 1020,
-      "endMin": 1320,
-      "title": "Chicagoland Indoor Soccer",
-      "subtitle": "Soccer"
-    },
-    {
-      "roomId": "1A",
-      "startMin": 1140,
-      "endMin": 1260,
-      "title": "Omona Athletics",
-      "subtitle": "Volleyball"
-    },
-    {
-      "roomId": "1B",
-      "startMin": 1140,
-      "endMin": 1260,
-      "title": "Omona Athletics",
-      "subtitle": "Volleyball"
-    },
-    {
-      "roomId": "2A",
-      "startMin": 1140,
-      "endMin": 1320,
-      "title": "David Llanos",
-      "subtitle": "Volleyball"
-    },
-    {
-      "roomId": "9A",
-      "startMin": 1140,
-      "endMin": 1290,
-      "title": "Sherwin Silvestre FFB",
-      "subtitle": "Basketball"
-    },
-    {
-      "roomId": "9B",
-      "startMin": 1140,
-      "endMin": 1290,
-      "title": "Sherwin Silvestre FFB",
-      "subtitle": "Basketball"
-    },
-    {
-      "roomId": "2B",
-      "startMin": 1140,
-      "endMin": 1200,
-      "title": "Yenny Daza",
-      "subtitle": "Basketball"
     }
   ]
 }
