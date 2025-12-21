@@ -126,6 +126,13 @@
       "endMin": 1380,
       "title": "RAEC Front Desk, Rentals - On Hold",
       "subtitle": "Turf Season per NM"
+    },
+    {
+      "roomId": "9B",
+      "startMin": 1320,
+      "endMin": 1380,
+      "title": "Sam Franklin",
+      "subtitle": "Basketball"
     }
   ]
 }
