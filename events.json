@@ -1,33 +1,152 @@
 {
-  "season": "courts",
+  "season": "turf",
   "slots": [
     {
-      "roomId": "1A",
-      "startMin": 480,
+      "roomId": "3",
+      "startMin": 540,
       "endMin": 1380,
       "title": "RAEC Front Desk, Rentals - On Hold",
-      "subtitle": "FACILITY CLOSED FOR CHRISTMAS DAY"
+      "subtitle": "Turf Season per NM"
+    },
+    {
+      "roomId": "4",
+      "startMin": 540,
+      "endMin": 1380,
+      "title": "RAEC Front Desk, Rentals - On Hold",
+      "subtitle": "Turf Season per NM"
+    },
+    {
+      "roomId": "5",
+      "startMin": 540,
+      "endMin": 1380,
+      "title": "RAEC Front Desk, Rentals - On Hold",
+      "subtitle": "Turf Season per NM"
+    },
+    {
+      "roomId": "6",
+      "startMin": 540,
+      "endMin": 1380,
+      "title": "RAEC Front Desk, Rentals - On Hold",
+      "subtitle": "Turf Season per NM"
+    },
+    {
+      "roomId": "7",
+      "startMin": 540,
+      "endMin": 1380,
+      "title": "RAEC Front Desk, Rentals - On Hold",
+      "subtitle": "Turf Season per NM"
+    },
+    {
+      "roomId": "8",
+      "startMin": 540,
+      "endMin": 1380,
+      "title": "RAEC Front Desk, Rentals - On Hold",
+      "subtitle": "Turf Season per NM"
+    },
+    {
+      "roomId": "1A",
+      "startMin": 600,
+      "endMin": 1020,
+      "title": "Open Gym",
+      "subtitle": ""
     },
     {
       "roomId": "1B",
-      "startMin": 480,
-      "endMin": 1380,
-      "title": "RAEC Front Desk, Rentals - On Hold",
-      "subtitle": "FACILITY CLOSED FOR CHRISTMAS DAY"
+      "startMin": 600,
+      "endMin": 1020,
+      "title": "Open Gym",
+      "subtitle": ""
     },
     {
       "roomId": "2A",
-      "startMin": 480,
-      "endMin": 1380,
-      "title": "RAEC Front Desk, Rentals - On Hold",
-      "subtitle": "FACILITY CLOSED FOR CHRISTMAS DAY"
+      "startMin": 600,
+      "endMin": 1020,
+      "title": "Open Gym",
+      "subtitle": ""
     },
     {
       "roomId": "2B",
-      "startMin": 480,
-      "endMin": 1380,
-      "title": "RAEC Front Desk, Rentals - On Hold",
-      "subtitle": "FACILITY CLOSED FOR CHRISTMAS DAY"
+      "startMin": 600,
+      "endMin": 1020,
+      "title": "Open Gym",
+      "subtitle": ""
+    },
+    {
+      "roomId": "Quarter Turf NA",
+      "startMin": 600,
+      "endMin": 960,
+      "title": "Open Gym",
+      "subtitle": ""
+    },
+    {
+      "roomId": "Quarter Turf NB",
+      "startMin": 600,
+      "endMin": 960,
+      "title": "Open Gym",
+      "subtitle": ""
+    },
+    {
+      "roomId": "Quarter Turf SA",
+      "startMin": 600,
+      "endMin": 960,
+      "title": "Open Gym",
+      "subtitle": ""
+    },
+    {
+      "roomId": "Quarter Turf SB",
+      "startMin": 600,
+      "endMin": 960,
+      "title": "Open Gym",
+      "subtitle": ""
+    },
+    {
+      "roomId": "1A",
+      "startMin": 1020,
+      "endMin": 1140,
+      "title": "Alejandrino Huerta",
+      "subtitle": "Basketball"
+    },
+    {
+      "roomId": "Quarter Turf SA",
+      "startMin": 1080,
+      "endMin": 1200,
+      "title": "Rodolfo Ibarra-Hernandez",
+      "subtitle": "Soccer"
+    },
+    {
+      "roomId": "9A",
+      "startMin": 1080,
+      "endMin": 1260,
+      "title": "Imran Pervaiz",
+      "subtitle": "Volleyball"
+    },
+    {
+      "roomId": "1B",
+      "startMin": 1110,
+      "endMin": 1290,
+      "title": "David Llanos",
+      "subtitle": "Volleyball"
+    },
+    {
+      "roomId": "10A",
+      "startMin": 1140,
+      "endMin": 1260,
+      "title": "Catch Corner",
+      "subtitle": "CatchCorner (Monterey Harris #492119 Basketball)"
+    },
+    {
+      "roomId": "10B",
+      "startMin": 1140,
+      "endMin": 1260,
+      "title": "Catch Corner",
+      "subtitle": "CatchCorner (Monterey Harris #492119 Basketball)"
+    },
+    {
+      "roomId": "9B",
+      "startMin": 1140,
+      "endMin": 1200,
+      "title": "Yenny Daza",
+      "subtitle": "Basketball"
     }
   ]
 }
