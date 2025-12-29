@@ -2,62 +2,6 @@
   "season": "turf",
   "slots": [
     {
-      "roomId": "1A",
-      "startMin": 540,
-      "endMin": 1320,
-      "title": "3 Step Sports, Ray Glassman",
-      "subtitle": "3 STEP SPORTS"
-    },
-    {
-      "roomId": "1B",
-      "startMin": 540,
-      "endMin": 1320,
-      "title": "3 Step Sports, Ray Glassman",
-      "subtitle": "3 STEP SPORTS"
-    },
-    {
-      "roomId": "2A",
-      "startMin": 540,
-      "endMin": 1320,
-      "title": "3 Step Sports, Ray Glassman",
-      "subtitle": "3 STEP SPORTS"
-    },
-    {
-      "roomId": "2B",
-      "startMin": 540,
-      "endMin": 1320,
-      "title": "3 Step Sports, Ray Glassman",
-      "subtitle": "3 STEP SPORTS"
-    },
-    {
-      "roomId": "9A",
-      "startMin": 540,
-      "endMin": 1320,
-      "title": "3 Step Sports, Ray Glassman",
-      "subtitle": "3 STEP SPORTS"
-    },
-    {
-      "roomId": "9B",
-      "startMin": 540,
-      "endMin": 1320,
-      "title": "3 Step Sports, Ray Glassman",
-      "subtitle": "3 STEP SPORTS"
-    },
-    {
-      "roomId": "10A",
-      "startMin": 540,
-      "endMin": 1320,
-      "title": "3 Step Sports, Ray Glassman",
-      "subtitle": "3 STEP SPORTS"
-    },
-    {
-      "roomId": "10B",
-      "startMin": 540,
-      "endMin": 1320,
-      "title": "3 Step Sports, Ray Glassman",
-      "subtitle": "3 STEP SPORTS"
-    },
-    {
       "roomId": "3",
       "startMin": 540,
       "endMin": 1380,
@@ -98,6 +42,216 @@
       "endMin": 1380,
       "title": "RAEC Front Desk, Rentals - On Hold",
       "subtitle": "Turf Season per NM"
+    },
+    {
+      "roomId": "9A",
+      "startMin": 570,
+      "endMin": 750,
+      "title": "Open Pickleball",
+      "subtitle": ""
+    },
+    {
+      "roomId": "9B",
+      "startMin": 570,
+      "endMin": 750,
+      "title": "Open Pickleball",
+      "subtitle": ""
+    },
+    {
+      "roomId": "10A",
+      "startMin": 570,
+      "endMin": 750,
+      "title": "Open Pickleball",
+      "subtitle": ""
+    },
+    {
+      "roomId": "10B",
+      "startMin": 570,
+      "endMin": 750,
+      "title": "Open Pickleball",
+      "subtitle": ""
+    },
+    {
+      "roomId": "1A",
+      "startMin": 600,
+      "endMin": 1020,
+      "title": "Open Gym",
+      "subtitle": ""
+    },
+    {
+      "roomId": "1B",
+      "startMin": 600,
+      "endMin": 1020,
+      "title": "Open Gym",
+      "subtitle": ""
+    },
+    {
+      "roomId": "2A",
+      "startMin": 600,
+      "endMin": 1020,
+      "title": "Open Gym",
+      "subtitle": ""
+    },
+    {
+      "roomId": "2B",
+      "startMin": 600,
+      "endMin": 1020,
+      "title": "Open Gym",
+      "subtitle": ""
+    },
+    {
+      "roomId": "Quarter Turf NA",
+      "startMin": 600,
+      "endMin": 960,
+      "title": "Open Gym",
+      "subtitle": ""
+    },
+    {
+      "roomId": "Quarter Turf NB",
+      "startMin": 600,
+      "endMin": 960,
+      "title": "Open Gym",
+      "subtitle": ""
+    },
+    {
+      "roomId": "Quarter Turf SA",
+      "startMin": 600,
+      "endMin": 960,
+      "title": "Open Gym",
+      "subtitle": ""
+    },
+    {
+      "roomId": "Quarter Turf SB",
+      "startMin": 600,
+      "endMin": 960,
+      "title": "Open Gym",
+      "subtitle": ""
+    },
+    {
+      "roomId": "9A",
+      "startMin": 750,
+      "endMin": 1020,
+      "title": "Open Gym",
+      "subtitle": ""
+    },
+    {
+      "roomId": "9B",
+      "startMin": 750,
+      "endMin": 1020,
+      "title": "Open Gym",
+      "subtitle": ""
+    },
+    {
+      "roomId": "10A",
+      "startMin": 750,
+      "endMin": 1020,
+      "title": "Open Gym",
+      "subtitle": ""
+    },
+    {
+      "roomId": "10B",
+      "startMin": 750,
+      "endMin": 1020,
+      "title": "Open Gym",
+      "subtitle": ""
+    },
+    {
+      "roomId": "9B",
+      "startMin": 1020,
+      "endMin": 1080,
+      "title": "Melvin Kim",
+      "subtitle": "Basketball"
+    },
+    {
+      "roomId": "Quarter Turf NA",
+      "startMin": 1080,
+      "endMin": 1200,
+      "title": "RAEC Front Desk, Rentals - On Hold",
+      "subtitle": "SOCCER OPEN TURF PER NM"
+    },
+    {
+      "roomId": "Quarter Turf NB",
+      "startMin": 1080,
+      "endMin": 1200,
+      "title": "RAEC Front Desk, Rentals - On Hold",
+      "subtitle": "SOCCER OPEN TURF PER NM"
+    },
+    {
+      "roomId": "Quarter Turf SA",
+      "startMin": 1080,
+      "endMin": 1200,
+      "title": "RAEC Front Desk, Rentals - On Hold",
+      "subtitle": "SOCCER OPEN TURF PER NM"
+    },
+    {
+      "roomId": "Quarter Turf SB",
+      "startMin": 1080,
+      "endMin": 1200,
+      "title": "RAEC Front Desk, Rentals - On Hold",
+      "subtitle": "SOCCER OPEN TURF PER NM"
+    },
+    {
+      "roomId": "10A",
+      "startMin": 1140,
+      "endMin": 1200,
+      "title": "Adrian F Santos",
+      "subtitle": "Basketball"
+    },
+    {
+      "roomId": "1A",
+      "startMin": 1260,
+      "endMin": 1380,
+      "title": "Chicago Sport and Social Club",
+      "subtitle": "Volleyball (Grab A Game)"
+    },
+    {
+      "roomId": "1B",
+      "startMin": 1260,
+      "endMin": 1380,
+      "title": "Chicago Sport and Social Club",
+      "subtitle": "Volleyball (Grab A Game)"
+    },
+    {
+      "roomId": "2A",
+      "startMin": 1260,
+      "endMin": 1380,
+      "title": "Chicago Sport and Social Club",
+      "subtitle": "Volleyball (Grab A Game)"
+    },
+    {
+      "roomId": "2B",
+      "startMin": 1260,
+      "endMin": 1380,
+      "title": "Chicago Sport and Social Club",
+      "subtitle": "Volleyball (Grab A Game)"
+    },
+    {
+      "roomId": "Quarter Turf NA",
+      "startMin": 1260,
+      "endMin": 1335,
+      "title": "Chicago Inter  Soccer",
+      "subtitle": "2025 Q4 Pattern"
+    },
+    {
+      "roomId": "Quarter Turf NB",
+      "startMin": 1260,
+      "endMin": 1335,
+      "title": "Chicago Inter  Soccer",
+      "subtitle": "2025 Q4 Pattern"
+    },
+    {
+      "roomId": "Quarter Turf SA",
+      "startMin": 1260,
+      "endMin": 1335,
+      "title": "Chicago Inter  Soccer",
+      "subtitle": "2025 Q4 Pattern"
+    },
+    {
+      "roomId": "Quarter Turf SB",
+      "startMin": 1260,
+      "endMin": 1335,
+      "title": "Chicago Inter  Soccer",
+      "subtitle": "2025 Q4 Pattern"
     }
   ]
 }
