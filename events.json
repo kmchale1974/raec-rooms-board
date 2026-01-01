@@ -4,58 +4,30 @@
     {
       "roomId": "1A",
       "startMin": 480,
-      "endMin": 1260,
+      "endMin": 1380,
       "title": "RAEC Front Desk, Rentals - On Hold",
-      "subtitle": "FACILITY CLOSED FOR NEW YEARS EVE"
+      "subtitle": "FACILITY CLOSED FOR NEW YEARS DAY"
     },
     {
       "roomId": "1B",
       "startMin": 480,
-      "endMin": 1260,
+      "endMin": 1380,
       "title": "RAEC Front Desk, Rentals - On Hold",
-      "subtitle": "FACILITY CLOSED FOR NEW YEARS EVE"
+      "subtitle": "FACILITY CLOSED FOR NEW YEARS DAY"
     },
     {
       "roomId": "2A",
       "startMin": 480,
-      "endMin": 1260,
+      "endMin": 1380,
       "title": "RAEC Front Desk, Rentals - On Hold",
-      "subtitle": "FACILITY CLOSED FOR NEW YEARS EVE"
+      "subtitle": "FACILITY CLOSED FOR NEW YEARS DAY"
     },
     {
       "roomId": "2B",
       "startMin": 480,
-      "endMin": 1260,
+      "endMin": 1380,
       "title": "RAEC Front Desk, Rentals - On Hold",
-      "subtitle": "FACILITY CLOSED FOR NEW YEARS EVE"
-    },
-    {
-      "roomId": "1A",
-      "startMin": 1260,
-      "endMin": 1380,
-      "title": "Chicago Sport and Social Club",
-      "subtitle": "Volleyball (Grab A Game)"
-    },
-    {
-      "roomId": "1B",
-      "startMin": 1260,
-      "endMin": 1380,
-      "title": "Chicago Sport and Social Club",
-      "subtitle": "Volleyball (Grab A Game)"
-    },
-    {
-      "roomId": "2A",
-      "startMin": 1260,
-      "endMin": 1380,
-      "title": "Chicago Sport and Social Club",
-      "subtitle": "Volleyball (Grab A Game)"
-    },
-    {
-      "roomId": "2B",
-      "startMin": 1260,
-      "endMin": 1380,
-      "title": "Chicago Sport and Social Club",
-      "subtitle": "Volleyball (Grab A Game)"
+      "subtitle": "FACILITY CLOSED FOR NEW YEARS DAY"
     }
   ]
 }
