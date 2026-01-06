@@ -255,8 +255,12 @@ function parseTimeRange(rangeStr) {
 // Season: if ANY row in column E is "Turf Season per NM" → turf, else courts
 function detectSeason(rows) {
   for (const row of rows) {
-    const text = String(row[COL_SEASON] || "").trim();
-    if (text === "Turf Season per NM") {
+    const raw = String(row[COL_SEASON] || "").trim().toLowerCase();
+
+    if (
+      raw === "turf season per nm".toLowerCase() ||
+      raw === "no courts; turf installed".toLowerCase()
+    ) {
       return "turf";
     }
   }
