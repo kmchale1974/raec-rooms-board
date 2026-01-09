@@ -44,136 +44,73 @@
       "subtitle": "NO COURTS; TURF INSTALLED"
     },
     {
-      "roomId": "1A",
-      "startMin": 570,
-      "endMin": 660,
-      "title": "Romeoville High School / SPED, Krissy Kinder",
-      "subtitle": "Romeoville High School SPED"
-    },
-    {
-      "roomId": "1B",
-      "startMin": 570,
-      "endMin": 660,
-      "title": "Romeoville High School / SPED, Krissy Kinder",
-      "subtitle": "Romeoville High School SPED"
-    },
-    {
-      "roomId": "2A",
-      "startMin": 570,
-      "endMin": 660,
-      "title": "Romeoville High School / SPED, Krissy Kinder",
-      "subtitle": "Romeoville High School SPED"
-    },
-    {
-      "roomId": "2B",
-      "startMin": 570,
-      "endMin": 660,
-      "title": "Romeoville High School / SPED, Krissy Kinder",
-      "subtitle": "Romeoville High School SPED"
-    },
-    {
       "roomId": "Quarter Turf NA",
-      "startMin": 975,
-      "endMin": 1335,
-      "title": "Chicago Inter  Soccer",
-      "subtitle": "Soccer 2026 Q1 Pattern"
+      "startMin": 1020,
+      "endMin": 1320,
+      "title": "Chicagoland Indoor Soccer",
+      "subtitle": "Soccer"
     },
     {
       "roomId": "Quarter Turf NB",
-      "startMin": 975,
-      "endMin": 1335,
-      "title": "Chicago Inter  Soccer",
-      "subtitle": "Soccer 2026 Q1 Pattern"
+      "startMin": 1020,
+      "endMin": 1320,
+      "title": "Chicagoland Indoor Soccer",
+      "subtitle": "Soccer"
     },
     {
       "roomId": "Quarter Turf SA",
-      "startMin": 975,
-      "endMin": 1335,
-      "title": "Chicago Inter  Soccer",
-      "subtitle": "Soccer 2026 Q1 Pattern"
+      "startMin": 1020,
+      "endMin": 1320,
+      "title": "Chicagoland Indoor Soccer",
+      "subtitle": "Soccer"
     },
     {
       "roomId": "Quarter Turf SB",
-      "startMin": 975,
-      "endMin": 1335,
-      "title": "Chicago Inter  Soccer",
-      "subtitle": "Soccer 2026 Q1 Pattern"
-    },
-    {
-      "roomId": "2B",
       "startMin": 1020,
-      "endMin": 1080,
-      "title": "John Jones",
-      "subtitle": "Basketball"
+      "endMin": 1320,
+      "title": "Chicagoland Indoor Soccer",
+      "subtitle": "Soccer"
     },
     {
-      "roomId": "1A",
-      "startMin": 1080,
-      "endMin": 1260,
-      "title": "D1 Training (Stay 22uned, Inc.), D1 Training (Stay 22uned, Inc.)",
-      "subtitle": "Basketball"
-    },
-    {
-      "roomId": "1B",
-      "startMin": 1080,
-      "endMin": 1260,
-      "title": "D1 Training (Stay 22uned, Inc.), D1 Training (Stay 22uned, Inc.)",
-      "subtitle": "Basketball"
-    },
-    {
-      "roomId": "2A",
-      "startMin": 1080,
-      "endMin": 1260,
-      "title": "D1 Training (Stay 22uned, Inc.), D1 Training (Stay 22uned, Inc.)",
-      "subtitle": "Basketball"
-    },
-    {
-      "roomId": "2B",
-      "startMin": 1080,
-      "endMin": 1260,
-      "title": "D1 Training (Stay 22uned, Inc.), D1 Training (Stay 22uned, Inc.)",
-      "subtitle": "Basketball"
-    },
-    {
-      "roomId": "10A",
-      "startMin": 1080,
-      "endMin": 1170,
-      "title": "Catch Corner",
-      "subtitle": "CatchCorner (Illinois Lady Elite #504322 Basketball)"
-    },
-    {
-      "roomId": "10B",
-      "startMin": 1080,
-      "endMin": 1170,
-      "title": "Catch Corner",
-      "subtitle": "CatchCorner (Illinois Lady Elite #504322 Basketball)"
+      "roomId": "9A",
+      "startMin": 1035,
+      "endMin": 1305,
+      "title": "Empower Volleyball (Rec), Dean Baxendale",
+      "subtitle": "Volleyball"
     },
     {
       "roomId": "9B",
-      "startMin": 1110,
-      "endMin": 1290,
-      "title": "Omona Athletics",
+      "startMin": 1035,
+      "endMin": 1305,
+      "title": "Empower Volleyball (Rec), Dean Baxendale",
       "subtitle": "Volleyball"
     },
     {
       "roomId": "10A",
-      "startMin": 1170,
-      "endMin": 1260,
-      "title": "Illinois Express Basketball",
-      "subtitle": "Basketball"
+      "startMin": 1035,
+      "endMin": 1305,
+      "title": "Empower Volleyball (Rec), Dean Baxendale",
+      "subtitle": "Volleyball"
     },
     {
       "roomId": "10B",
-      "startMin": 1170,
-      "endMin": 1260,
-      "title": "Illinois Express Basketball",
-      "subtitle": "Basketball"
+      "startMin": 1035,
+      "endMin": 1305,
+      "title": "Empower Volleyball (Rec), Dean Baxendale",
+      "subtitle": "Volleyball"
     },
     {
-      "roomId": "9A",
-      "startMin": 1170,
-      "endMin": 1290,
-      "title": "Extreme Volleyball",
+      "roomId": "2A",
+      "startMin": 1140,
+      "endMin": 1320,
+      "title": "David Llanos",
+      "subtitle": "Volleyball"
+    },
+    {
+      "roomId": "1A",
+      "startMin": 1140,
+      "endMin": 1260,
+      "title": "ARA Metal Works, LLC",
       "subtitle": "Volleyball"
     }
   ]
