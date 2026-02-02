@@ -2,34 +2,6 @@
   "season": "turf",
   "slots": [
     {
-      "roomId": "Quarter Turf NA",
-      "startMin": 420,
-      "endMin": 1275,
-      "title": "Chicagoland Indoor Soccer",
-      "subtitle": "Soccer per Contract"
-    },
-    {
-      "roomId": "Quarter Turf NB",
-      "startMin": 420,
-      "endMin": 1275,
-      "title": "Chicagoland Indoor Soccer",
-      "subtitle": "Soccer per Contract"
-    },
-    {
-      "roomId": "Quarter Turf SA",
-      "startMin": 420,
-      "endMin": 1275,
-      "title": "Chicagoland Indoor Soccer",
-      "subtitle": "Soccer per Contract"
-    },
-    {
-      "roomId": "Quarter Turf SB",
-      "startMin": 420,
-      "endMin": 1275,
-      "title": "Chicagoland Indoor Soccer",
-      "subtitle": "Soccer per Contract"
-    },
-    {
       "roomId": "3",
       "startMin": 480,
       "endMin": 1380,
@@ -72,116 +44,186 @@
       "subtitle": "NO COURTS; TURF INSTALLED"
     },
     {
-      "roomId": "1A",
-      "startMin": 540,
-      "endMin": 1320,
-      "title": "3 Step Sports, Ray Glassman",
-      "subtitle": "3 STEP SPORTS"
-    },
-    {
-      "roomId": "1B",
-      "startMin": 540,
-      "endMin": 1320,
-      "title": "3 Step Sports, Ray Glassman",
-      "subtitle": "3 STEP SPORTS"
-    },
-    {
-      "roomId": "2A",
-      "startMin": 540,
-      "endMin": 1320,
-      "title": "3 Step Sports, Ray Glassman",
-      "subtitle": "3 STEP SPORTS"
-    },
-    {
-      "roomId": "2B",
-      "startMin": 540,
-      "endMin": 1320,
-      "title": "3 Step Sports, Ray Glassman",
-      "subtitle": "3 STEP SPORTS"
-    },
-    {
       "roomId": "9A",
-      "startMin": 540,
-      "endMin": 1140,
-      "title": "3 Step Sports, Ray Glassman",
-      "subtitle": "3 STEP SPORTS"
+      "startMin": 570,
+      "endMin": 750,
+      "title": "Open Pickleball",
+      "subtitle": ""
     },
     {
       "roomId": "9B",
-      "startMin": 540,
-      "endMin": 1140,
-      "title": "3 Step Sports, Ray Glassman",
-      "subtitle": "3 STEP SPORTS"
+      "startMin": 570,
+      "endMin": 750,
+      "title": "Open Pickleball",
+      "subtitle": ""
     },
     {
       "roomId": "10A",
-      "startMin": 540,
-      "endMin": 1140,
-      "title": "3 Step Sports, Ray Glassman",
-      "subtitle": "3 STEP SPORTS"
+      "startMin": 570,
+      "endMin": 750,
+      "title": "Open Pickleball",
+      "subtitle": ""
     },
     {
       "roomId": "10B",
-      "startMin": 540,
-      "endMin": 1140,
-      "title": "3 Step Sports, Ray Glassman",
-      "subtitle": "3 STEP SPORTS"
+      "startMin": 570,
+      "endMin": 750,
+      "title": "Open Pickleball",
+      "subtitle": ""
+    },
+    {
+      "roomId": "Quarter Turf NA",
+      "startMin": 1020,
+      "endMin": 1260,
+      "title": "Plainfield Soccer Club",
+      "subtitle": "Soccer 2026 Q1 Pattern"
+    },
+    {
+      "roomId": "Quarter Turf NB",
+      "startMin": 1020,
+      "endMin": 1260,
+      "title": "Plainfield Soccer Club",
+      "subtitle": "Soccer 2026 Q1 Pattern"
+    },
+    {
+      "roomId": "Quarter Turf SA",
+      "startMin": 1020,
+      "endMin": 1260,
+      "title": "Plainfield Soccer Club",
+      "subtitle": "Soccer 2026 Q1 Pattern"
+    },
+    {
+      "roomId": "Quarter Turf SB",
+      "startMin": 1020,
+      "endMin": 1260,
+      "title": "Plainfield Soccer Club",
+      "subtitle": "Soccer 2026 Q1 Pattern"
+    },
+    {
+      "roomId": "1A",
+      "startMin": 1080,
+      "endMin": 1260,
+      "title": "Belusa United Volleyball, Nicole Diamond",
+      "subtitle": "Volleyball"
+    },
+    {
+      "roomId": "1B",
+      "startMin": 1080,
+      "endMin": 1260,
+      "title": "Belusa United Volleyball, Nicole Diamond",
+      "subtitle": "Volleyball"
+    },
+    {
+      "roomId": "2A",
+      "startMin": 1080,
+      "endMin": 1260,
+      "title": "Belusa United Volleyball, Nicole Diamond",
+      "subtitle": "Volleyball"
+    },
+    {
+      "roomId": "2B",
+      "startMin": 1080,
+      "endMin": 1260,
+      "title": "Belusa United Volleyball, Nicole Diamond",
+      "subtitle": "Volleyball"
+    },
+    {
+      "roomId": "9A",
+      "startMin": 1080,
+      "endMin": 1170,
+      "title": "RAEC Front Desk, Rentals - On Hold",
+      "subtitle": "Hold per NM for new HH"
+    },
+    {
+      "roomId": "9B",
+      "startMin": 1080,
+      "endMin": 1170,
+      "title": "RAEC Front Desk, Rentals - On Hold",
+      "subtitle": "Hold per NM for new HH"
     },
     {
       "roomId": "10A",
-      "startMin": 1140,
-      "endMin": 1200,
-      "title": "Sam Franklin Training, Sam Franklin",
+      "startMin": 1110,
+      "endMin": 1230,
+      "title": "Illinois Lady Elite, Darius McCullough",
+      "subtitle": "Basketball 2026 Q1 Pattern"
+    },
+    {
+      "roomId": "10B",
+      "startMin": 1110,
+      "endMin": 1230,
+      "title": "Illinois Lady Elite, Darius McCullough",
       "subtitle": "Basketball 2026 Q1 Pattern"
     },
     {
       "roomId": "9A",
-      "startMin": 1140,
-      "endMin": 1200,
-      "title": "3 Step Sports, Ray Glassman",
-      "subtitle": "3 STEP SPORTS"
+      "startMin": 1170,
+      "endMin": 1260,
+      "title": "Illinois Express Basketball",
+      "subtitle": "Basketball"
     },
     {
       "roomId": "9B",
-      "startMin": 1140,
-      "endMin": 1200,
-      "title": "3 Step Sports, Ray Glassman",
-      "subtitle": "3 STEP SPORTS"
+      "startMin": 1170,
+      "endMin": 1260,
+      "title": "Illinois Express Basketball",
+      "subtitle": "Basketball"
     },
     {
-      "roomId": "10B",
-      "startMin": 1140,
-      "endMin": 1200,
-      "title": "3 Step Sports, Ray Glassman",
-      "subtitle": "3 STEP SPORTS"
+      "roomId": "1A",
+      "startMin": 1260,
+      "endMin": 1380,
+      "title": "Chicago Sport and Social Club",
+      "subtitle": "Volleyball"
     },
     {
-      "roomId": "9A",
-      "startMin": 1200,
-      "endMin": 1320,
-      "title": "3 Step Sports, Ray Glassman",
-      "subtitle": "3 STEP SPORTS"
+      "roomId": "1B",
+      "startMin": 1260,
+      "endMin": 1380,
+      "title": "Chicago Sport and Social Club",
+      "subtitle": "Volleyball"
     },
     {
-      "roomId": "9B",
-      "startMin": 1200,
-      "endMin": 1320,
-      "title": "3 Step Sports, Ray Glassman",
-      "subtitle": "3 STEP SPORTS"
+      "roomId": "2A",
+      "startMin": 1260,
+      "endMin": 1380,
+      "title": "Chicago Sport and Social Club",
+      "subtitle": "Volleyball"
     },
     {
-      "roomId": "10A",
-      "startMin": 1200,
-      "endMin": 1320,
-      "title": "3 Step Sports, Ray Glassman",
-      "subtitle": "3 STEP SPORTS"
+      "roomId": "2B",
+      "startMin": 1260,
+      "endMin": 1380,
+      "title": "Chicago Sport and Social Club",
+      "subtitle": "Volleyball"
     },
     {
-      "roomId": "10B",
-      "startMin": 1200,
-      "endMin": 1320,
-      "title": "3 Step Sports, Ray Glassman",
-      "subtitle": "3 STEP SPORTS"
+      "roomId": "Quarter Turf NA",
+      "startMin": 1260,
+      "endMin": 1335,
+      "title": "Chicago Inter  Soccer",
+      "subtitle": "2026 Q1 Pattern"
+    },
+    {
+      "roomId": "Quarter Turf NB",
+      "startMin": 1260,
+      "endMin": 1335,
+      "title": "Chicago Inter  Soccer",
+      "subtitle": "2026 Q1 Pattern"
+    },
+    {
+      "roomId": "Quarter Turf SA",
+      "startMin": 1260,
+      "endMin": 1335,
+      "title": "Chicago Inter  Soccer",
+      "subtitle": "2026 Q1 Pattern"
+    },
+    {
+      "roomId": "Quarter Turf SB",
+      "startMin": 1260,
+      "endMin": 1335,
+      "title": "Chicago Inter  Soccer",
+      "subtitle": "2026 Q1 Pattern"
     }
   ]
 }
