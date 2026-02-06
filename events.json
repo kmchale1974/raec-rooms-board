@@ -44,213 +44,94 @@
       "subtitle": "NO COURTS; TURF INSTALLED"
     },
     {
-      "roomId": "1A",
-      "startMin": 570,
-      "endMin": 660,
-      "title": "Romeoville High School / SPED, Krissy Kinder",
-      "subtitle": "Romeoville High School SPED"
-    },
-    {
-      "roomId": "1B",
-      "startMin": 570,
-      "endMin": 660,
-      "title": "Romeoville High School / SPED, Krissy Kinder",
-      "subtitle": "Romeoville High School SPED"
-    },
-    {
-      "roomId": "2A",
-      "startMin": 570,
-      "endMin": 660,
-      "title": "Romeoville High School / SPED, Krissy Kinder",
-      "subtitle": "Romeoville High School SPED"
-    },
-    {
-      "roomId": "2B",
-      "startMin": 570,
-      "endMin": 660,
-      "title": "Romeoville High School / SPED, Krissy Kinder",
-      "subtitle": "Romeoville High School SPED"
-    },
-    {
-      "roomId": "9A",
-      "startMin": 570,
-      "endMin": 750,
-      "title": "Open Pickleball",
-      "subtitle": ""
-    },
-    {
-      "roomId": "9B",
-      "startMin": 570,
-      "endMin": 750,
-      "title": "Open Pickleball",
-      "subtitle": ""
-    },
-    {
-      "roomId": "10A",
-      "startMin": 570,
-      "endMin": 750,
-      "title": "Open Pickleball",
-      "subtitle": ""
-    },
-    {
-      "roomId": "10B",
-      "startMin": 570,
-      "endMin": 750,
-      "title": "Open Pickleball",
-      "subtitle": ""
-    },
-    {
       "roomId": "Quarter Turf NA",
-      "startMin": 840,
-      "endMin": 960,
-      "title": "Lewis University Soccer (Women's), Christopher Koenig",
+      "startMin": 990,
+      "endMin": 1365,
+      "title": "Chicagoland Indoor Soccer",
       "subtitle": "Soccer"
     },
     {
       "roomId": "Quarter Turf NB",
-      "startMin": 840,
-      "endMin": 960,
-      "title": "Lewis University Soccer (Women's), Christopher Koenig",
+      "startMin": 990,
+      "endMin": 1365,
+      "title": "Chicagoland Indoor Soccer",
       "subtitle": "Soccer"
-    },
-    {
-      "roomId": "Quarter Turf NA",
-      "startMin": 975,
-      "endMin": 1335,
-      "title": "Chicago Inter  Soccer",
-      "subtitle": "Soccer 2026 Q1 Pattern"
-    },
-    {
-      "roomId": "Quarter Turf NB",
-      "startMin": 975,
-      "endMin": 1335,
-      "title": "Chicago Inter  Soccer",
-      "subtitle": "Soccer 2026 Q1 Pattern"
     },
     {
       "roomId": "Quarter Turf SA",
-      "startMin": 975,
-      "endMin": 1335,
-      "title": "Chicago Inter  Soccer",
-      "subtitle": "Soccer 2026 Q1 Pattern"
+      "startMin": 990,
+      "endMin": 1365,
+      "title": "Chicagoland Indoor Soccer",
+      "subtitle": "Soccer"
     },
     {
       "roomId": "Quarter Turf SB",
-      "startMin": 975,
-      "endMin": 1335,
-      "title": "Chicago Inter  Soccer",
-      "subtitle": "Soccer 2026 Q1 Pattern"
-    },
-    {
-      "roomId": "2A",
       "startMin": 990,
-      "endMin": 1050,
-      "title": "Erica Washington",
-      "subtitle": "Basketball"
+      "endMin": 1365,
+      "title": "Chicagoland Indoor Soccer",
+      "subtitle": "Soccer"
     },
     {
       "roomId": "9A",
-      "startMin": 1050,
-      "endMin": 1230,
+      "startMin": 1035,
+      "endMin": 1305,
       "title": "Empower Volleyball (Rec), Dean Baxendale",
       "subtitle": "Volleyball"
     },
     {
       "roomId": "9B",
-      "startMin": 1050,
-      "endMin": 1230,
+      "startMin": 1035,
+      "endMin": 1305,
       "title": "Empower Volleyball (Rec), Dean Baxendale",
       "subtitle": "Volleyball"
     },
     {
       "roomId": "10A",
-      "startMin": 1050,
-      "endMin": 1230,
+      "startMin": 1035,
+      "endMin": 1305,
       "title": "Empower Volleyball (Rec), Dean Baxendale",
       "subtitle": "Volleyball"
     },
     {
       "roomId": "10B",
-      "startMin": 1050,
-      "endMin": 1230,
+      "startMin": 1035,
+      "endMin": 1305,
       "title": "Empower Volleyball (Rec), Dean Baxendale",
       "subtitle": "Volleyball"
     },
     {
-      "roomId": "2A",
-      "startMin": 1080,
-      "endMin": 1170,
-      "title": "RAEC Front Desk, Rentals - On Hold",
-      "subtitle": "Hold per NM for new HH"
-    },
-    {
-      "roomId": "2B",
-      "startMin": 1080,
-      "endMin": 1170,
-      "title": "RAEC Front Desk, Rentals - On Hold",
-      "subtitle": "Hold per NM for new HH"
-    },
-    {
       "roomId": "1A",
-      "startMin": 1110,
-      "endMin": 1230,
-      "title": "Illinois Lady Elite, Darius McCullough",
+      "startMin": 1140,
+      "endMin": 1260,
+      "title": "Gautam Ullal",
       "subtitle": "Basketball"
     },
     {
       "roomId": "1B",
-      "startMin": 1110,
-      "endMin": 1230,
-      "title": "Illinois Lady Elite, Darius McCullough",
+      "startMin": 1140,
+      "endMin": 1260,
+      "title": "Gautam Ullal",
       "subtitle": "Basketball"
     },
     {
       "roomId": "2A",
-      "startMin": 1170,
-      "endMin": 1260,
-      "title": "Illinois Express Basketball",
-      "subtitle": "Basketball"
-    },
-    {
-      "roomId": "2B",
-      "startMin": 1170,
-      "endMin": 1260,
-      "title": "Illinois Express Basketball",
-      "subtitle": "Basketball"
-    },
-    {
-      "roomId": "10A",
-      "startMin": 1230,
-      "endMin": 1350,
-      "title": "Catch Corner",
-      "subtitle": "CatchCorner (Favio Nunez #524155 Basketball)"
-    },
-    {
-      "roomId": "10B",
-      "startMin": 1230,
-      "endMin": 1350,
-      "title": "Catch Corner",
-      "subtitle": "CatchCorner (Favio Nunez #524155 Basketball)"
-    },
-    {
-      "roomId": "9B",
-      "startMin": 1230,
-      "endMin": 1350,
-      "title": "Extreme Volleyball",
+      "startMin": 1140,
+      "endMin": 1320,
+      "title": "Martin Villa",
       "subtitle": "Volleyball"
     },
     {
-      "roomId": "2A",
-      "startMin": 1260,
-      "endMin": 1350,
-      "title": "Andrew Touch",
+      "roomId": "2B",
+      "startMin": 1140,
+      "endMin": 1230,
+      "title": "Yenny Daza",
       "subtitle": "Basketball"
     },
     {
       "roomId": "2B",
-      "startMin": 1260,
-      "endMin": 1350,
-      "title": "Andrew Touch",
+      "startMin": 1230,
+      "endMin": 1320,
+      "title": "Adrian Martinez",
       "subtitle": "Basketball"
     }
   ]
