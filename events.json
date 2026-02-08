@@ -4,28 +4,28 @@
     {
       "roomId": "Quarter Turf NA",
       "startMin": 420,
-      "endMin": 1365,
+      "endMin": 1005,
       "title": "Chicagoland Indoor Soccer",
       "subtitle": "Soccer per Contract"
     },
     {
       "roomId": "Quarter Turf NB",
       "startMin": 420,
-      "endMin": 1365,
+      "endMin": 1005,
       "title": "Chicagoland Indoor Soccer",
       "subtitle": "Soccer per Contract"
     },
     {
       "roomId": "Quarter Turf SA",
       "startMin": 420,
-      "endMin": 1365,
+      "endMin": 1005,
       "title": "Chicagoland Indoor Soccer",
       "subtitle": "Soccer per Contract"
     },
     {
       "roomId": "Quarter Turf SB",
       "startMin": 420,
-      "endMin": 1365,
+      "endMin": 1005,
       "title": "Chicagoland Indoor Soccer",
       "subtitle": "Soccer per Contract"
     },
@@ -102,27 +102,111 @@
     {
       "roomId": "9A",
       "startMin": 540,
-      "endMin": 1320,
+      "endMin": 1140,
       "title": "3 Step Sports, Ray Glassman",
       "subtitle": "3 STEP SPORTS"
     },
     {
       "roomId": "9B",
       "startMin": 540,
-      "endMin": 1320,
+      "endMin": 1140,
       "title": "3 Step Sports, Ray Glassman",
       "subtitle": "3 STEP SPORTS"
     },
     {
       "roomId": "10A",
       "startMin": 540,
-      "endMin": 1320,
+      "endMin": 1140,
       "title": "3 Step Sports, Ray Glassman",
       "subtitle": "3 STEP SPORTS"
     },
     {
       "roomId": "10B",
       "startMin": 540,
+      "endMin": 1140,
+      "title": "3 Step Sports, Ray Glassman",
+      "subtitle": "3 STEP SPORTS"
+    },
+    {
+      "roomId": "Quarter Turf NA",
+      "startMin": 1005,
+      "endMin": 1320,
+      "title": "RAEC Front Desk, Rentals - On Hold",
+      "subtitle": "Hold per NM"
+    },
+    {
+      "roomId": "Quarter Turf NB",
+      "startMin": 1005,
+      "endMin": 1320,
+      "title": "RAEC Front Desk, Rentals - On Hold",
+      "subtitle": "Hold per NM"
+    },
+    {
+      "roomId": "Quarter Turf SA",
+      "startMin": 1005,
+      "endMin": 1320,
+      "title": "RAEC Front Desk, Rentals - On Hold",
+      "subtitle": "Hold per NM"
+    },
+    {
+      "roomId": "Quarter Turf SB",
+      "startMin": 1005,
+      "endMin": 1320,
+      "title": "RAEC Front Desk, Rentals - On Hold",
+      "subtitle": "Hold per NM"
+    },
+    {
+      "roomId": "10A",
+      "startMin": 1140,
+      "endMin": 1200,
+      "title": "Sam Franklin Training, Sam Franklin",
+      "subtitle": "Basketball 2026 Q1 Pattern"
+    },
+    {
+      "roomId": "9A",
+      "startMin": 1140,
+      "endMin": 1200,
+      "title": "3 Step Sports, Ray Glassman",
+      "subtitle": "3 STEP SPORTS"
+    },
+    {
+      "roomId": "9B",
+      "startMin": 1140,
+      "endMin": 1200,
+      "title": "3 Step Sports, Ray Glassman",
+      "subtitle": "3 STEP SPORTS"
+    },
+    {
+      "roomId": "10B",
+      "startMin": 1140,
+      "endMin": 1200,
+      "title": "3 Step Sports, Ray Glassman",
+      "subtitle": "3 STEP SPORTS"
+    },
+    {
+      "roomId": "9A",
+      "startMin": 1200,
+      "endMin": 1320,
+      "title": "3 Step Sports, Ray Glassman",
+      "subtitle": "3 STEP SPORTS"
+    },
+    {
+      "roomId": "9B",
+      "startMin": 1200,
+      "endMin": 1320,
+      "title": "3 Step Sports, Ray Glassman",
+      "subtitle": "3 STEP SPORTS"
+    },
+    {
+      "roomId": "10A",
+      "startMin": 1200,
+      "endMin": 1320,
+      "title": "3 Step Sports, Ray Glassman",
+      "subtitle": "3 STEP SPORTS"
+    },
+    {
+      "roomId": "10B",
+      "startMin": 1200,
       "endMin": 1320,
       "title": "3 Step Sports, Ray Glassman",
       "subtitle": "3 STEP SPORTS"
