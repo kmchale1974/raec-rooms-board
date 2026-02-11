@@ -73,72 +73,37 @@
     },
     {
       "roomId": "Quarter Turf NA",
-      "startMin": 840,
-      "endMin": 960,
-      "title": "Lewis University Soccer (Women's), Christopher Koenig",
-      "subtitle": "Soccer"
-    },
-    {
-      "roomId": "Quarter Turf NB",
-      "startMin": 840,
-      "endMin": 960,
-      "title": "Lewis University Soccer (Women's), Christopher Koenig",
-      "subtitle": "Soccer"
-    },
-    {
-      "roomId": "2A",
-      "startMin": 900,
-      "endMin": 960,
-      "title": "Saint Andrew's School, Ingrid Wilkin",
-      "subtitle": "Soccer"
-    },
-    {
-      "roomId": "2B",
-      "startMin": 900,
-      "endMin": 960,
-      "title": "Saint Andrew's School, Ingrid Wilkin",
-      "subtitle": "Soccer"
-    },
-    {
-      "roomId": "Quarter Turf NA",
-      "startMin": 975,
-      "endMin": 1335,
-      "title": "Chicago Inter  Soccer",
+      "startMin": 1020,
+      "endMin": 1320,
+      "title": "Plainfield Soccer Club",
       "subtitle": "Soccer 2026 Q1 Pattern"
     },
     {
       "roomId": "Quarter Turf NB",
-      "startMin": 975,
-      "endMin": 1335,
-      "title": "Chicago Inter  Soccer",
+      "startMin": 1020,
+      "endMin": 1320,
+      "title": "Plainfield Soccer Club",
       "subtitle": "Soccer 2026 Q1 Pattern"
     },
     {
       "roomId": "Quarter Turf SA",
-      "startMin": 975,
-      "endMin": 1335,
-      "title": "Chicago Inter  Soccer",
+      "startMin": 1020,
+      "endMin": 1320,
+      "title": "Plainfield Soccer Club",
       "subtitle": "Soccer 2026 Q1 Pattern"
     },
     {
       "roomId": "Quarter Turf SB",
-      "startMin": 975,
-      "endMin": 1335,
-      "title": "Chicago Inter  Soccer",
+      "startMin": 1020,
+      "endMin": 1320,
+      "title": "Plainfield Soccer Club",
       "subtitle": "Soccer 2026 Q1 Pattern"
     },
     {
-      "roomId": "2A",
-      "startMin": 990,
-      "endMin": 1080,
-      "title": "Catch Corner",
-      "subtitle": "CatchCorner (Danny Pilon Volleyball Booking #539951)"
-    },
-    {
       "roomId": "2B",
-      "startMin": 1005,
-      "endMin": 1065,
-      "title": "John Jones",
+      "startMin": 1020,
+      "endMin": 1080,
+      "title": "Sam Franklin Training, Sam Franklin",
       "subtitle": "Basketball"
     },
     {
@@ -198,46 +163,32 @@
       "subtitle": "Volleyball"
     },
     {
-      "roomId": "10A",
-      "startMin": 1230,
-      "endMin": 1350,
-      "title": "Catch Corner",
-      "subtitle": "CatchCorner (O'Ryan McAvoy Volleyball Booking# 535759)"
-    },
-    {
-      "roomId": "10B",
-      "startMin": 1230,
-      "endMin": 1350,
-      "title": "Catch Corner",
-      "subtitle": "CatchCorner (David Llanos Volleyball Booking# 537151)"
-    },
-    {
-      "roomId": "9A",
-      "startMin": 1230,
-      "endMin": 1350,
-      "title": "Omona Athletics",
+      "roomId": "1A",
+      "startMin": 1260,
+      "endMin": 1380,
+      "title": "Chicago Sport and Social Club",
       "subtitle": "Volleyball"
     },
     {
-      "roomId": "9B",
-      "startMin": 1230,
-      "endMin": 1350,
-      "title": "Extreme Volleyball",
+      "roomId": "1B",
+      "startMin": 1260,
+      "endMin": 1380,
+      "title": "Chicago Sport and Social Club",
       "subtitle": "Volleyball"
     },
     {
       "roomId": "2A",
       "startMin": 1260,
-      "endMin": 1395,
-      "title": "RAEC Front Desk, Rentals - On Hold",
-      "subtitle": "Hold for Reifsteck ok per MH"
+      "endMin": 1380,
+      "title": "Chicago Sport and Social Club",
+      "subtitle": "Volleyball"
     },
     {
       "roomId": "2B",
       "startMin": 1260,
-      "endMin": 1395,
-      "title": "RAEC Front Desk, Rentals - On Hold",
-      "subtitle": "Hold for Reifsteck ok per MH"
+      "endMin": 1380,
+      "title": "Chicago Sport and Social Club",
+      "subtitle": "Volleyball"
     }
   ]
 }
