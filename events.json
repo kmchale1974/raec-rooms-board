@@ -44,34 +44,6 @@
       "subtitle": "NO COURTS; TURF INSTALLED"
     },
     {
-      "roomId": "1A",
-      "startMin": 540,
-      "endMin": 720,
-      "title": "Sam Franklin Training, Sam Franklin",
-      "subtitle": "Basketball"
-    },
-    {
-      "roomId": "1B",
-      "startMin": 540,
-      "endMin": 720,
-      "title": "Sam Franklin Training, Sam Franklin",
-      "subtitle": "Basketball"
-    },
-    {
-      "roomId": "2A",
-      "startMin": 540,
-      "endMin": 720,
-      "title": "Sam Franklin Training, Sam Franklin",
-      "subtitle": "Basketball"
-    },
-    {
-      "roomId": "2B",
-      "startMin": 540,
-      "endMin": 720,
-      "title": "Sam Franklin Training, Sam Franklin",
-      "subtitle": "Basketball"
-    },
-    {
       "roomId": "9A",
       "startMin": 570,
       "endMin": 750,
@@ -101,149 +73,114 @@
     },
     {
       "roomId": "Quarter Turf NA",
-      "startMin": 780,
-      "endMin": 840,
-      "title": "Julia Buckley",
+      "startMin": 840,
+      "endMin": 960,
+      "title": "Lewis University Soccer (Women's), Christopher Koenig",
       "subtitle": "Soccer"
     },
     {
       "roomId": "Quarter Turf NB",
-      "startMin": 780,
-      "endMin": 840,
-      "title": "Julia Buckley",
+      "startMin": 840,
+      "endMin": 960,
+      "title": "Lewis University Soccer (Women's), Christopher Koenig",
       "subtitle": "Soccer"
-    },
-    {
-      "roomId": "2A",
-      "startMin": 1020,
-      "endMin": 1260,
-      "title": "Empower Volleyball (CLUB)",
-      "subtitle": "Volleyball"
-    },
-    {
-      "roomId": "2B",
-      "startMin": 1020,
-      "endMin": 1260,
-      "title": "Empower Volleyball (CLUB)",
-      "subtitle": "Volleyball"
-    },
-    {
-      "roomId": "1A",
-      "startMin": 1050,
-      "endMin": 1170,
-      "title": "Tristan Rivera",
-      "subtitle": "Volleyball"
-    },
-    {
-      "roomId": "10A",
-      "startMin": 1110,
-      "endMin": 1230,
-      "title": "Illinois Lady Elite, Darius McCullough",
-      "subtitle": "Basketball 2026 Q1 Pattern"
-    },
-    {
-      "roomId": "10B",
-      "startMin": 1110,
-      "endMin": 1230,
-      "title": "Illinois Lady Elite, Darius McCullough",
-      "subtitle": "Basketball 2026 Q1 Pattern"
-    },
-    {
-      "roomId": "9A",
-      "startMin": 1110,
-      "endMin": 1170,
-      "title": "Catch Corner",
-      "subtitle": "CatchCorner (Mike Howard #540336 Basketball)"
-    },
-    {
-      "roomId": "9B",
-      "startMin": 1110,
-      "endMin": 1170,
-      "title": "Catch Corner",
-      "subtitle": "CatchCorner (Mike Howard #540336 Basketball)"
-    },
-    {
-      "roomId": "1B",
-      "startMin": 1140,
-      "endMin": 1260,
-      "title": "Omona Athletics",
-      "subtitle": "Volleyball"
-    },
-    {
-      "roomId": "9A",
-      "startMin": 1170,
-      "endMin": 1260,
-      "title": "Illinois Express Basketball, cill",
-      "subtitle": "Basketball"
-    },
-    {
-      "roomId": "9B",
-      "startMin": 1170,
-      "endMin": 1260,
-      "title": "Illinois Express Basketball, cill",
-      "subtitle": "Basketball"
-    },
-    {
-      "roomId": "1A",
-      "startMin": 1170,
-      "endMin": 1290,
-      "title": "Extreme Volleyball",
-      "subtitle": "Volleyball"
-    },
-    {
-      "roomId": "Quarter Turf NA",
-      "startMin": 1260,
-      "endMin": 1335,
-      "title": "Chicago Inter  Soccer",
-      "subtitle": "2026 Q1 Pattern"
-    },
-    {
-      "roomId": "Quarter Turf NB",
-      "startMin": 1260,
-      "endMin": 1335,
-      "title": "Chicago Inter  Soccer",
-      "subtitle": "2026 Q1 Pattern"
-    },
-    {
-      "roomId": "Quarter Turf SA",
-      "startMin": 1260,
-      "endMin": 1335,
-      "title": "Chicago Inter  Soccer",
-      "subtitle": "2026 Q1 Pattern"
     },
     {
       "roomId": "Quarter Turf SB",
-      "startMin": 1260,
+      "startMin": 900,
+      "endMin": 960,
+      "title": "Saint Andrew's School, Ingrid Wilkin",
+      "subtitle": "Soccer 2026 Q1 Pattern"
+    },
+    {
+      "roomId": "Quarter Turf NA",
+      "startMin": 975,
       "endMin": 1335,
       "title": "Chicago Inter  Soccer",
-      "subtitle": "2026 Q1 Pattern"
+      "subtitle": "Soccer 2026 Q1 Pattern"
+    },
+    {
+      "roomId": "Quarter Turf NB",
+      "startMin": 975,
+      "endMin": 1335,
+      "title": "Chicago Inter  Soccer",
+      "subtitle": "Soccer 2026 Q1 Pattern"
+    },
+    {
+      "roomId": "Quarter Turf SA",
+      "startMin": 975,
+      "endMin": 1335,
+      "title": "Chicago Inter  Soccer",
+      "subtitle": "Soccer 2026 Q1 Pattern"
+    },
+    {
+      "roomId": "Quarter Turf SB",
+      "startMin": 975,
+      "endMin": 1335,
+      "title": "Chicago Inter  Soccer",
+      "subtitle": "Soccer 2026 Q1 Pattern"
+    },
+    {
+      "roomId": "2B",
+      "startMin": 1005,
+      "endMin": 1065,
+      "title": "John Jones",
+      "subtitle": "Basketball"
     },
     {
       "roomId": "9A",
-      "startMin": 1260,
-      "endMin": 1380,
-      "title": "Chicago Sport and Social Club",
+      "startMin": 1050,
+      "endMin": 1230,
+      "title": "Empower Volleyball (Rec), Dean Baxendale",
       "subtitle": "Volleyball"
     },
     {
       "roomId": "9B",
-      "startMin": 1260,
-      "endMin": 1380,
-      "title": "Chicago Sport and Social Club",
+      "startMin": 1050,
+      "endMin": 1230,
+      "title": "Empower Volleyball (Rec), Dean Baxendale",
       "subtitle": "Volleyball"
     },
     {
       "roomId": "10A",
-      "startMin": 1260,
-      "endMin": 1380,
-      "title": "Chicago Sport and Social Club",
+      "startMin": 1050,
+      "endMin": 1230,
+      "title": "Empower Volleyball (Rec), Dean Baxendale",
       "subtitle": "Volleyball"
     },
     {
       "roomId": "10B",
-      "startMin": 1260,
-      "endMin": 1380,
-      "title": "Chicago Sport and Social Club",
+      "startMin": 1050,
+      "endMin": 1230,
+      "title": "Empower Volleyball (Rec), Dean Baxendale",
+      "subtitle": "Volleyball"
+    },
+    {
+      "roomId": "1A",
+      "startMin": 1080,
+      "endMin": 1260,
+      "title": "Belusa United Volleyball, Nicole Diamond",
+      "subtitle": "Volleyball"
+    },
+    {
+      "roomId": "1B",
+      "startMin": 1080,
+      "endMin": 1260,
+      "title": "Belusa United Volleyball, Nicole Diamond",
+      "subtitle": "Volleyball"
+    },
+    {
+      "roomId": "2A",
+      "startMin": 1080,
+      "endMin": 1260,
+      "title": "Belusa United Volleyball, Nicole Diamond",
+      "subtitle": "Volleyball"
+    },
+    {
+      "roomId": "2B",
+      "startMin": 1080,
+      "endMin": 1260,
+      "title": "Belusa United Volleyball, Nicole Diamond",
       "subtitle": "Volleyball"
     }
   ]
