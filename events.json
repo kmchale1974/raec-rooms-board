@@ -2,34 +2,6 @@
   "season": "turf",
   "slots": [
     {
-      "roomId": "Quarter Turf NA",
-      "startMin": 420,
-      "endMin": 1275,
-      "title": "Chicagoland Indoor Soccer",
-      "subtitle": "Soccer per Contract"
-    },
-    {
-      "roomId": "Quarter Turf NB",
-      "startMin": 420,
-      "endMin": 1275,
-      "title": "Chicagoland Indoor Soccer",
-      "subtitle": "Soccer per Contract"
-    },
-    {
-      "roomId": "Quarter Turf SA",
-      "startMin": 420,
-      "endMin": 1275,
-      "title": "Chicagoland Indoor Soccer",
-      "subtitle": "Soccer per Contract"
-    },
-    {
-      "roomId": "Quarter Turf SB",
-      "startMin": 420,
-      "endMin": 1275,
-      "title": "Chicagoland Indoor Soccer",
-      "subtitle": "Soccer per Contract"
-    },
-    {
       "roomId": "3",
       "startMin": 480,
       "endMin": 1380,
@@ -72,60 +44,123 @@
       "subtitle": "NO COURTS; TURF INSTALLED"
     },
     {
-      "roomId": "1A",
+      "roomId": "Quarter Turf NA",
       "startMin": 540,
       "endMin": 1320,
-      "title": "3 Step Sports, Lucas Megleo",
-      "subtitle": "3 STEP SPORTS"
+      "title": "Workforce Development Center of Will County, Workforce Development Center of Will County of",
+      "subtitle": "Pathways to Professions Event"
     },
     {
-      "roomId": "1B",
+      "roomId": "Quarter Turf NB",
       "startMin": 540,
       "endMin": 1320,
-      "title": "3 Step Sports, Lucas Megleo",
-      "subtitle": "3 STEP SPORTS"
+      "title": "Workforce Development Center of Will County, Workforce Development Center of Will County of",
+      "subtitle": "Pathways to Professions Event"
     },
     {
-      "roomId": "2A",
+      "roomId": "Quarter Turf SA",
       "startMin": 540,
       "endMin": 1320,
-      "title": "3 Step Sports, Lucas Megleo",
-      "subtitle": "3 STEP SPORTS"
+      "title": "Workforce Development Center of Will County, Workforce Development Center of Will County of",
+      "subtitle": "Pathways to Professions Event"
     },
     {
-      "roomId": "2B",
+      "roomId": "Quarter Turf SB",
       "startMin": 540,
       "endMin": 1320,
-      "title": "3 Step Sports, Lucas Megleo",
-      "subtitle": "3 STEP SPORTS"
+      "title": "Workforce Development Center of Will County, Workforce Development Center of Will County of",
+      "subtitle": "Pathways to Professions Event"
     },
     {
       "roomId": "9A",
       "startMin": 540,
       "endMin": 1320,
-      "title": "3 Step Sports, Lucas Megleo",
-      "subtitle": "3 STEP SPORTS"
+      "title": "Workforce Development Center of Will County, Workforce Development Center of Will County of",
+      "subtitle": "Pathways to Professions Event"
     },
     {
       "roomId": "9B",
       "startMin": 540,
       "endMin": 1320,
-      "title": "3 Step Sports, Lucas Megleo",
-      "subtitle": "3 STEP SPORTS"
+      "title": "Workforce Development Center of Will County, Workforce Development Center of Will County of",
+      "subtitle": "Pathways to Professions Event"
     },
     {
       "roomId": "10A",
       "startMin": 540,
       "endMin": 1320,
-      "title": "3 Step Sports, Lucas Megleo",
-      "subtitle": "3 STEP SPORTS"
+      "title": "Workforce Development Center of Will County, Workforce Development Center of Will County of",
+      "subtitle": "Pathways to Professions Event"
     },
     {
       "roomId": "10B",
       "startMin": 540,
       "endMin": 1320,
-      "title": "3 Step Sports, Lucas Megleo",
-      "subtitle": "3 STEP SPORTS"
+      "title": "Workforce Development Center of Will County, Workforce Development Center of Will County of",
+      "subtitle": "Pathways to Professions Event"
+    },
+    {
+      "roomId": "1A",
+      "startMin": 1020,
+      "endMin": 1080,
+      "title": "Excel Skills Training, Denis Alibegovic",
+      "subtitle": "Basketball"
+    },
+    {
+      "roomId": "1A",
+      "startMin": 1080,
+      "endMin": 1260,
+      "title": "Belusa United Volleyball, Nicole Diamond",
+      "subtitle": "Volleyball"
+    },
+    {
+      "roomId": "1B",
+      "startMin": 1080,
+      "endMin": 1260,
+      "title": "Belusa United Volleyball, Nicole Diamond",
+      "subtitle": "Volleyball"
+    },
+    {
+      "roomId": "2A",
+      "startMin": 1080,
+      "endMin": 1260,
+      "title": "Belusa United Volleyball, Nicole Diamond",
+      "subtitle": "Volleyball"
+    },
+    {
+      "roomId": "2B",
+      "startMin": 1080,
+      "endMin": 1260,
+      "title": "Belusa United Volleyball, Nicole Diamond",
+      "subtitle": "Volleyball"
+    },
+    {
+      "roomId": "1A",
+      "startMin": 1260,
+      "endMin": 1380,
+      "title": "Chicago Sport and Social Club",
+      "subtitle": "Volleyball"
+    },
+    {
+      "roomId": "1B",
+      "startMin": 1260,
+      "endMin": 1380,
+      "title": "Chicago Sport and Social Club",
+      "subtitle": "Volleyball"
+    },
+    {
+      "roomId": "2A",
+      "startMin": 1260,
+      "endMin": 1380,
+      "title": "Chicago Sport and Social Club",
+      "subtitle": "Volleyball"
+    },
+    {
+      "roomId": "2B",
+      "startMin": 1260,
+      "endMin": 1380,
+      "title": "Chicago Sport and Social Club",
+      "subtitle": "Volleyball"
     }
   ]
 }
