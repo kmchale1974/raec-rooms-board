@@ -2,6 +2,90 @@
   "season": "turf",
   "slots": [
     {
+      "roomId": "1A",
+      "startMin": 360,
+      "endMin": 1080,
+      "title": "Workforce Development Center of Will County, Workforce Development Center of Will County of",
+      "subtitle": "Pathways to Professions Event"
+    },
+    {
+      "roomId": "1B",
+      "startMin": 360,
+      "endMin": 1080,
+      "title": "Workforce Development Center of Will County, Workforce Development Center of Will County of",
+      "subtitle": "Pathways to Professions Event"
+    },
+    {
+      "roomId": "2A",
+      "startMin": 360,
+      "endMin": 1080,
+      "title": "Workforce Development Center of Will County, Workforce Development Center of Will County of",
+      "subtitle": "Pathways to Professions Event"
+    },
+    {
+      "roomId": "2B",
+      "startMin": 360,
+      "endMin": 1080,
+      "title": "Workforce Development Center of Will County, Workforce Development Center of Will County of",
+      "subtitle": "Pathways to Professions Event"
+    },
+    {
+      "roomId": "Quarter Turf NA",
+      "startMin": 360,
+      "endMin": 1080,
+      "title": "Workforce Development Center of Will County, Workforce Development Center of Will County of",
+      "subtitle": "Pathways to Professions Event"
+    },
+    {
+      "roomId": "Quarter Turf NB",
+      "startMin": 360,
+      "endMin": 1080,
+      "title": "Workforce Development Center of Will County, Workforce Development Center of Will County of",
+      "subtitle": "Pathways to Professions Event"
+    },
+    {
+      "roomId": "Quarter Turf SA",
+      "startMin": 360,
+      "endMin": 1080,
+      "title": "Workforce Development Center of Will County, Workforce Development Center of Will County of",
+      "subtitle": "Pathways to Professions Event"
+    },
+    {
+      "roomId": "Quarter Turf SB",
+      "startMin": 360,
+      "endMin": 1080,
+      "title": "Workforce Development Center of Will County, Workforce Development Center of Will County of",
+      "subtitle": "Pathways to Professions Event"
+    },
+    {
+      "roomId": "9A",
+      "startMin": 360,
+      "endMin": 1080,
+      "title": "Workforce Development Center of Will County, Workforce Development Center of Will County of",
+      "subtitle": "Pathways to Professions Event"
+    },
+    {
+      "roomId": "9B",
+      "startMin": 360,
+      "endMin": 1080,
+      "title": "Workforce Development Center of Will County, Workforce Development Center of Will County of",
+      "subtitle": "Pathways to Professions Event"
+    },
+    {
+      "roomId": "10A",
+      "startMin": 360,
+      "endMin": 1080,
+      "title": "Workforce Development Center of Will County, Workforce Development Center of Will County of",
+      "subtitle": "Pathways to Professions Event"
+    },
+    {
+      "roomId": "10B",
+      "startMin": 360,
+      "endMin": 1080,
+      "title": "Workforce Development Center of Will County, Workforce Development Center of Will County of",
+      "subtitle": "Pathways to Professions Event"
+    },
+    {
       "roomId": "3",
       "startMin": 480,
       "endMin": 1380,
@@ -44,123 +128,81 @@
       "subtitle": "NO COURTS; TURF INSTALLED"
     },
     {
-      "roomId": "Quarter Turf NA",
-      "startMin": 540,
-      "endMin": 1320,
-      "title": "Workforce Development Center of Will County, Workforce Development Center of Will County of",
-      "subtitle": "Pathways to Professions Event"
+      "roomId": "1A",
+      "startMin": 1080,
+      "endMin": 1260,
+      "title": "Belusa United Volleyball, Nicole Diamond",
+      "subtitle": "Volleyball"
     },
     {
-      "roomId": "Quarter Turf NB",
-      "startMin": 540,
-      "endMin": 1320,
-      "title": "Workforce Development Center of Will County, Workforce Development Center of Will County of",
-      "subtitle": "Pathways to Professions Event"
+      "roomId": "1B",
+      "startMin": 1080,
+      "endMin": 1260,
+      "title": "Belusa United Volleyball, Nicole Diamond",
+      "subtitle": "Volleyball"
     },
     {
-      "roomId": "Quarter Turf SA",
-      "startMin": 540,
-      "endMin": 1320,
-      "title": "Workforce Development Center of Will County, Workforce Development Center of Will County of",
-      "subtitle": "Pathways to Professions Event"
+      "roomId": "2A",
+      "startMin": 1080,
+      "endMin": 1260,
+      "title": "Belusa United Volleyball, Nicole Diamond",
+      "subtitle": "Volleyball"
     },
     {
-      "roomId": "Quarter Turf SB",
-      "startMin": 540,
-      "endMin": 1320,
-      "title": "Workforce Development Center of Will County, Workforce Development Center of Will County of",
-      "subtitle": "Pathways to Professions Event"
+      "roomId": "2B",
+      "startMin": 1080,
+      "endMin": 1260,
+      "title": "Belusa United Volleyball, Nicole Diamond",
+      "subtitle": "Volleyball"
     },
     {
       "roomId": "9A",
-      "startMin": 540,
-      "endMin": 1320,
-      "title": "Workforce Development Center of Will County, Workforce Development Center of Will County of",
-      "subtitle": "Pathways to Professions Event"
+      "startMin": 1080,
+      "endMin": 1260,
+      "title": "Empower Volleyball (Rec), Dean Baxendale",
+      "subtitle": "Volleyball"
     },
     {
       "roomId": "9B",
-      "startMin": 540,
-      "endMin": 1320,
-      "title": "Workforce Development Center of Will County, Workforce Development Center of Will County of",
-      "subtitle": "Pathways to Professions Event"
+      "startMin": 1080,
+      "endMin": 1260,
+      "title": "Empower Volleyball (Rec), Dean Baxendale",
+      "subtitle": "Volleyball"
     },
     {
       "roomId": "10A",
-      "startMin": 540,
-      "endMin": 1320,
-      "title": "Workforce Development Center of Will County, Workforce Development Center of Will County of",
-      "subtitle": "Pathways to Professions Event"
+      "startMin": 1080,
+      "endMin": 1260,
+      "title": "Empower Volleyball (Rec), Dean Baxendale",
+      "subtitle": "Volleyball"
     },
     {
       "roomId": "10B",
-      "startMin": 540,
-      "endMin": 1320,
-      "title": "Workforce Development Center of Will County, Workforce Development Center of Will County of",
-      "subtitle": "Pathways to Professions Event"
+      "startMin": 1080,
+      "endMin": 1260,
+      "title": "Empower Volleyball (Rec), Dean Baxendale",
+      "subtitle": "Volleyball"
+    },
+    {
+      "roomId": "Quarter Turf SA",
+      "startMin": 1260,
+      "endMin": 1380,
+      "title": "Salim Barut",
+      "subtitle": "Soccer"
+    },
+    {
+      "roomId": "Quarter Turf SB",
+      "startMin": 1260,
+      "endMin": 1380,
+      "title": "Salim Barut",
+      "subtitle": "Soccer"
     },
     {
       "roomId": "1A",
-      "startMin": 1020,
-      "endMin": 1080,
+      "startMin": 1260,
+      "endMin": 1320,
       "title": "Excel Skills Training, Denis Alibegovic",
       "subtitle": "Basketball"
-    },
-    {
-      "roomId": "1A",
-      "startMin": 1080,
-      "endMin": 1260,
-      "title": "Belusa United Volleyball, Nicole Diamond",
-      "subtitle": "Volleyball"
-    },
-    {
-      "roomId": "1B",
-      "startMin": 1080,
-      "endMin": 1260,
-      "title": "Belusa United Volleyball, Nicole Diamond",
-      "subtitle": "Volleyball"
-    },
-    {
-      "roomId": "2A",
-      "startMin": 1080,
-      "endMin": 1260,
-      "title": "Belusa United Volleyball, Nicole Diamond",
-      "subtitle": "Volleyball"
-    },
-    {
-      "roomId": "2B",
-      "startMin": 1080,
-      "endMin": 1260,
-      "title": "Belusa United Volleyball, Nicole Diamond",
-      "subtitle": "Volleyball"
-    },
-    {
-      "roomId": "1A",
-      "startMin": 1260,
-      "endMin": 1380,
-      "title": "Chicago Sport and Social Club",
-      "subtitle": "Volleyball"
-    },
-    {
-      "roomId": "1B",
-      "startMin": 1260,
-      "endMin": 1380,
-      "title": "Chicago Sport and Social Club",
-      "subtitle": "Volleyball"
-    },
-    {
-      "roomId": "2A",
-      "startMin": 1260,
-      "endMin": 1380,
-      "title": "Chicago Sport and Social Club",
-      "subtitle": "Volleyball"
-    },
-    {
-      "roomId": "2B",
-      "startMin": 1260,
-      "endMin": 1380,
-      "title": "Chicago Sport and Social Club",
-      "subtitle": "Volleyball"
     }
   ]
 }
