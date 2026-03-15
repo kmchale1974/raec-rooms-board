@@ -3,29 +3,29 @@
   "slots": [
     {
       "roomId": "Quarter Turf NA",
-      "startMin": 465,
-      "endMin": 1230,
+      "startMin": 420,
+      "endMin": 1275,
       "title": "Chicagoland Indoor Soccer",
       "subtitle": "Soccer per Contract"
     },
     {
       "roomId": "Quarter Turf NB",
-      "startMin": 465,
-      "endMin": 1230,
+      "startMin": 420,
+      "endMin": 1275,
       "title": "Chicagoland Indoor Soccer",
       "subtitle": "Soccer per Contract"
     },
     {
       "roomId": "Quarter Turf SA",
-      "startMin": 465,
-      "endMin": 1230,
+      "startMin": 420,
+      "endMin": 1275,
       "title": "Chicagoland Indoor Soccer",
       "subtitle": "Soccer per Contract"
     },
     {
       "roomId": "Quarter Turf SB",
-      "startMin": 465,
-      "endMin": 1230,
+      "startMin": 420,
+      "endMin": 1275,
       "title": "Chicagoland Indoor Soccer",
       "subtitle": "Soccer per Contract"
     },
@@ -126,6 +126,20 @@
       "endMin": 1320,
       "title": "RAEC Front Desk, Rentals - On Hold",
       "subtitle": "Internal Hold per NM for Midwest Collectibles"
+    },
+    {
+      "roomId": "9A",
+      "startMin": 1320,
+      "endMin": 1410,
+      "title": "Illinois Flight, Brandon Brown",
+      "subtitle": "Basketball"
+    },
+    {
+      "roomId": "9B",
+      "startMin": 1320,
+      "endMin": 1410,
+      "title": "Illinois Flight, Brandon Brown",
+      "subtitle": "Basketball"
     }
   ]
 }
