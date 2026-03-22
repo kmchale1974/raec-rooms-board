@@ -126,6 +126,20 @@
       "endMin": 1320,
       "title": "RAEC Front Desk, Rentals - On Hold",
       "subtitle": "NO TURF FIELDOUSE INSTALLED"
+    },
+    {
+      "roomId": "9A",
+      "startMin": 1320,
+      "endMin": 1410,
+      "title": "Illinois Flight, Brandon Brown",
+      "subtitle": "Basketball"
+    },
+    {
+      "roomId": "9B",
+      "startMin": 1320,
+      "endMin": 1410,
+      "title": "Illinois Flight, Brandon Brown",
+      "subtitle": "Basketball"
     }
   ]
 }
