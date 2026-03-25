@@ -58,6 +58,20 @@
       "subtitle": ""
     },
     {
+      "roomId": "3",
+      "startMin": 960,
+      "endMin": 1140,
+      "title": "Sam Franklin Training, Sam Franklin",
+      "subtitle": "Basketball 2026 Q1 Pattern"
+    },
+    {
+      "roomId": "10A",
+      "startMin": 1005,
+      "endMin": 1065,
+      "title": "Excel Skills Training, Denis Alibegovic",
+      "subtitle": "Basketball 2026 Q1 Add On"
+    },
+    {
       "roomId": "1A",
       "startMin": 1080,
       "endMin": 1260,
@@ -86,13 +100,6 @@
       "subtitle": "Volleyball"
     },
     {
-      "roomId": "3",
-      "startMin": 1080,
-      "endMin": 1260,
-      "title": "Illinois Express Basketball, Tiffany Owens",
-      "subtitle": "Basketball"
-    },
-    {
       "roomId": "4",
       "startMin": 1080,
       "endMin": 1260,
@@ -100,74 +107,81 @@
       "subtitle": "Basketball"
     },
     {
-      "roomId": "6",
+      "roomId": "5",
       "startMin": 1080,
       "endMin": 1260,
-      "title": "Zero Fears Basketball",
-      "subtitle": "2026 Q2 Pattern"
+      "title": "Illinois Express Basketball, Tiffany Owens",
+      "subtitle": "Basketball"
     },
     {
       "roomId": "7",
       "startMin": 1080,
       "endMin": 1260,
       "title": "Zero Fears Basketball",
-      "subtitle": "2026 Q2 Pattern"
+      "subtitle": "Basketball"
     },
     {
       "roomId": "8",
       "startMin": 1080,
       "endMin": 1260,
       "title": "Zero Fears Basketball",
-      "subtitle": "2026 Q2 Pattern"
-    },
-    {
-      "roomId": "10B",
-      "startMin": 1080,
-      "endMin": 1140,
-      "title": "Excel Skills Training, Denis Alibegovic",
-      "subtitle": "Basketball"
-    },
-    {
-      "roomId": "9A",
-      "startMin": 1080,
-      "endMin": 1260,
-      "title": "Vikings Basketball",
       "subtitle": "Basketball"
     },
     {
       "roomId": "9B",
       "startMin": 1080,
       "endMin": 1260,
-      "title": "Vikings Basketball",
-      "subtitle": "Basketball"
-    },
-    {
-      "roomId": "5",
-      "startMin": 1140,
-      "endMin": 1260,
-      "title": "Catch Corner",
-      "subtitle": "CatchCorner (Paul Aguilar #581959 Basketball)"
+      "title": "Empower Volleyball (CLUB)",
+      "subtitle": "Volleyball"
     },
     {
       "roomId": "10A",
-      "startMin": 1170,
-      "endMin": 1290,
-      "title": "Mugilan Palani",
+      "startMin": 1080,
+      "endMin": 1260,
+      "title": "Empower Volleyball (CLUB)",
       "subtitle": "Volleyball"
     },
     {
       "roomId": "10B",
-      "startMin": 1170,
-      "endMin": 1290,
-      "title": "Extreme Volleyball",
+      "startMin": 1080,
+      "endMin": 1260,
+      "title": "Empower Volleyball (CLUB)",
       "subtitle": "Volleyball"
     },
     {
-      "roomId": "8",
+      "roomId": "9A",
+      "startMin": 1140,
+      "endMin": 1260,
+      "title": "Catch Corner",
+      "subtitle": "CatchCorner (Abigail Sharp #578013 Volleyball)"
+    },
+    {
+      "roomId": "1A",
       "startMin": 1260,
       "endMin": 1380,
-      "title": "Todd Aguilera",
-      "subtitle": "Basketball"
+      "title": "Chicago Sport and Social Club",
+      "subtitle": "Volleyball"
+    },
+    {
+      "roomId": "1B",
+      "startMin": 1260,
+      "endMin": 1380,
+      "title": "Chicago Sport and Social Club",
+      "subtitle": "Volleyball"
+    },
+    {
+      "roomId": "2A",
+      "startMin": 1260,
+      "endMin": 1380,
+      "title": "Chicago Sport and Social Club",
+      "subtitle": "Volleyball"
+    },
+    {
+      "roomId": "2B",
+      "startMin": 1260,
+      "endMin": 1380,
+      "title": "Chicago Sport and Social Club",
+      "subtitle": "Volleyball"
     }
   ]
 }
