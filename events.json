@@ -2,193 +2,130 @@
   "season": "courts",
   "slots": [
     {
+      "roomId": "1A",
+      "startMin": 540,
+      "endMin": 1320,
+      "title": "RAEC Front Desk, Rentals - On Hold",
+      "subtitle": "CLOSED FOR GOOD FRIDAY"
+    },
+    {
+      "roomId": "1B",
+      "startMin": 540,
+      "endMin": 1320,
+      "title": "RAEC Front Desk, Rentals - On Hold",
+      "subtitle": "CLOSED FOR GOOD FRIDAY"
+    },
+    {
+      "roomId": "2A",
+      "startMin": 540,
+      "endMin": 1320,
+      "title": "RAEC Front Desk, Rentals - On Hold",
+      "subtitle": "CLOSED FOR GOOD FRIDAY"
+    },
+    {
+      "roomId": "2B",
+      "startMin": 540,
+      "endMin": 1320,
+      "title": "RAEC Front Desk, Rentals - On Hold",
+      "subtitle": "CLOSED FOR GOOD FRIDAY"
+    },
+    {
+      "roomId": "3",
+      "startMin": 540,
+      "endMin": 1320,
+      "title": "RAEC Front Desk, Rentals - On Hold",
+      "subtitle": "CLOSED FOR GOOD FRIDAY"
+    },
+    {
+      "roomId": "4",
+      "startMin": 540,
+      "endMin": 1320,
+      "title": "RAEC Front Desk, Rentals - On Hold",
+      "subtitle": "CLOSED FOR GOOD FRIDAY"
+    },
+    {
+      "roomId": "5",
+      "startMin": 540,
+      "endMin": 1320,
+      "title": "RAEC Front Desk, Rentals - On Hold",
+      "subtitle": "CLOSED FOR GOOD FRIDAY"
+    },
+    {
+      "roomId": "6",
+      "startMin": 540,
+      "endMin": 1320,
+      "title": "RAEC Front Desk, Rentals - On Hold",
+      "subtitle": "CLOSED FOR GOOD FRIDAY"
+    },
+    {
+      "roomId": "7",
+      "startMin": 540,
+      "endMin": 1320,
+      "title": "RAEC Front Desk, Rentals - On Hold",
+      "subtitle": "CLOSED FOR GOOD FRIDAY"
+    },
+    {
+      "roomId": "8",
+      "startMin": 540,
+      "endMin": 1320,
+      "title": "RAEC Front Desk, Rentals - On Hold",
+      "subtitle": "CLOSED FOR GOOD FRIDAY"
+    },
+    {
       "roomId": "Quarter Turf NA",
       "startMin": 540,
       "endMin": 1320,
       "title": "RAEC Front Desk, Rentals - On Hold",
-      "subtitle": "FIELDHOUSE INSTALLED - NO TURF"
+      "subtitle": "CLOSED FOR GOOD FRIDAY"
     },
     {
       "roomId": "Quarter Turf NB",
       "startMin": 540,
       "endMin": 1320,
       "title": "RAEC Front Desk, Rentals - On Hold",
-      "subtitle": "FIELDHOUSE INSTALLED - NO TURF"
+      "subtitle": "CLOSED FOR GOOD FRIDAY"
     },
     {
       "roomId": "Quarter Turf SA",
       "startMin": 540,
       "endMin": 1320,
       "title": "RAEC Front Desk, Rentals - On Hold",
-      "subtitle": "FIELDHOUSE INSTALLED - NO TURF"
+      "subtitle": "CLOSED FOR GOOD FRIDAY"
     },
     {
       "roomId": "Quarter Turf SB",
       "startMin": 540,
       "endMin": 1320,
       "title": "RAEC Front Desk, Rentals - On Hold",
-      "subtitle": "FIELDHOUSE INSTALLED - NO TURF"
+      "subtitle": "CLOSED FOR GOOD FRIDAY"
     },
     {
       "roomId": "9A",
-      "startMin": 570,
-      "endMin": 750,
-      "title": "Open Pickleball",
-      "subtitle": ""
+      "startMin": 540,
+      "endMin": 1320,
+      "title": "RAEC Front Desk, Rentals - On Hold",
+      "subtitle": "CLOSED FOR GOOD FRIDAY"
     },
     {
       "roomId": "9B",
-      "startMin": 570,
-      "endMin": 750,
-      "title": "Open Pickleball",
-      "subtitle": ""
+      "startMin": 540,
+      "endMin": 1320,
+      "title": "RAEC Front Desk, Rentals - On Hold",
+      "subtitle": "CLOSED FOR GOOD FRIDAY"
     },
     {
       "roomId": "10A",
-      "startMin": 570,
-      "endMin": 750,
-      "title": "Open Pickleball",
-      "subtitle": ""
+      "startMin": 540,
+      "endMin": 1320,
+      "title": "RAEC Front Desk, Rentals - On Hold",
+      "subtitle": "CLOSED FOR GOOD FRIDAY"
     },
     {
       "roomId": "10B",
-      "startMin": 570,
-      "endMin": 750,
-      "title": "Open Pickleball",
-      "subtitle": ""
-    },
-    {
-      "roomId": "3",
-      "startMin": 660,
-      "endMin": 750,
-      "title": "Catch Corner",
-      "subtitle": "CatchCorner(Prolific Basketball Booking# 583367)"
-    },
-    {
-      "roomId": "3",
-      "startMin": 750,
-      "endMin": 840,
-      "title": "Catch Corner",
-      "subtitle": "CatchCorner(Prolific Basketball Booking# 583369)"
-    },
-    {
-      "roomId": "2A",
-      "startMin": 1020,
-      "endMin": 1140,
-      "title": "Work Until Basketball",
-      "subtitle": "Basketball"
-    },
-    {
-      "roomId": "2B",
-      "startMin": 1020,
-      "endMin": 1140,
-      "title": "Work Until Basketball",
-      "subtitle": "Basketball"
-    },
-    {
-      "roomId": "9A",
-      "startMin": 1050,
-      "endMin": 1290,
-      "title": "Empower Volleyball (Rec), Dean Baxendale",
-      "subtitle": "Volleyball"
-    },
-    {
-      "roomId": "9B",
-      "startMin": 1050,
-      "endMin": 1290,
-      "title": "Empower Volleyball (Rec), Dean Baxendale",
-      "subtitle": "Volleyball"
-    },
-    {
-      "roomId": "10A",
-      "startMin": 1050,
-      "endMin": 1290,
-      "title": "Empower Volleyball (Rec), Dean Baxendale",
-      "subtitle": "Volleyball"
-    },
-    {
-      "roomId": "10B",
-      "startMin": 1050,
-      "endMin": 1290,
-      "title": "Empower Volleyball (Rec), Dean Baxendale",
-      "subtitle": "Volleyball"
-    },
-    {
-      "roomId": "1B",
-      "startMin": 1080,
-      "endMin": 1170,
-      "title": "Vikings Basketball",
-      "subtitle": "Basketball"
-    },
-    {
-      "roomId": "3",
-      "startMin": 1080,
-      "endMin": 1260,
-      "title": "Vikings Basketball",
-      "subtitle": "Basketball"
-    },
-    {
-      "roomId": "4",
-      "startMin": 1080,
-      "endMin": 1260,
-      "title": "Vikings Basketball",
-      "subtitle": "Basketball"
-    },
-    {
-      "roomId": "5",
-      "startMin": 1080,
-      "endMin": 1260,
-      "title": "Vikings Basketball",
-      "subtitle": "Basketball"
-    },
-    {
-      "roomId": "6",
-      "startMin": 1080,
-      "endMin": 1260,
-      "title": "Vikings Basketball",
-      "subtitle": "Basketball"
-    },
-    {
-      "roomId": "7",
-      "startMin": 1080,
-      "endMin": 1260,
-      "title": "Zero Fears Basketball",
-      "subtitle": "2026 Q2 Pattern"
-    },
-    {
-      "roomId": "8",
-      "startMin": 1080,
-      "endMin": 1260,
-      "title": "Zero Fears Basketball",
-      "subtitle": "2026 Q2 Pattern"
-    },
-    {
-      "roomId": "2A",
-      "startMin": 1170,
-      "endMin": 1290,
-      "title": "Omona Athletics",
-      "subtitle": "Volleyball"
-    },
-    {
-      "roomId": "2B",
-      "startMin": 1170,
-      "endMin": 1290,
-      "title": "Omona Athletics",
-      "subtitle": "Volleyball"
-    },
-    {
-      "roomId": "1A",
-      "startMin": 1170,
-      "endMin": 1290,
-      "title": "ARA Metal Works, LLC",
-      "subtitle": "Volleyball"
-    },
-    {
-      "roomId": "1B",
-      "startMin": 1230,
-      "endMin": 1350,
-      "title": "Catch Corner",
-      "subtitle": "CatchCorner (O'Rayn McAvoy Volleyball Booking# 589462)"
+      "startMin": 540,
+      "endMin": 1320,
+      "title": "RAEC Front Desk, Rentals - On Hold",
+      "subtitle": "CLOSED FOR GOOD FRIDAY"
     }
   ]
 }
