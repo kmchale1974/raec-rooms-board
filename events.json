@@ -2,53 +2,130 @@
   "season": "courts",
   "slots": [
     {
+      "roomId": "1A",
+      "startMin": 480,
+      "endMin": 1320,
+      "title": "Prep Hoops Basketball, Andrew Krupke",
+      "subtitle": "PREP HOOPS BASKETBALL TOURNAMENT"
+    },
+    {
+      "roomId": "1B",
+      "startMin": 480,
+      "endMin": 1320,
+      "title": "Prep Hoops Basketball, Andrew Krupke",
+      "subtitle": "PREP HOOPS BASKETBALL TOURNAMENT"
+    },
+    {
+      "roomId": "2A",
+      "startMin": 480,
+      "endMin": 1320,
+      "title": "Prep Hoops Basketball, Andrew Krupke",
+      "subtitle": "PREP HOOPS BASKETBALL TOURNAMENT"
+    },
+    {
+      "roomId": "2B",
+      "startMin": 480,
+      "endMin": 1320,
+      "title": "Prep Hoops Basketball, Andrew Krupke",
+      "subtitle": "PREP HOOPS BASKETBALL TOURNAMENT"
+    },
+    {
+      "roomId": "3",
+      "startMin": 480,
+      "endMin": 1320,
+      "title": "Prep Hoops Basketball, Andrew Krupke",
+      "subtitle": "PREP HOOPS BASKETBALL TOURNAMENT"
+    },
+    {
+      "roomId": "4",
+      "startMin": 480,
+      "endMin": 1320,
+      "title": "Prep Hoops Basketball, Andrew Krupke",
+      "subtitle": "PREP HOOPS BASKETBALL TOURNAMENT"
+    },
+    {
+      "roomId": "5",
+      "startMin": 480,
+      "endMin": 1320,
+      "title": "Prep Hoops Basketball, Andrew Krupke",
+      "subtitle": "PREP HOOPS BASKETBALL TOURNAMENT"
+    },
+    {
+      "roomId": "6",
+      "startMin": 480,
+      "endMin": 1320,
+      "title": "Prep Hoops Basketball, Andrew Krupke",
+      "subtitle": "PREP HOOPS BASKETBALL TOURNAMENT"
+    },
+    {
+      "roomId": "7",
+      "startMin": 480,
+      "endMin": 1320,
+      "title": "Prep Hoops Basketball, Andrew Krupke",
+      "subtitle": "PREP HOOPS BASKETBALL TOURNAMENT"
+    },
+    {
+      "roomId": "8",
+      "startMin": 480,
+      "endMin": 1320,
+      "title": "Prep Hoops Basketball, Andrew Krupke",
+      "subtitle": "PREP HOOPS BASKETBALL TOURNAMENT"
+    },
+    {
+      "roomId": "9A",
+      "startMin": 480,
+      "endMin": 1320,
+      "title": "Prep Hoops Basketball, Andrew Krupke",
+      "subtitle": "PREP HOOPS BASKETBALL TOURNAMENT"
+    },
+    {
+      "roomId": "9B",
+      "startMin": 480,
+      "endMin": 1320,
+      "title": "Prep Hoops Basketball, Andrew Krupke",
+      "subtitle": "PREP HOOPS BASKETBALL TOURNAMENT"
+    },
+    {
+      "roomId": "10A",
+      "startMin": 480,
+      "endMin": 1320,
+      "title": "Prep Hoops Basketball, Andrew Krupke",
+      "subtitle": "PREP HOOPS BASKETBALL TOURNAMENT"
+    },
+    {
+      "roomId": "10B",
+      "startMin": 480,
+      "endMin": 1320,
+      "title": "Prep Hoops Basketball, Andrew Krupke",
+      "subtitle": "PREP HOOPS BASKETBALL TOURNAMENT"
+    },
+    {
       "roomId": "Quarter Turf NA",
       "startMin": 540,
       "endMin": 1320,
       "title": "RAEC Front Desk, Rentals - On Hold",
-      "subtitle": "FIELDHOUSE INSTALLED - NO TURF"
+      "subtitle": "NO TURF FIELDOUSE INSTALLED"
     },
     {
       "roomId": "Quarter Turf NB",
       "startMin": 540,
       "endMin": 1320,
       "title": "RAEC Front Desk, Rentals - On Hold",
-      "subtitle": "FIELDHOUSE INSTALLED - NO TURF"
+      "subtitle": "NO TURF FIELDOUSE INSTALLED"
     },
     {
       "roomId": "Quarter Turf SA",
       "startMin": 540,
       "endMin": 1320,
       "title": "RAEC Front Desk, Rentals - On Hold",
-      "subtitle": "FIELDHOUSE INSTALLED - NO TURF"
+      "subtitle": "NO TURF FIELDOUSE INSTALLED"
     },
     {
       "roomId": "Quarter Turf SB",
       "startMin": 540,
       "endMin": 1320,
       "title": "RAEC Front Desk, Rentals - On Hold",
-      "subtitle": "FIELDHOUSE INSTALLED - NO TURF"
-    },
-    {
-      "roomId": "10A",
-      "startMin": 1080,
-      "endMin": 1200,
-      "title": "Alejandrino Huerta",
-      "subtitle": "Basketball"
-    },
-    {
-      "roomId": "10B",
-      "startMin": 1080,
-      "endMin": 1200,
-      "title": "Alejandrino Huerta",
-      "subtitle": "Basketball"
-    },
-    {
-      "roomId": "1A",
-      "startMin": 1080,
-      "endMin": 1200,
-      "title": "Martin Villa",
-      "subtitle": "Volleyball"
+      "subtitle": "NO TURF FIELDOUSE INSTALLED"
     }
   ]
 }
