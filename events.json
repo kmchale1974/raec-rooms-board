@@ -58,31 +58,10 @@
       "subtitle": ""
     },
     {
-      "roomId": "10A",
-      "startMin": 960,
-      "endMin": 1140,
-      "title": "Sam Franklin Training, Sam Franklin",
-      "subtitle": "Basketball 2026 Q2 Pattern"
-    },
-    {
-      "roomId": "7",
-      "startMin": 1020,
-      "endMin": 1080,
-      "title": "Catch Corner",
-      "subtitle": "CatchCorner (Prolific Basketball Booking #600390)"
-    },
-    {
-      "roomId": "9A",
-      "startMin": 1020,
-      "endMin": 1140,
-      "title": "Work Until Basketball",
-      "subtitle": "Basketball"
-    },
-    {
       "roomId": "9B",
       "startMin": 1020,
       "endMin": 1140,
-      "title": "Work Until Basketball",
+      "title": "Excel Skills Training, Denis Alibegovic",
       "subtitle": "Basketball"
     },
     {
@@ -114,109 +93,88 @@
       "subtitle": "Volleyball 2026 Q2 Pattern"
     },
     {
+      "roomId": "3",
+      "startMin": 1080,
+      "endMin": 1260,
+      "title": "Vikings Basketball",
+      "subtitle": "Basketball"
+    },
+    {
+      "roomId": "4",
+      "startMin": 1080,
+      "endMin": 1260,
+      "title": "Vikings Basketball",
+      "subtitle": "Basketball"
+    },
+    {
+      "roomId": "5",
+      "startMin": 1080,
+      "endMin": 1260,
+      "title": "Vikings Basketball",
+      "subtitle": "Basketball"
+    },
+    {
       "roomId": "6",
       "startMin": 1080,
-      "endMin": 1170,
-      "title": "D1 Training (Stay 22uned, Inc.), D1 Training (Stay 22uned, Inc.)",
+      "endMin": 1260,
+      "title": "Vikings Basketball",
       "subtitle": "Basketball"
     },
     {
       "roomId": "7",
       "startMin": 1080,
-      "endMin": 1170,
-      "title": "D1 Training (Stay 22uned, Inc.), D1 Training (Stay 22uned, Inc.)",
-      "subtitle": "Basketball"
+      "endMin": 1260,
+      "title": "Zero Fears Basketball",
+      "subtitle": "2026 Q2 Pattern"
     },
     {
-      "roomId": "5",
+      "roomId": "8",
+      "startMin": 1080,
+      "endMin": 1260,
+      "title": "Zero Fears Basketball",
+      "subtitle": "2026 Q2 Pattern"
+    },
+    {
+      "roomId": "10A",
+      "startMin": 1080,
+      "endMin": 1260,
+      "title": "Illinois Express Basketball, Tiffany Owens",
+      "subtitle": "Basketball 2026 Q2 Pattern"
+    },
+    {
+      "roomId": "10B",
+      "startMin": 1080,
+      "endMin": 1260,
+      "title": "Illinois Express Basketball, Tiffany Owens",
+      "subtitle": "Basketball 2026 Q2 Pattern"
+    },
+    {
+      "roomId": "9A",
       "startMin": 1080,
       "endMin": 1170,
       "title": "Vikings Basketball",
       "subtitle": "Basketball"
     },
     {
-      "roomId": "3",
-      "startMin": 1080,
-      "endMin": 1260,
-      "title": "Illinois Express Basketball, Tiffany Owens",
-      "subtitle": "Basketball 2026 Q2 Pattern"
-    },
-    {
-      "roomId": "4",
-      "startMin": 1080,
-      "endMin": 1260,
-      "title": "Illinois Express Basketball, Tiffany Owens",
-      "subtitle": "Basketball 2026 Q2 Pattern"
-    },
-    {
-      "roomId": "6",
-      "startMin": 1170,
-      "endMin": 1260,
-      "title": "D1 Training (Stay 22uned, Inc.), D1 Training (Stay 22uned, Inc.)",
-      "subtitle": "Basketball"
-    },
-    {
-      "roomId": "7",
-      "startMin": 1170,
-      "endMin": 1260,
-      "title": "D1 Training (Stay 22uned, Inc.), D1 Training (Stay 22uned, Inc.)",
-      "subtitle": "Basketball"
-    },
-    {
-      "roomId": "5",
-      "startMin": 1170,
-      "endMin": 1260,
-      "title": "Illinois Express Basketball, Tiffany Owens",
-      "subtitle": "Basketball 2026 Q2 Pattern"
-    },
-    {
-      "roomId": "10A",
-      "startMin": 1170,
-      "endMin": 1290,
-      "title": "Extreme Volleyball",
-      "subtitle": "Volleyball"
-    },
-    {
       "roomId": "9A",
       "startMin": 1170,
-      "endMin": 1290,
-      "title": "Omona Athletics",
-      "subtitle": "Volleyball"
+      "endMin": 1260,
+      "title": "Illinois Express Basketball, Tiffany Owens",
+      "subtitle": "Basketball 2026 Q2 Pattern"
     },
     {
       "roomId": "9B",
       "startMin": 1170,
-      "endMin": 1290,
-      "title": "Omona Athletics",
-      "subtitle": "Volleyball"
+      "endMin": 1260,
+      "title": "Illinois Express Basketball, Tiffany Owens",
+      "subtitle": "Basketball 2026 Q2 Pattern"
     },
     {
-      "roomId": "1A",
+      "roomId": "3",
       "startMin": 1260,
       "endMin": 1380,
-      "title": "Chicago Sport and Social Club",
-      "subtitle": "Volleyball"
-    },
-    {
-      "roomId": "1B",
-      "startMin": 1260,
-      "endMin": 1380,
-      "title": "Chicago Sport and Social Club",
-      "subtitle": "Volleyball"
-    },
-    {
-      "roomId": "2A",
-      "startMin": 1260,
-      "endMin": 1380,
-      "title": "Chicago Sport and Social Club",
-      "subtitle": "Volleyball"
-    },
-    {
-      "roomId": "2B",
-      "startMin": 1260,
-      "endMin": 1380,
-      "title": "Chicago Sport and Social Club",
-      "subtitle": "Volleyball"
+      "title": "Catch Corner",
+      "subtitle": "CatchCorner (Paul Aguilar #603329 Basketball)"
     }
   ]
 }
