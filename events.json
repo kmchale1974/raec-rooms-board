@@ -2,6 +2,34 @@
   "season": "courts",
   "slots": [
     {
+      "roomId": "1A",
+      "startMin": 540,
+      "endMin": 1320,
+      "title": "Prep Hoops Basketball, Andrew Krupke",
+      "subtitle": "Prep Hoops Tournament"
+    },
+    {
+      "roomId": "1B",
+      "startMin": 540,
+      "endMin": 1320,
+      "title": "Prep Hoops Basketball, Andrew Krupke",
+      "subtitle": "Prep Hoops Tournament"
+    },
+    {
+      "roomId": "2A",
+      "startMin": 540,
+      "endMin": 1320,
+      "title": "Prep Hoops Basketball, Andrew Krupke",
+      "subtitle": "Prep Hoops Tournament"
+    },
+    {
+      "roomId": "2B",
+      "startMin": 540,
+      "endMin": 1320,
+      "title": "Prep Hoops Basketball, Andrew Krupke",
+      "subtitle": "Prep Hoops Tournament"
+    },
+    {
       "roomId": "3",
       "startMin": 540,
       "endMin": 1320,
@@ -76,70 +104,28 @@
       "startMin": 540,
       "endMin": 1320,
       "title": "RAEC Front Desk, Rentals - On Hold",
-      "subtitle": "FIELDHOUSE INSTALLED - NO TURF"
+      "subtitle": "NO TURF FIELDOUSE INSTALLED"
     },
     {
       "roomId": "Quarter Turf NB",
       "startMin": 540,
       "endMin": 1320,
       "title": "RAEC Front Desk, Rentals - On Hold",
-      "subtitle": "FIELDHOUSE INSTALLED - NO TURF"
+      "subtitle": "NO TURF FIELDOUSE INSTALLED"
     },
     {
       "roomId": "Quarter Turf SA",
       "startMin": 540,
       "endMin": 1320,
       "title": "RAEC Front Desk, Rentals - On Hold",
-      "subtitle": "FIELDHOUSE INSTALLED - NO TURF"
+      "subtitle": "NO TURF FIELDOUSE INSTALLED"
     },
     {
       "roomId": "Quarter Turf SB",
       "startMin": 540,
       "endMin": 1320,
       "title": "RAEC Front Desk, Rentals - On Hold",
-      "subtitle": "FIELDHOUSE INSTALLED - NO TURF"
-    },
-    {
-      "roomId": "1B",
-      "startMin": 960,
-      "endMin": 1320,
-      "title": "RAEC Front Desk, Rentals - On Hold",
-      "subtitle": "Reservation for Prep Hoops"
-    },
-    {
-      "roomId": "2A",
-      "startMin": 960,
-      "endMin": 1320,
-      "title": "RAEC Front Desk, Rentals - On Hold",
-      "subtitle": "Reservation for Prep Hoops"
-    },
-    {
-      "roomId": "2B",
-      "startMin": 960,
-      "endMin": 1320,
-      "title": "RAEC Front Desk, Rentals - On Hold",
-      "subtitle": "Reservation for Prep Hoops"
-    },
-    {
-      "roomId": "1A",
-      "startMin": 960,
-      "endMin": 1020,
-      "title": "Excel Skills Training, Denis Alibegovic",
-      "subtitle": "Basketball"
-    },
-    {
-      "roomId": "1A",
-      "startMin": 1020,
-      "endMin": 1320,
-      "title": "RAEC Front Desk, Rentals - On Hold",
-      "subtitle": "Reservation for Prep Hoops"
-    },
-    {
-      "roomId": "1B",
-      "startMin": 1320,
-      "endMin": 1380,
-      "title": "Excel Skills Training, Denis Alibegovic",
-      "subtitle": "Basketball"
+      "subtitle": "NO TURF FIELDOUSE INSTALLED"
     }
   ]
 }
