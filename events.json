@@ -2,6 +2,76 @@
   "season": "courts",
   "slots": [
     {
+      "roomId": "3",
+      "startMin": 540,
+      "endMin": 1320,
+      "title": "RAEC Front Desk, Rentals - On Hold",
+      "subtitle": "CLOSED FOR JUNETEENTH"
+    },
+    {
+      "roomId": "4",
+      "startMin": 540,
+      "endMin": 1320,
+      "title": "RAEC Front Desk, Rentals - On Hold",
+      "subtitle": "CLOSED FOR JUNETEENTH"
+    },
+    {
+      "roomId": "5",
+      "startMin": 540,
+      "endMin": 1320,
+      "title": "RAEC Front Desk, Rentals - On Hold",
+      "subtitle": "CLOSED FOR JUNETEENTH"
+    },
+    {
+      "roomId": "6",
+      "startMin": 540,
+      "endMin": 1320,
+      "title": "RAEC Front Desk, Rentals - On Hold",
+      "subtitle": "CLOSED FOR JUNETEENTH"
+    },
+    {
+      "roomId": "7",
+      "startMin": 540,
+      "endMin": 1320,
+      "title": "RAEC Front Desk, Rentals - On Hold",
+      "subtitle": "CLOSED FOR JUNETEENTH"
+    },
+    {
+      "roomId": "8",
+      "startMin": 540,
+      "endMin": 1320,
+      "title": "RAEC Front Desk, Rentals - On Hold",
+      "subtitle": "CLOSED FOR JUNETEENTH"
+    },
+    {
+      "roomId": "9A",
+      "startMin": 540,
+      "endMin": 1320,
+      "title": "RAEC Front Desk, Rentals - On Hold",
+      "subtitle": "CLOSED FOR JUNETEENTH"
+    },
+    {
+      "roomId": "9B",
+      "startMin": 540,
+      "endMin": 1320,
+      "title": "RAEC Front Desk, Rentals - On Hold",
+      "subtitle": "CLOSED FOR JUNETEENTH"
+    },
+    {
+      "roomId": "10A",
+      "startMin": 540,
+      "endMin": 1320,
+      "title": "RAEC Front Desk, Rentals - On Hold",
+      "subtitle": "CLOSED FOR JUNETEENTH"
+    },
+    {
+      "roomId": "10B",
+      "startMin": 540,
+      "endMin": 1320,
+      "title": "RAEC Front Desk, Rentals - On Hold",
+      "subtitle": "CLOSED FOR JUNETEENTH"
+    },
+    {
       "roomId": "Quarter Turf NA",
       "startMin": 540,
       "endMin": 1320,
@@ -28,6 +98,41 @@
       "endMin": 1320,
       "title": "RAEC Front Desk, Rentals - On Hold",
       "subtitle": "FIELDHOUSE INSTALLED - NO TURF"
+    },
+    {
+      "roomId": "2A",
+      "startMin": 1110,
+      "endMin": 1170,
+      "title": "Ali Goetcheus",
+      "subtitle": "Basketball"
+    },
+    {
+      "roomId": "1A",
+      "startMin": 1110,
+      "endMin": 1320,
+      "title": "RAEC Front Desk, Rentals - On Hold",
+      "subtitle": "Hold per MH for The Ville Shootout"
+    },
+    {
+      "roomId": "1B",
+      "startMin": 1110,
+      "endMin": 1320,
+      "title": "RAEC Front Desk, Rentals - On Hold",
+      "subtitle": "Hold per MH for The Ville Shootout"
+    },
+    {
+      "roomId": "2A",
+      "startMin": 1170,
+      "endMin": 1320,
+      "title": "RAEC Front Desk, Rentals - On Hold",
+      "subtitle": "Hold per MH for The Ville Shootout"
+    },
+    {
+      "roomId": "2B",
+      "startMin": 1170,
+      "endMin": 1320,
+      "title": "RAEC Front Desk, Rentals - On Hold",
+      "subtitle": "Hold per MH for The Ville Shootout"
     }
   ]
 }
