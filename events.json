@@ -3,31 +3,59 @@
   "slots": [
     {
       "roomId": "1A",
-      "startMin": 480,
-      "endMin": 690,
-      "title": "Belusa United Volleyball, Nicole Diamond",
-      "subtitle": "Volleyball Tryouts"
+      "startMin": 540,
+      "endMin": 1320,
+      "title": "3 Step Sports, Lucas Megleo",
+      "subtitle": "3 STEP SPORTS"
     },
     {
       "roomId": "1B",
-      "startMin": 480,
-      "endMin": 690,
-      "title": "Belusa United Volleyball, Nicole Diamond",
-      "subtitle": "Volleyball Tryouts"
+      "startMin": 540,
+      "endMin": 1320,
+      "title": "3 Step Sports, Lucas Megleo",
+      "subtitle": "3 STEP SPORTS"
     },
     {
       "roomId": "2A",
-      "startMin": 480,
-      "endMin": 690,
-      "title": "Belusa United Volleyball, Nicole Diamond",
-      "subtitle": "Volleyball Tryouts"
+      "startMin": 540,
+      "endMin": 1320,
+      "title": "3 Step Sports, Lucas Megleo",
+      "subtitle": "3 STEP SPORTS"
     },
     {
       "roomId": "2B",
-      "startMin": 480,
-      "endMin": 690,
-      "title": "Belusa United Volleyball, Nicole Diamond",
-      "subtitle": "Volleyball Tryouts"
+      "startMin": 540,
+      "endMin": 1320,
+      "title": "3 Step Sports, Lucas Megleo",
+      "subtitle": "3 STEP SPORTS"
+    },
+    {
+      "roomId": "9A",
+      "startMin": 540,
+      "endMin": 1320,
+      "title": "3 Step Sports, Lucas Megleo",
+      "subtitle": "3 STEP SPORTS"
+    },
+    {
+      "roomId": "9B",
+      "startMin": 540,
+      "endMin": 1320,
+      "title": "3 Step Sports, Lucas Megleo",
+      "subtitle": "3 STEP SPORTS"
+    },
+    {
+      "roomId": "10A",
+      "startMin": 540,
+      "endMin": 1320,
+      "title": "3 Step Sports, Lucas Megleo",
+      "subtitle": "3 STEP SPORTS"
+    },
+    {
+      "roomId": "10B",
+      "startMin": 540,
+      "endMin": 1320,
+      "title": "3 Step Sports, Lucas Megleo",
+      "subtitle": "3 STEP SPORTS"
     },
     {
       "roomId": "3",
@@ -98,34 +126,6 @@
       "endMin": 1320,
       "title": "RAEC Front Desk, Rentals - On Hold",
       "subtitle": "NO TURF FIELDOUSE INSTALLED"
-    },
-    {
-      "roomId": "9A",
-      "startMin": 540,
-      "endMin": 1320,
-      "title": "3 Step Sports, Lucas Megleo",
-      "subtitle": "3 STEP SPORTS"
-    },
-    {
-      "roomId": "9B",
-      "startMin": 540,
-      "endMin": 1320,
-      "title": "3 Step Sports, Lucas Megleo",
-      "subtitle": "3 STEP SPORTS"
-    },
-    {
-      "roomId": "10A",
-      "startMin": 540,
-      "endMin": 1320,
-      "title": "3 Step Sports, Lucas Megleo",
-      "subtitle": "3 STEP SPORTS"
-    },
-    {
-      "roomId": "10B",
-      "startMin": 540,
-      "endMin": 1320,
-      "title": "3 Step Sports, Lucas Megleo",
-      "subtitle": "3 STEP SPORTS"
     }
   ]
 }
