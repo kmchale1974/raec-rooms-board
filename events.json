@@ -2,104 +2,6 @@
   "season": "courts",
   "slots": [
     {
-      "roomId": "1A",
-      "startMin": 540,
-      "endMin": 1320,
-      "title": "RAEC Front Desk, Rentals - On Hold",
-      "subtitle": "CLOSED FOR LABOR DAY"
-    },
-    {
-      "roomId": "1B",
-      "startMin": 540,
-      "endMin": 1320,
-      "title": "RAEC Front Desk, Rentals - On Hold",
-      "subtitle": "CLOSED FOR LABOR DAY"
-    },
-    {
-      "roomId": "2A",
-      "startMin": 540,
-      "endMin": 1320,
-      "title": "RAEC Front Desk, Rentals - On Hold",
-      "subtitle": "CLOSED FOR LABOR DAY"
-    },
-    {
-      "roomId": "2B",
-      "startMin": 540,
-      "endMin": 1320,
-      "title": "RAEC Front Desk, Rentals - On Hold",
-      "subtitle": "CLOSED FOR LABOR DAY"
-    },
-    {
-      "roomId": "3",
-      "startMin": 540,
-      "endMin": 1320,
-      "title": "RAEC Front Desk, Rentals - On Hold",
-      "subtitle": "CLOSED FOR LABOR DAY"
-    },
-    {
-      "roomId": "4",
-      "startMin": 540,
-      "endMin": 1320,
-      "title": "RAEC Front Desk, Rentals - On Hold",
-      "subtitle": "CLOSED FOR LABOR DAY"
-    },
-    {
-      "roomId": "5",
-      "startMin": 540,
-      "endMin": 1320,
-      "title": "RAEC Front Desk, Rentals - On Hold",
-      "subtitle": "CLOSED FOR LABOR DAY"
-    },
-    {
-      "roomId": "6",
-      "startMin": 540,
-      "endMin": 1320,
-      "title": "RAEC Front Desk, Rentals - On Hold",
-      "subtitle": "CLOSED FOR LABOR DAY"
-    },
-    {
-      "roomId": "7",
-      "startMin": 540,
-      "endMin": 1320,
-      "title": "RAEC Front Desk, Rentals - On Hold",
-      "subtitle": "CLOSED FOR LABOR DAY"
-    },
-    {
-      "roomId": "8",
-      "startMin": 540,
-      "endMin": 1320,
-      "title": "RAEC Front Desk, Rentals - On Hold",
-      "subtitle": "CLOSED FOR LABOR DAY"
-    },
-    {
-      "roomId": "9A",
-      "startMin": 540,
-      "endMin": 1320,
-      "title": "RAEC Front Desk, Rentals - On Hold",
-      "subtitle": "CLOSED FOR LABOR DAY"
-    },
-    {
-      "roomId": "9B",
-      "startMin": 540,
-      "endMin": 1320,
-      "title": "RAEC Front Desk, Rentals - On Hold",
-      "subtitle": "CLOSED FOR LABOR DAY"
-    },
-    {
-      "roomId": "10A",
-      "startMin": 540,
-      "endMin": 1320,
-      "title": "RAEC Front Desk, Rentals - On Hold",
-      "subtitle": "CLOSED FOR LABOR DAY"
-    },
-    {
-      "roomId": "10B",
-      "startMin": 540,
-      "endMin": 1320,
-      "title": "RAEC Front Desk, Rentals - On Hold",
-      "subtitle": "CLOSED FOR LABOR DAY"
-    },
-    {
       "roomId": "Quarter Turf NA",
       "startMin": 540,
       "endMin": 1320,
@@ -126,6 +28,97 @@
       "endMin": 1320,
       "title": "RAEC Front Desk, Rentals - On Hold",
       "subtitle": "FIELDHOUSE INSTALLED - NO TURF"
+    },
+    {
+      "roomId": "9A",
+      "startMin": 570,
+      "endMin": 750,
+      "title": "Open Pickleball",
+      "subtitle": ""
+    },
+    {
+      "roomId": "9B",
+      "startMin": 570,
+      "endMin": 750,
+      "title": "Open Pickleball",
+      "subtitle": ""
+    },
+    {
+      "roomId": "10A",
+      "startMin": 570,
+      "endMin": 750,
+      "title": "Open Pickleball",
+      "subtitle": ""
+    },
+    {
+      "roomId": "10B",
+      "startMin": 570,
+      "endMin": 750,
+      "title": "Open Pickleball",
+      "subtitle": ""
+    },
+    {
+      "roomId": "9A",
+      "startMin": 1050,
+      "endMin": 1230,
+      "title": "Empower Volleyball (Rec), Dean Baxendale",
+      "subtitle": "Volleyball 2026 Quarter 3 Pattern"
+    },
+    {
+      "roomId": "9B",
+      "startMin": 1050,
+      "endMin": 1230,
+      "title": "Empower Volleyball (Rec), Dean Baxendale",
+      "subtitle": "Volleyball 2026 Quarter 3 Pattern"
+    },
+    {
+      "roomId": "10A",
+      "startMin": 1050,
+      "endMin": 1230,
+      "title": "Empower Volleyball (Rec), Dean Baxendale",
+      "subtitle": "Volleyball 2026 Quarter 3 Pattern"
+    },
+    {
+      "roomId": "10B",
+      "startMin": 1050,
+      "endMin": 1230,
+      "title": "Empower Volleyball (Rec), Dean Baxendale",
+      "subtitle": "Volleyball 2026 Quarter 3 Pattern"
+    },
+    {
+      "roomId": "8",
+      "startMin": 1080,
+      "endMin": 1260,
+      "title": "Marcus Riley Basketball",
+      "subtitle": "Basketball"
+    },
+    {
+      "roomId": "1A",
+      "startMin": 1140,
+      "endMin": 1260,
+      "title": "Omona Athletics",
+      "subtitle": "Volleyball 2026 Q3 Add On"
+    },
+    {
+      "roomId": "3",
+      "startMin": 1170,
+      "endMin": 1260,
+      "title": "D1 Training (Stay 22uned, Inc.), D1 Training (Stay 22uned, Inc.)",
+      "subtitle": "Basketball 2026 Q3 Pattern"
+    },
+    {
+      "roomId": "4",
+      "startMin": 1170,
+      "endMin": 1260,
+      "title": "Illinois Express Basketball,  Tiffany Owens",
+      "subtitle": "Basketball"
+    },
+    {
+      "roomId": "5",
+      "startMin": 1170,
+      "endMin": 1260,
+      "title": "Illinois Express Basketball,  Tiffany Owens",
+      "subtitle": "Basketball"
     }
   ]
 }
