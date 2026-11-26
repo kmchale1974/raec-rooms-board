@@ -2,130 +2,32 @@
   "season": "courts",
   "slots": [
     {
-      "roomId": "3",
+      "roomId": "1A",
       "startMin": 540,
       "endMin": 1320,
       "title": "RAEC Front Desk, Rentals - On Hold",
-      "subtitle": "NO FIELDHOUSE - TURF INSTALLED"
+      "subtitle": "CLOSED FOR THANKSGIVING"
     },
     {
-      "roomId": "4",
+      "roomId": "1B",
       "startMin": 540,
       "endMin": 1320,
       "title": "RAEC Front Desk, Rentals - On Hold",
-      "subtitle": "NO FIELDHOUSE - TURF INSTALLED"
-    },
-    {
-      "roomId": "5",
-      "startMin": 540,
-      "endMin": 1320,
-      "title": "RAEC Front Desk, Rentals - On Hold",
-      "subtitle": "NO FIELDHOUSE - TURF INSTALLED"
-    },
-    {
-      "roomId": "6",
-      "startMin": 540,
-      "endMin": 1320,
-      "title": "RAEC Front Desk, Rentals - On Hold",
-      "subtitle": "NO FIELDHOUSE - TURF INSTALLED"
-    },
-    {
-      "roomId": "7",
-      "startMin": 540,
-      "endMin": 1320,
-      "title": "RAEC Front Desk, Rentals - On Hold",
-      "subtitle": "NO FIELDHOUSE - TURF INSTALLED"
-    },
-    {
-      "roomId": "8",
-      "startMin": 540,
-      "endMin": 1320,
-      "title": "RAEC Front Desk, Rentals - On Hold",
-      "subtitle": "NO FIELDHOUSE - TURF INSTALLED"
-    },
-    {
-      "roomId": "9A",
-      "startMin": 570,
-      "endMin": 750,
-      "title": "Open Pickleball",
-      "subtitle": ""
-    },
-    {
-      "roomId": "9B",
-      "startMin": 570,
-      "endMin": 750,
-      "title": "Open Pickleball",
-      "subtitle": ""
-    },
-    {
-      "roomId": "10A",
-      "startMin": 570,
-      "endMin": 750,
-      "title": "Open Pickleball",
-      "subtitle": ""
-    },
-    {
-      "roomId": "10B",
-      "startMin": 570,
-      "endMin": 750,
-      "title": "Open Pickleball",
-      "subtitle": ""
+      "subtitle": "CLOSED FOR THANKSGIVING"
     },
     {
       "roomId": "2A",
-      "startMin": 600,
-      "endMin": 660,
-      "title": "Samantha Reyes",
-      "subtitle": "volleyball"
-    },
-    {
-      "roomId": "10A",
-      "startMin": 1020,
-      "endMin": 1110,
-      "title": "Martin Uscila",
-      "subtitle": "basketball"
-    },
-    {
-      "roomId": "10B",
-      "startMin": 1020,
-      "endMin": 1110,
-      "title": "Martin Uscila",
-      "subtitle": "basketball"
-    },
-    {
-      "roomId": "2A",
-      "startMin": 1080,
-      "endMin": 1140,
-      "title": "Plainfield huskies",
-      "subtitle": "Basketball Add on"
-    },
-    {
-      "roomId": "9A",
-      "startMin": 1080,
-      "endMin": 1200,
-      "title": "Jany Agualimpia",
-      "subtitle": "Arsenal (Futsal)"
-    },
-    {
-      "roomId": "10A",
-      "startMin": 1140,
+      "startMin": 540,
       "endMin": 1320,
-      "title": "Jose Portillo",
-      "subtitle": "volleyball"
+      "title": "RAEC Front Desk, Rentals - On Hold",
+      "subtitle": "CLOSED FOR THANKSGIVING"
     },
     {
-      "roomId": "10B",
-      "startMin": 1140,
-      "endMin": 1260,
-      "title": "Catch Corner",
-      "subtitle": "Catchcorner (Ecang Renee Volleyball #769074)"
-    },
-    {
-      "roomId": "9B",
-      "startMin": 1140,
-      "endMin": 1260,
-      "title": "Catch Corner",
-      "subtitle": "Catchcorner (David Llanos, #765318 Volleyball)"
+      "roomId": "2B",
+      "startMin": 540,
+      "endMin": 1320,
+      "title": "RAEC Front Desk, Rentals - On Hold",
+      "subtitle": "CLOSED FOR THANKSGIVING"
     }
   ]
 }
